@@ -26,6 +26,11 @@ PORT = int(os.environ.get("KANBAN_PORT", "18320"))
 HOST = "127.0.0.1"
 WINDOW_TITLE = "AI 交接看板"
 
+try:                                        # 冻结版里 app 是 hidden-import，取不到不能让启动挂掉
+    from app.version import APP_VERSION, BUILD_TIME
+except Exception:
+    APP_VERSION, BUILD_TIME = "?", "?"
+
 
 def data_dir() -> Path:
     env = os.environ.get("KANBAN_DATA_DIR")
@@ -103,6 +108,7 @@ def start_server() -> None:
 def main() -> None:
     ensure_standard_streams()
     log("=" * 60)
+    log(f"版本：v{APP_VERSION} build {BUILD_TIME}")
     log(f"启动：frozen={getattr(sys, 'frozen', False)} meipass={getattr(sys, '_MEIPASS', '')}")
     log(f"PORT={PORT} HOST={HOST} data_dir={data_dir()}")
 
