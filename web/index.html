@@ -746,6 +746,9 @@
       <div class="field"><label>任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调"></div>
       <div class="field"><label>任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、验收标准……"></textarea></div>
       <div class="field"><label>相关代码位置（可选，逗号分隔）</label><input id="t-refs" placeholder="如 app/main.py:120, tests/test_api.py —— 接手的人不用再翻一遍找在哪改"></div>
+      <div class="field"><label>前置任务（可选，按住 Ctrl 多选）</label><select id="t-deps" multiple size="4"></select>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了前置，交接包与 AGENTS.md 会按依赖排好顺序，AI 也能直接问「现在该做哪个」</div>
+      </div>
       <div class="row3">
         <div class="field"><label>状态</label><select id="t-status">
           <option>待办</option><option>进行中</option><option>已完成</option><option>阻塞</option>
@@ -1246,10 +1249,20 @@ function renderDetail() {
     const refHtml = (t.refs && t.refs.length)
       ? `<div class="td" style="font-family:Consolas,monospace;font-size:11px">📍 ${t.refs.map(r => esc(r)).join("、")}</div>`
       : "";
+    const depHtml = (t.depends_on && t.depends_on.length)
+      ? (() => {
+          const titles = t.depends_on.map(d => {
+            const x = (current.tasks || []).find(y => y.id === d);
+            return x ? x.title : d;
+          });
+          return `<div class="td" style="font-size:11px">⛓ 前置：${titles.map(esc).join("、")}</div>`;
+        })()
+      : "";
     el.innerHTML = `
       <div class="tt">${esc(t.title)}</div>
       ${t.desc ? `<div class="td">${esc(t.desc)}</div>` : ""}
       ${refHtml}
+      ${depHtml}
       <div class="tfoot">
         <span class="tag2 pri-${tpri}">${esc(tpri)}</span>
         ${t.agent ? `<span class="agent">🤖 ${esc(t.agent)}</span>` : ""}
@@ -1428,6 +1441,10 @@ function openTaskModal(taskId) {
   document.getElementById("t-priority").value = "中";
   document.getElementById("t-agent").value = "";
   document.getElementById("t-refs").value = "";
+  const depsSel = document.getElementById("t-deps");
+  depsSel.innerHTML = (current && current.tasks ? current.tasks : [])
+    .filter(x => x.id !== taskId)
+    .map(x => `<option value="${esc(x.id)}">${esc(x.title)}</option>`).join("");
   if (taskId) {
     const t = (current.tasks || []).find(x => x.id === taskId);
     if (t) {
@@ -1437,6 +1454,8 @@ function openTaskModal(taskId) {
       document.getElementById("t-priority").value = t.priority;
       document.getElementById("t-agent").value = t.agent || "";
       document.getElementById("t-refs").value = (t.refs || []).join(", ");
+      const mine = t.depends_on || [];
+      Array.from(depsSel.options).forEach(o => { o.selected = mine.includes(o.value); });
     }
   }
   openModal("task-modal");
@@ -1452,6 +1471,7 @@ async function saveTask() {
     priority: document.getElementById("t-priority").value,
     agent: document.getElementById("t-agent").value.trim(),
     refs: document.getElementById("t-refs").value.split(",").map(s => s.trim()).filter(Boolean),
+    depends_on: Array.from(document.getElementById("t-deps").selectedOptions).map(o => o.value),
   };
   try {
     if (editTaskId) {

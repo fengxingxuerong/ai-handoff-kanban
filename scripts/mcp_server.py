@@ -201,6 +201,7 @@ def t_add_task(args: dict) -> str:
         priority=args.get("priority") or "中",
         agent=args.get("agent") or "",
         refs=args.get("refs") or [],
+        depends_on=args.get("depends_on") or [],
     )
     task = kanban.create_task(pid, body)
     refs = ("；涉及 " + "、".join(task["refs"])) if task.get("refs") else ""
@@ -224,9 +225,40 @@ def t_update_task(args: dict) -> str:
         priority=pick("priority", task.get("priority")),
         agent=pick("agent", task.get("agent") or ""),
         refs=pick("refs", task.get("refs") or []),
+        depends_on=pick("depends_on", task.get("depends_on") or []),
     )
     updated = kanban.update_task(tid, body)
     return f"任务 [{tid}] 已更新为 {updated['status']}/{updated['priority']}（所属项目 {project.get('name')}）"
+
+
+def t_next_task(args: dict) -> str:
+    """现在就能动手的任务：接手时先问这个，别一上来挑个被前置挡住的"""
+    pid = args.get("project_id") or ""
+    p = _find(pid)
+    if not p:
+        raise ValueError(f"找不到项目：{pid}")
+    tasks = p.get("tasks") or []
+    ready = kanban.executable_tasks(tasks)
+    blocked = [t for t in tasks if t not in ready and t.get("status") != "已完成"]
+    if not tasks:
+        return f"「{p.get('name')}」还没有任务。"
+    lines = [f"# {p.get('name')} · 现在可以做"]
+    if ready:
+        for t in ready:
+            refs = ("（" + "、".join(t.get("refs") or []) + "）") if t.get("refs") else ""
+            lines.append(f"- [{t['id']}] {t.get('title')} · {t.get('priority')}{refs}")
+    else:
+        lines.append("- 没有可以直接开工的任务（都在等前置）")
+    if blocked:
+        by_id = {x.get("id"): x for x in tasks}
+        lines.append("")
+        lines.append("被前置挡住：")
+        for t in blocked:
+            waiting = [by_id[d].get("title", d) for d in (t.get("depends_on") or [])
+                       if d in by_id and by_id[d].get("status") != "已完成"]
+            if waiting:
+                lines.append(f"- {t.get('title')}（等：{'、'.join(waiting)}）")
+    return "\n".join(lines)
 
 
 def t_delete_task(args: dict) -> str:
@@ -347,6 +379,8 @@ TOOLS: list[dict] = [
                 "agent": {"type": "string", "description": "负责的 AI 或人"},
                 "refs": {"type": "array", "items": {"type": "string"},
                          "description": "相关代码位置，如 [\"app/main.py:120\", \"tests/test_api.py\"]"},
+                "depends_on": {"type": "array", "items": {"type": "string"},
+                               "description": "前置任务 id（同一项目内），用于排「先做哪个」"},
             },
             "required": ["project_id", "title"], "additionalProperties": False,
         },
@@ -365,8 +399,20 @@ TOOLS: list[dict] = [
                 "agent": {"type": "string"},
                 "refs": {"type": "array", "items": {"type": "string"},
                          "description": "相关代码位置；不改就省略"},
+                "depends_on": {"type": "array", "items": {"type": "string"},
+                               "description": "前置任务 id；不改就省略"},
             },
             "required": ["task_id"], "additionalProperties": False,
+        },
+    },
+    {
+        "name": "kanban_next_task",
+        "description": "问「现在该做哪个」：返回所有前置已完成、可以立刻开工的任务，以及被谁挡住的任务。"
+                       "刚接手一个项目时先调这个，别一上来挑个被依赖挡住的。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"project_id": {"type": "string"}},
+            "required": ["project_id"], "additionalProperties": False,
         },
     },
     {
@@ -411,6 +457,7 @@ HANDLERS = {
     "kanban_update_project": t_update_project,
     "kanban_add_task": t_add_task,
     "kanban_update_task": t_update_task,
+    "kanban_next_task": t_next_task,
     "kanban_delete_task": t_delete_task,
     "kanban_stats": t_stats,
     "kanban_handoff": t_handoff,

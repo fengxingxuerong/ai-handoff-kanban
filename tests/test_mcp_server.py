@@ -275,6 +275,34 @@ def test_add_task_with_refs_roundtrip(mcp):
     assert "涉及：app/main.py:120" in detail
 
 
+def last_id(text: str) -> str:
+    """从「已在项目 [pid] 新增任务 [tid] …」里取最后一个方括号中的 id"""
+    return text.split("[")[-1].split("]")[0]
+
+
+def test_next_task_tool(mcp):
+    """接手时最该先问的问题：现在能动手的是哪个"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "有依赖的活"})[0])
+    a = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "搭骨架"})[0])
+    mcp.tool("kanban_add_task", {"project_id": pid, "title": "联调", "depends_on": [a]})
+
+    text, is_err = mcp.tool("kanban_next_task", {"project_id": pid})
+    assert not is_err and "搭骨架" in text and "联调" not in text.split("被前置挡住")[0], text
+    assert "等：搭骨架" in text
+
+    mcp.tool("kanban_update_task", {"task_id": a, "status": "已完成"})
+    text2, _ = mcp.tool("kanban_next_task", {"project_id": pid})
+    assert "联调" in text2.split("被前置挡住")[0], "前置做完后就该轮到下一个"
+
+
+def test_cycle_via_mcp_is_rejected(mcp):
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "成环"})[0])
+    a = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "A"})[0])
+    b = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "B", "depends_on": [a]})[0])
+    text, is_err = mcp.tool("kanban_update_task", {"task_id": a, "depends_on": [b]})
+    assert is_err and ("循环" in text or "依赖" in text), text
+
+
 def test_unknown_tool_is_tool_error_not_crash(mcp):
     text, is_err = mcp.tool("kanban_not_exist")
     assert is_err and "未知工具" in text

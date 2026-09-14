@@ -166,6 +166,76 @@ def clean_refs(raw) -> list[str]:
     return out
 
 
+# ---- 任务依赖（交接时说清"先做哪个"） ----
+
+MAX_DEPS = 10
+
+
+def clean_deps(raw, valid_ids) -> list[str]:
+    """依赖只能是同一项目里存在的任务 id；去重、限量、去自引用"""
+    if isinstance(raw, str):
+        raw = [p for p in raw.replace("\n", ",").split(",")]
+    if not isinstance(raw, (list, tuple)):
+        return []
+    out, seen = [], set()
+    for item in raw:
+        dep = str(item).strip()
+        if not dep or dep in seen or dep not in valid_ids or len(out) >= MAX_DEPS:
+            continue
+        seen.add(dep)
+        out.append(dep)
+    return out
+
+
+def task_graph(tasks: list[dict]) -> dict[str, list[str]]:
+    ids = {t.get("id") for t in tasks if isinstance(t, dict)}
+    return {t.get("id"): [d for d in (t.get("depends_on") or []) if d in ids]
+            for t in tasks if isinstance(t, dict)}
+
+
+def has_cycle(graph: dict[str, list[str]]) -> bool:
+    """依赖图不能有环 —— 否则谁都等谁，永远做不了"""
+    WHITE, GREY, BLACK = 0, 1, 2
+    color = {k: WHITE for k in graph}
+
+    def visit(node: str) -> bool:
+        color[node] = GREY
+        for dep in graph.get(node, []):
+            if dep not in color:
+                continue
+            if color[dep] == GREY or (color[dep] == WHITE and visit(dep)):
+                return True
+        color[node] = BLACK
+        return False
+
+    return any(color[n] == WHITE and visit(n) for n in list(graph))
+
+
+def topo_order(tasks: list[dict]) -> list[dict]:
+    """按依赖给出可执行顺序；有环时退回原始顺序（不该发生，写入时已拦）"""
+    graph = task_graph(tasks)
+    by_id = {t.get("id"): t for t in tasks}
+    done, out = set(), []
+    while len(out) < len(tasks):
+        ready = [t for t in tasks
+                 if t.get("id") not in done
+                 and all(d in done or d not in by_id for d in (t.get("depends_on") or []))]
+        if not ready:                      # 有环，剩下的按原序补上
+            out.extend(t for t in tasks if t.get("id") not in done)
+            break
+        out.extend(ready)
+        done.update(t.get("id") for t in ready)
+    return out
+
+
+def executable_tasks(tasks: list[dict]) -> list[dict]:
+    """当前可以动手的任务：自己的状态未完成，且所有前置都已完成"""
+    done_ids = {t.get("id") for t in tasks if t.get("status") == "已完成"}
+    return [t for t in tasks
+            if t.get("status") != "已完成"
+            and all(d in done_ids for d in (t.get("depends_on") or []) if d in {x.get("id") for x in tasks})]
+
+
 def _sanitize(data: dict) -> dict:
     """规范化读入的数据：修正非法状态/优先级，保证前端不拿到越界值"""
     if not isinstance(data, dict):
@@ -198,6 +268,13 @@ def _sanitize(data: dict) -> dict:
             if t.get("priority") not in DEFAULT_PRIORITY:
                 t["priority"] = "中"
             t["refs"] = clean_refs(t.get("refs"))      # 老数据没有这个字段，顺带补齐
+            if not isinstance(t.get("depends_on"), list):
+                t["depends_on"] = []
+        # 顺手清掉指向已删除任务的依赖（否则任务永远"等一个不存在的东西"）
+        ids = {t.get("id") for t in tasks if isinstance(t, dict)}
+        for t in tasks:
+            if isinstance(t, dict):
+                t["depends_on"] = [d for d in t["depends_on"] if d in ids]
     return data
 
 
@@ -378,6 +455,16 @@ def find_project(pid: str) -> tuple[dict, dict] | None:
     return None
 
 
+def find_task(tid: str) -> tuple[dict, dict] | None:
+    """只读查找任务，返回 (所属项目, 任务)"""
+    data = get_projects_data()
+    for p in data.get("projects", []):
+        for t in (p.get("tasks") or []):
+            if t.get("id") == tid:
+                return p, t
+    return None
+
+
 # ---------------- 交接就绪度（本地规则） ----------------
 
 def _readiness_items(p: dict) -> list[dict]:
@@ -431,11 +518,21 @@ class TaskIn(BaseModel):
     priority: Literal["高", "中", "低"] = "中"
     agent: str = ""
     refs: list[str] = []          # 相关代码位置，如 app/main.py:120；交接时用来说明"改哪里"
+    depends_on: list[str] = []    # 前置任务 id（同一项目内），用于排"先做哪个"
 
     @field_validator("refs", mode="before")
     @classmethod
     def _clean_refs(cls, v):
         return clean_refs(v)
+
+    @field_validator("depends_on", mode="before")
+    @classmethod
+    def _clean_deps(cls, v):
+        if isinstance(v, str):
+            v = [p for p in v.replace("\n", ",").split(",")]
+        if not isinstance(v, (list, tuple)):
+            return []
+        return [str(x).strip() for x in v if str(x).strip()]
 
 
 # ---------------- 应用 ----------------
@@ -577,13 +674,21 @@ def delete_project(pid: str):
 @app.post("/api/projects/{pid}/tasks", status_code=201)
 def create_task(pid: str, body: TaskIn):
     now = now_str()
+    found = find_project(pid)
+    if not found:
+        raise HTTPException(404, "项目不存在")
+    existing = [t for t in (found[1].get("tasks") or []) if isinstance(t, dict)]
+    ids = {t.get("id") for t in existing}
     task = {
         "id": uuid.uuid4().hex[:12],
         "title": body.title.strip(), "desc": body.desc,
         "status": body.status, "priority": body.priority,
         "agent": body.agent.strip(), "created_at": now, "updated_at": now,
         "refs": clean_refs(body.refs),
+        "depends_on": clean_deps(body.depends_on, ids),
     }
+    if has_cycle(task_graph(existing + [task])):
+        raise HTTPException(400, "依赖会形成循环，已放弃创建")
 
     def apply(p: dict, _data: dict) -> None:
         p.setdefault("tasks", []).insert(0, task)
@@ -596,6 +701,21 @@ def create_task(pid: str, body: TaskIn):
 
 @app.put("/api/tasks/{tid}")
 def update_task(tid: str, body: TaskIn):
+    found = find_task(tid)
+    if not found:
+        raise HTTPException(404, "任务不存在")
+    project, _old = found
+    siblings = [t for t in (project.get("tasks") or []) if isinstance(t, dict) and t.get("id") != tid]
+    ids = {t.get("id") for t in siblings}
+    if tid in (body.depends_on or []):
+        raise HTTPException(400, "任务不能依赖自己")
+    deps = clean_deps(body.depends_on, ids)
+
+    # 先模拟一次，确认不会成环再落盘
+    simulated = siblings + [{"id": tid, "depends_on": deps}]
+    if has_cycle(task_graph(simulated)):
+        raise HTTPException(400, "依赖会形成循环，已放弃更新")
+
     def apply(t: dict, p: dict) -> None:
         now = now_str()
         t.update({
@@ -603,6 +723,7 @@ def update_task(tid: str, body: TaskIn):
             "status": body.status, "priority": body.priority,
             "agent": body.agent.strip(), "updated_at": now,
             "refs": clean_refs(body.refs),
+            "depends_on": deps,
         })
         p["updated_at"] = now
 
@@ -621,6 +742,10 @@ def delete_task(tid: str):
             for t in list(p.get("tasks", [])):
                 if t.get("id") == tid:
                     p["tasks"].remove(t)
+                    # 把指向它的依赖一并摘掉，否则剩下的任务永远"等一个不存在的东西"
+                    for other in p.get("tasks", []):
+                        if tid in (other.get("depends_on") or []):
+                            other["depends_on"] = [d for d in other["depends_on"] if d != tid]
                     p["updated_at"] = now_str()
                     box["ok"] = True
                     return True, True
@@ -666,16 +791,20 @@ def _build_handoff_markdown(p: dict) -> str:
         lines.append("")
         lines.append(git_block)
         lines.append("")
-    tasks = p.get("tasks", [])
+    tasks = topo_order(p.get("tasks", []) or [])      # 按依赖排序：接手的人照着做就行
+    by_id = {t.get("id"): t for t in (p.get("tasks") or [])}
     if tasks:
-        lines.append("## 任务清单")
+        lines.append("## 任务清单（按依赖排序）")
         lines.append("")
-        lines.append("| 任务 | 状态 | 优先级 | 负责AI | 描述 |")
-        lines.append("| --- | --- | --- | --- | --- |")
+        lines.append("| 任务 | 状态 | 优先级 | 负责AI | 前置 | 描述 |")
+        lines.append("| --- | --- | --- | --- | --- | --- |")
         for t in tasks:
             title = (t.get("title") or "").replace("|", "\\|").replace("\n", " ")
             desc = (t.get("desc") or "").replace("|", "\\|").replace("\n", " ")
-            lines.append(f"| {title} | {t['status']} | {t['priority']} | {t.get('agent','') or '—'} | {desc} |")
+            deps = [d for d in (t.get("depends_on") or []) if d in by_id]
+            dep_txt = "、".join((by_id[d].get("title") or d) for d in deps) if deps else "—"
+            lines.append(f"| {title} | {t['status']} | {t['priority']} | {t.get('agent','') or '—'} "
+                         f"| {dep_txt} | {desc} |")
         lines.append("")
         with_refs = [t for t in tasks if t.get("refs")]
         if with_refs:
@@ -875,14 +1004,17 @@ def _build_agents_md_local(p: dict) -> str:
     lines.append(f"- 状态：{p.get('status', '')}（进度 {p.get('progress', 0)}%）")
     lines.append(f"- 下一步：{p.get('next_action') or '未明确'}")
     lines.append("")
-    tasks = p.get("tasks", [])
+    tasks = topo_order(p.get("tasks") or [])
+    by_id = {t.get("id"): t for t in (p.get("tasks") or [])}
     if tasks:
-        lines.append("## 任务清单")
+        lines.append("## 任务清单（按依赖排序）")
         lines.append("")
         for t in tasks:
             refs = "、".join(t.get("refs") or [])
-            lines.append(f"- [{t.get('status', '待办')}] {t['title']}（优先级 {t.get('priority', '中')}）"
-                         + (f" — 涉及：{refs}" if refs else ""))
+            deps = [d for d in (t.get("depends_on") or []) if d in by_id]
+            dep_txt = "，前置：" + "、".join(by_id[d].get("title", d) for d in deps) if deps else ""
+            lines.append(f"- [{t.get('status', '待办')}] {t.get('title')}（优先级 {t.get('priority', '中')}）"
+                         + (f" — 涉及：{refs}" if refs else "") + dep_txt)
         lines.append("")
     return "\n".join(lines)
 
@@ -1341,6 +1473,28 @@ def git_snapshot(repo_path: str, limit: int = 10, use_cache: bool = True) -> dic
     if use_cache:
         _git_cache[cache_key] = (time.time(), snapshot)
     return snapshot
+
+
+@app.get("/api/projects/{pid}/next")
+def next_tasks(pid: str):
+    """现在就能动手的任务：自己没完成，且所有前置都已完成。换人接手时看这个就知道先做啥"""
+    found = find_project(pid)
+    if not found:
+        raise HTTPException(404, "项目不存在")
+    p = found[1]
+    tasks = p.get("tasks") or []
+    by_id = {t.get("id"): t for t in tasks}
+    ready = executable_tasks(tasks)
+    return {
+        "project": p.get("name", ""),
+        "next": [{"id": t["id"], "title": t.get("title"), "priority": t.get("priority"),
+                  "refs": t.get("refs") or []} for t in ready],
+        "blocked": [{"id": t["id"], "title": t.get("title"),
+                     "waiting_for": [by_id[d].get("title", d)
+                                     for d in (t.get("depends_on") or []) if d in by_id
+                                     and by_id[d].get("status") != "已完成"]}
+                    for t in tasks if t not in ready and t.get("status") != "已完成"],
+    }
 
 
 @app.get("/api/projects/{pid}/git")
