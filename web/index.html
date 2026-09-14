@@ -618,7 +618,13 @@
             <button class="btn small" data-act="openHandoffPackage">📦 完整交接包</button>
             <button class="btn small" data-act="openAgentsMD">🤖 生成 AGENTS.md</button>
             <button class="btn small" data-act="openSummarize">📥 会话提炼</button>
+            <button class="btn small" data-act="loadGitInfo">🌿 代码现状</button>
           </div>
+        </div>
+
+        <div class="panel" id="git-panel" style="display:none">
+          <h3>🌿 代码现状（git）</h3>
+          <div id="git-body" style="font-size:12px;line-height:1.9;color:var(--text-dim);font-family:Consolas,monospace"></div>
         </div>
 
         <div class="panel" id="readiness-panel">
@@ -1121,6 +1127,7 @@ const ACTIONS = {
   openHandoffPackage: () => openHandoffPackage(),
   openAgentsMD: () => openAgentsMD(),
   openSummarize: () => openSummarize(),
+  loadGitInfo: () => loadGitInfo(),
   openAIHandoff: () => openAIHandoff(),
   applySuggestion: (arg, ev, el) => applySuggestion(el),
   // —— 弹窗通用 ——
@@ -2093,6 +2100,35 @@ async function saveAgentsMD(ev) {
     toast("已保存：" + r.path + " ✓");
   } catch (e) { toast("保存失败：" + e.message); }
   btn.classList.remove("ai-loading-btn");
+}
+
+// ============ 代码现状（git） ============
+async function loadGitInfo() {
+  if (!currentPid) return;
+  const panel = document.getElementById("git-panel");
+  const box = document.getElementById("git-body");
+  panel.style.display = "block";
+  box.innerHTML = "读取中…";
+  try {
+    const g = await api(`/api/projects/${currentPid}/git?limit=8`);
+    const head = g.head || {};
+    const days = g.days_since_commit;
+    const stale = days !== null && days >= 7 && g.dirty_count === 0;
+    const rows = [];
+    rows.push(`分支 <b>${esc(g.branch || "(detached)")}</b> · 工作区${g.dirty_count === 0 ? "干净" : `有 ${g.dirty_count} 个未提交改动`}`);
+    if (head.hash) rows.push(`HEAD ${esc(head.hash)} · ${esc(head.date)} · ${esc(head.subject || "")}`);
+    if (days !== null) rows.push(`距上次提交 <b>${days}</b> 天${stale ? " —— 看板还在推进，代码却停了？" : ""}`);
+    rows.push('<div style="margin-top:6px;color:var(--text-faint)">最近提交</div>');
+    (g.commits || []).forEach(c => rows.push(`${esc(c.hash)} ${esc(c.date)} ${esc(c.subject || "")}`));
+    if (g.dirty_files && g.dirty_files.length) {
+      rows.push('<div style="margin-top:6px;color:var(--text-faint)">未提交文件</div>');
+      g.dirty_files.forEach(f => rows.push(esc(f)));
+    }
+    box.innerHTML = rows.join("<br>");
+  } catch (e) {
+    box.innerHTML = `<span style="color:#e08080">${esc(e.message)}</span>`
+      + '<div style="margin-top:4px;color:var(--text-faint)">先在项目里填对「代码路径」，并确认它是个 git 仓库</div>';
+  }
 }
 
 // ============ 会话提炼 ============

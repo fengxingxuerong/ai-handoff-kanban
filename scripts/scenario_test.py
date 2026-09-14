@@ -270,21 +270,46 @@ TASKS = {
 }
 
 
+def force_rmtree(path: Path) -> None:
+    """git 对象文件是只读的，Windows 上直接 rmtree 会失败 —— 先去掉只读位再删"""
+    def on_error(func, p, _exc):
+        try:
+            os.chmod(p, 0o700)
+            func(p)
+        except Exception:
+            pass
+    shutil.rmtree(path, ignore_errors=True, onerror=on_error)
+
+
 def main() -> int:
     report_path = None
     if "--report" in sys.argv:
         report_path = Path(sys.argv[sys.argv.index("--report") + 1])
 
     work = Path(tempfile.gettempdir()) / "kanban_scenario"
-    shutil.rmtree(work, ignore_errors=True)
+    force_rmtree(work)
+    if work.exists():
+        work = Path(tempfile.gettempdir()) / f"kanban_scenario_{int(time.time())}"
     data_dir = work / "data"
     data_dir.mkdir(parents=True)
     repo_dir = work / "repo" / "sqli-scanner"        # 模拟一个真实仓库（含已有文件）
     (repo_dir / "src").mkdir(parents=True)
-    (repo_dir / ".git").mkdir()
     (repo_dir / "README.md").write_text("# sqli-scanner\n\n已有 README，别被我覆盖。\n", encoding="utf-8")
     (repo_dir / "src" / "main.py").write_text("print('existing code')\n", encoding="utf-8")
     (repo_dir / "AGENTS.md").write_text("# 我自己手写的 AGENTS.md\n\n这段内容很重要。\n", encoding="utf-8")
+    # 让这个"仓库"真的是个 git 仓库，这样 git 集成才有东西可读
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=str(repo_dir), capture_output=True, text=True)
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "scenario@example.com")
+    git("config", "user.name", "scenario")
+    git("add", "-A")
+    git("commit", "-q", "-m", "feat: 落地报错型注入探测")
+    (repo_dir / "src" / "probe.py").write_text("def probe(): ...\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "feat: 补 UNION 注入的列数探测")
+    PROJECTS[0]["repo_path"] = str(repo_dir)     # 让"代码路径"真的指向这个临时仓库
 
     stub = StubLLM().start()
     (data_dir / "config.json").write_text(json.dumps({
@@ -625,6 +650,46 @@ def run_all(api: Http, mcp: Mcp, data_dir: Path, repo_dir: Path, stub: StubLLM, 
     check("A10", "边界：仓库里已经有一份用户手写的 AGENTS.md / CLAUDE.md 时再写一次",
           "同一目录调用两次：不带 overwrite 与带 overwrite",
           "默认跳过已有文件并如实上报；显式覆盖才替换", a10)
+
+    def a12():
+        pid = ids["sqli-scanner 注入扫描器"]
+        st, g = api.get(f"/api/projects/{pid}/git?limit=5")
+        if st != 200 or not isinstance(g, dict):
+            return expect(f"读取失败：{st} {str(g)[:100]}", False)
+        head = g.get("head") or {}
+        _, md = api.get(f"/api/export/{pid}")
+        checks = {
+            "分支正确": g.get("branch") == "main",
+            "HEAD 有 hash": bool(head.get("hash")),
+            "提交条数受 limit 约束": len(g.get("commits", [])) <= 5,
+            "认得出未提交改动": g.get("dirty_count", 0) >= 7,     # A9 刚写进去的 7 个入口文件
+            "交接包含代码现状节": "## 代码现状（git）" in md,
+            "交接包带上最新提交": (head.get("subject") or "") in md,
+        }
+        bad = [k for k, v in checks.items() if not v]
+        return expect(f"分支 {g.get('branch')} · HEAD {head.get('hash', '?')} "
+                      f"{head.get('date', '')} · 最近 {len(g.get('commits', []))} 条提交 · "
+                      f"未提交 {g.get('dirty_count')} 个文件 · 距上次提交 {g.get('days_since_commit')} 天"
+                      + ("" if not bad else f"；不符：{bad}"), not bad)
+
+    check("A12", "接手前先看代码现实：分支 / 最近提交 / 有没有没提交的改动",
+          f"GET /api/projects/{'{pid}'}/git；再导出交接包核对",
+          "读到 main 分支与提交记录；刚写进去的入口文件被算作未提交改动；交接包带上这一节", a12)
+
+    def b20():
+        pid = ids["毕业设计 netsec-platform"]        # 这个项目的 repo_path 指向不存在的目录
+        st1, b1 = api.get(f"/api/projects/{pid}/git")
+        st2, md = api.get(f"/api/export/{pid}")
+        no_repo = ids["番茄小说《规则怪谈·午夜日志》"]  # 这个项目压根没填路径
+        st3, b3 = api.get(f"/api/projects/{no_repo}/git")
+        return expect(f"路径不存在 → {st1}「{str(b1)[:40]}」；未填路径 → {st3}「{str(b3)[:40]}」；"
+                      f"交接包仍能导出={st2 == 200}且不含该节={'## 代码现状' not in md}",
+                      st1 == 400 and st3 == 400 and st2 == 200 and "## 代码现状" not in md,
+                      "git 读不到时整体降级：接口给可行动的提示，交接包照常出，不塞空节")
+
+    check("B20", "边界：代码路径不存在 / 项目没填路径时不能拖垮交接",
+          "分别对未填路径与路径不存在的项目拉 git 与交接包",
+          "git 接口 400 且提示可行动；交接包正常生成但不含空节", b20)
 
     check("A10", "边界：仓库里已经有一份用户手写的 AGENTS.md 时再写一次",
           "同一目录重复调用 /api/export/agent-files",

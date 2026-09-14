@@ -96,6 +96,17 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
 .venv\Scripts\python.exe -m pytest tests\test_mcp_server.py -q --no-cov
 ```
 
+## git 集成（只读，绝不拼 shell）
+
+- `git_snapshot(repo_path, limit, use_cache)`：固定调用 `rev-parse` / `log` / `status --porcelain`，
+  **一律列表形式传参**（`["git", *args]` + `cwd=`），仓库路径里塞 `; rm -rf` 之类也只是路径。
+  6 秒超时，任何失败都转成 `{ok: False, error}` 而不是抛异常。
+- **缓存只给批量场景用**：`_git_cache` TTL 60 秒，服务 AI 监管（逐项目取摘要，避免每条一次子进程）。
+  `GET /api/projects/{pid}/git` 必须 `use_cache=False` —— 用户刚提交完点开却看到旧状态最容易被坑。
+- 解析 `git status --porcelain` 时用 **rstrip 不能用 strip**：输出形如 `" M 文件"`，
+  状态列前面的空格有意义，strip 掉会把文件名截错（曾经解析出 `ile0.txt`）。
+- 读不到仓库时降级：接口 400 带可行动提示；交接包省略该节（不要塞空标题）。
+
 ## 数据层三条不显眼但重要的约定
 
 1. **首次落盘丢弃示例数据**：`create_project` 在 `mutate` 里检查 `data_file().exists()`，

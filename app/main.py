@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -620,6 +621,12 @@ def _build_handoff_markdown(p: dict) -> str:
         lines.append("")
         lines.append(p["next_action"])
         lines.append("")
+    git_block = _git_line_for_handoff(p)
+    if git_block:
+        lines.append("## 代码现状（git）")
+        lines.append("")
+        lines.append(git_block)
+        lines.append("")
     tasks = p.get("tasks", [])
     if tasks:
         lines.append("## 任务清单")
@@ -1188,11 +1195,145 @@ def _extract_json(text: str) -> dict | list:
     raise ValueError("无法从 LLM 输出中解析 JSON")
 
 
+# =====================================================================
+#  git 集成：让看板和代码现实对上（只读、只跑固定子命令、绝不拼 shell）
+# =====================================================================
+
+GIT_TIMEOUT = 6
+_git_cache: dict[str, tuple[float, dict]] = {}
+_GIT_CACHE_TTL = 60.0
+
+
+def _run_git(args: list[str], cwd: Path, timeout: int = GIT_TIMEOUT) -> tuple[int, str]:
+    """只以列表形式调用 git，不经过 shell —— 仓库路径里的特殊字符不会被当命令执行"""
+    try:
+        proc = subprocess.run(
+            ["git", *args], cwd=str(cwd), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=timeout,
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0"},
+        )
+        # 注意用 rstrip 而不是 strip：git 的 porcelain 输出形如 " M 文件"，
+        # 前面的状态列空格是有意义的，strip 掉就会把文件名截错。
+        return proc.returncode, (proc.stdout or "").rstrip()
+    except FileNotFoundError:
+        return 127, "未找到 git 命令"
+    except subprocess.TimeoutExpired:
+        return 124, f"git 命令超时（>{timeout}s）"
+    except Exception as e:                       # noqa: BLE001
+        return 1, f"git 调用失败：{e}"
+
+
+def git_snapshot(repo_path: str, limit: int = 10, use_cache: bool = True) -> dict:
+    """读取仓库现状。任何异常都转成 ok=False 的描述，绝不向上抛。"""
+    raw = (repo_path or "").strip()
+    if not raw:
+        return {"ok": False, "error": "该项目没有填代码路径"}
+    repo = Path(raw)
+    if not repo.exists():
+        return {"ok": False, "error": f"代码路径不存在：{raw}"}
+    if not repo.is_dir():
+        return {"ok": False, "error": f"代码路径不是目录：{raw}"}
+
+    cache_key = f"{repo}|{limit}"
+    if use_cache:
+        hit = _git_cache.get(cache_key)
+        if hit and time.time() - hit[0] < _GIT_CACHE_TTL:
+            return hit[1]
+
+    code, out = _run_git(["rev-parse", "--is-inside-work-tree"], repo)
+    if code != 0 or out != "true":
+        return {"ok": False, "error": "该路径不是 git 仓库" if code != 127 else out}
+
+    branch_code, branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], repo)
+    head_code, head_line = _run_git(
+        ["log", "-1", "--date=format:%Y-%m-%d %H:%M", "--pretty=%h%x1f%ad%x1f%an%x1f%s"], repo)
+    commits_code, log_out = _run_git(
+        ["log", f"-{max(1, min(limit, 50))}", "--date=format:%Y-%m-%d %H:%M",
+         "--pretty=%h%x1f%ad%x1f%s"], repo)
+    dirty_code, porcelain = _run_git(["status", "--porcelain"], repo)
+
+    commits = []
+    for line in (log_out or "").splitlines():
+        parts = line.split("\x1f")
+        if len(parts) >= 3:
+            commits.append({"hash": parts[0], "date": parts[1], "subject": parts[2][:200]})
+
+    head = {}
+    if head_code == 0 and head_line:
+        parts = head_line.split("\x1f")
+        if len(parts) >= 4:
+            head = {"hash": parts[0], "date": parts[1], "author": parts[2], "subject": parts[3][:200]}
+
+    dirty_files = []
+    if dirty_code == 0:
+        for line in (porcelain or "").splitlines():
+            if len(line) < 4:
+                continue
+            path = line[3:].strip()
+            if " -> " in path:                       # 重命名：取新名字
+                path = path.split(" -> ")[-1].strip()
+            dirty_files.append(path)
+    days_since: int | None = None
+    if head.get("date"):
+        try:
+            days_since = (datetime.now() - datetime.strptime(head["date"], "%Y-%m-%d %H:%M")).days
+        except Exception:
+            days_since = None
+
+    snapshot = {
+        "ok": True, "path": str(repo),
+        "branch": branch if branch_code == 0 else "",
+        "head": head,
+        "commits": commits,
+        "dirty_count": len(dirty_files),
+        "dirty_files": dirty_files[:20],
+        "days_since_commit": days_since,
+    }
+    if use_cache:
+        _git_cache[cache_key] = (time.time(), snapshot)
+    return snapshot
+
+
+@app.get("/api/projects/{pid}/git")
+def project_git(pid: str, limit: int = 10):
+    """只读：分支 / HEAD / 最近提交 / 工作区是否干净 / 距上次提交多少天
+
+    这个接口是给人点的，不能吃缓存 —— 用户刚提交完点开却看到旧状态最容易被坑。
+    缓存只服务于批量场景（AI 监管里逐个项目取摘要）。
+    """
+    found = find_project(pid)
+    if not found:
+        raise HTTPException(404, "项目不存在")
+    snap = git_snapshot(found[1].get("repo_path", ""), limit=limit, use_cache=False)
+    if not snap.get("ok"):
+        raise HTTPException(400, snap.get("error", "无法读取仓库信息"))
+    return snap
+
+
+def _git_line_for_handoff(p: dict) -> str:
+    """交接包里的一行代码现状；读不到就返回空串，不影响导出"""
+    snap = git_snapshot(p.get("repo_path", ""), limit=5)
+    if not snap.get("ok"):
+        return ""
+    head = snap.get("head") or {}
+    bits = [f"- 分支 `{snap['branch'] or '(detached)'}`"]
+    if head:
+        bits.append(f"- 最新提交：`{head['hash']}` {head['date']} {head['subject']}")
+    if snap.get("days_since_commit") is not None:
+        bits.append(f"- 距上次提交 {snap['days_since_commit']} 天")
+    dirty = snap.get("dirty_count", 0)
+    bits.append("- 工作区" + ("干净" if dirty == 0 else f"有 {dirty} 个未提交改动"))
+    if snap.get("commits"):
+        bits.append("- 最近提交：")
+        bits.extend(f"  - `{c['hash']}` {c['date']} {c['subject']}" for c in snap["commits"])
+    return "\n".join(bits)
+
+
 def _projects_brief(projects: list[dict]) -> list[dict]:
-    """给 LLM 的精简项目数据"""
+    """给 LLM 的精简项目数据（含代码现状，便于发现"看板说有进展、代码其实没动"）"""
     brief = []
     for p in projects:
-        brief.append({
+        item = {
             "id": p["id"],
             "name": p["name"],
             "status": p.get("status", ""),
@@ -1203,7 +1344,18 @@ def _projects_brief(projects: list[dict]) -> list[dict]:
             "background": (p.get("background") or "")[:300],
             "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", "")}
                       for t in (p.get("tasks") or [])[:40]],
-        })
+        }
+        snap = git_snapshot(p.get("repo_path", ""), limit=1)
+        if snap.get("ok"):
+            item["git"] = {
+                "branch": snap.get("branch", ""),
+                "last_commit": (snap.get("head") or {}).get("hash", ""),
+                "last_commit_at": (snap.get("head") or {}).get("date", ""),
+                "last_commit_subject": (snap.get("head") or {}).get("subject", ""),
+                "days_since_commit": snap.get("days_since_commit"),
+                "uncommitted_files": snap.get("dirty_count", 0),
+            }
+        brief.append(item)
     return brief
 
 
