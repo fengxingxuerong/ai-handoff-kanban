@@ -1,0 +1,2030 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 交接看板</title>
+<link rel="icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='88'%3E%E2%87%84%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0e1320;
+    --bg-soft: #141b2d;
+    --card: #1a2336;
+    --card-hover: #202b42;
+    --border: #2a3650;
+    --text: #e6ecf7;
+    --text-dim: #8fa0bf;
+    --text-faint: #5f6f8f;
+    --accent: #4cc2ff;
+    --accent2: #8b7cf6;
+    --green: #34d399;
+    --orange: #fbbf24;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --gray: #94a3b8;
+    --radius: 14px;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(139,124,246,.12), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(76,194,255,.10), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    overflow: hidden;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(14,19,32,.7);
+    backdrop-filter: blur(8px);
+    position: relative; z-index: 10;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px; white-space: nowrap;
+  }
+  .logo .mark {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: grid; place-items: center;
+    font-size: 18px; color: #fff;
+    box-shadow: 0 4px 14px rgba(76,194,255,.35);
+  }
+  .logo h1 { font-size: 17px; font-weight: 700; letter-spacing: .5px; }
+  .logo .sub { font-size: 11px; color: var(--text-faint); font-weight: 400; }
+
+  .search-wrap { flex: 1; display: flex; justify-content: center; }
+  .search-box {
+    position: relative; width: min(420px, 100%);
+  }
+  .search-box input {
+    width: 100%; padding: 9px 14px 9px 36px;
+    border-radius: 10px; border: 1px solid var(--border);
+    background: var(--bg-soft); color: var(--text);
+    font-size: 13px; outline: none; transition: border .2s;
+  }
+  .search-box input:focus { border-color: var(--accent); }
+  .search-box svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); opacity: .5; }
+
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text); font-size: 13px; cursor: pointer;
+    transition: all .18s; white-space: nowrap;
+  }
+  .btn:hover { background: var(--card-hover); border-color: #3a4a6e; transform: translateY(-1px); }
+  .btn.primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none; color: #fff; font-weight: 600;
+    box-shadow: 0 4px 16px rgba(76,194,255,.3);
+  }
+  .btn.primary:hover { filter: brightness(1.1); }
+  .btn.danger { color: var(--red); }
+  .btn.danger:hover { background: rgba(248,113,113,.12); border-color: var(--red); }
+  .btn.small { padding: 4px 10px; font-size: 12px; border-radius: 8px; }
+  .btn.icon { padding: 8px 10px; }
+
+  /* ---------- 筛选条 ---------- */
+  .filter-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 22px; border-bottom: 1px solid var(--border);
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .filter-bar::-webkit-scrollbar { display: none; }
+  .chip {
+    padding: 5px 14px; border-radius: 20px; font-size: 12px;
+    border: 1px solid var(--border); color: var(--text-dim);
+    cursor: pointer; background: transparent; transition: all .15s; white-space: nowrap;
+  }
+  .chip:hover { color: var(--text); border-color: #3a4a6e; }
+  .chip.active { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border-color: transparent; }
+  .filter-bar .spacer { flex: 1; }
+  .filter-bar .count { font-size: 12px; color: var(--text-faint); }
+
+  /* ---------- 总览视图 ---------- */
+  #view-overview { height: calc(100vh - 118px); overflow-y: auto; padding: 20px 22px 40px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .pcard {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+    cursor: pointer; transition: all .2s;
+    display: flex; flex-direction: column; gap: 10px;
+    position: relative; overflow: hidden;
+  }
+  .pcard::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    opacity: 0; transition: opacity .2s;
+  }
+  .pcard:hover { background: var(--card-hover); transform: translateY(-3px); box-shadow: var(--shadow); }
+  .pcard:hover::before { opacity: 1; }
+  .pcard .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .pcard .name { font-size: 15px; font-weight: 700; line-height: 1.35; }
+  .pcard .actions { display: flex; gap: 4px; opacity: 0; transition: opacity .15s; }
+  .pcard:hover .actions { opacity: 1; }
+  .pcard .actions .btn { padding: 3px 7px; font-size: 11px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .st-规划中 { color: var(--gray); background: rgba(148,163,184,.12); }
+  .st-进行中 { color: var(--blue); background: rgba(96,165,250,.12); }
+  .st-已暂停 { color: var(--orange); background: rgba(251,191,36,.12); }
+  .st-已完成 { color: var(--green); background: rgba(52,211,153,.12); }
+  .pr-高 { color: var(--red); }
+  .pr-中 { color: var(--orange); }
+  .pr-低 { color: var(--gray); }
+
+  .progress-row { display: flex; align-items: center; gap: 10px; }
+  .bar { flex: 1; height: 7px; border-radius: 4px; background: var(--bg-soft); overflow: hidden; }
+  .bar > i {
+    display: block; height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width .4s ease;
+  }
+  .progress-row .num { font-size: 12px; color: var(--text-dim); width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .stats { display: flex; gap: 6px; flex-wrap: wrap; }
+  .stat {
+    padding: 3px 9px; border-radius: 7px; font-size: 11px;
+    background: var(--bg-soft); color: var(--text-dim); border: 1px solid transparent;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat b { font-weight: 700; }
+  .stat.s-todo { color: var(--gray); }
+  .stat.s-doing { color: var(--blue); }
+  .stat.s-done { color: var(--green); }
+  .stat.s-blocked { color: var(--red); }
+
+  .next-action {
+    font-size: 12px; color: var(--text-dim);
+    background: rgba(76,194,255,.07); border: 1px dashed rgba(76,194,255,.25);
+    border-radius: 9px; padding: 8px 10px; line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .next-action .lab { color: var(--accent); font-weight: 600; margin-right: 4px; }
+
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: 11px; color: var(--accent2); background: rgba(139,124,246,.1); border: 1px solid rgba(139,124,246,.25); padding: 1px 8px; border-radius: 6px; }
+  .pcard .meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); margin-top: auto; }
+
+  .empty {
+    text-align: center; padding: 80px 20px; color: var(--text-faint);
+  }
+  .empty .big { font-size: 44px; margin-bottom: 14px; }
+
+  /* ---------- 详情视图 ---------- */
+  #view-detail { display: none; height: calc(100vh - 60px); }
+  #view-detail.active { display: block; }
+  .detail-scroll { height: 100%; overflow-y: auto; padding: 18px 22px 60px; }
+  .d-head {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .d-head .title { font-size: 20px; font-weight: 800; }
+  .d-head .badge { font-size: 12px; padding: 3px 12px; }
+  .d-head .spacer { flex: 1; }
+
+  .d-layout { display: grid; grid-template-columns: 380px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 980px) { .d-layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+  }
+  .panel h3 {
+    font-size: 12px; color: var(--accent); letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .panel .body { font-size: 13px; line-height: 1.7; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+  .panel .body.dim { color: var(--text-dim); }
+  .kv { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+  .kv .row { display: flex; justify-content: space-between; gap: 10px; }
+  .kv .k { color: var(--text-faint); }
+  .kv .v { color: var(--text); text-align: right; word-break: break-all; }
+  .kv .v.mono { font-family: Consolas, monospace; font-size: 12px; }
+
+  .handoff-box {
+    background: linear-gradient(135deg, rgba(76,194,255,.08), rgba(139,124,246,.08));
+    border: 1px solid rgba(76,194,255,.3); border-radius: 12px;
+    padding: 14px; margin-bottom: 16px;
+  }
+  .handoff-box .tip { font-size: 11px; color: var(--text-faint); margin-bottom: 8px; }
+  .handoff-box .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* 任务看板 */
+  .kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 1200px) { .kanban { grid-template-columns: repeat(2, 1fr); } }
+  .kcol {
+    background: rgba(10,14,24,.5); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px; min-height: 160px;
+  }
+  .kcol .khead {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 700; margin-bottom: 10px; padding: 2px 4px;
+  }
+  .kcol .khead .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .kcol .khead .n { margin-left: auto; background: var(--bg-soft); color: var(--text-dim); font-size: 11px; padding: 1px 8px; border-radius: 10px; }
+  .kcol.k-todo .dot { background: var(--gray); }
+  .kcol.k-doing .dot { background: var(--blue); }
+  .kcol.k-done .dot { background: var(--green); }
+  .kcol.k-blocked .dot { background: var(--red); }
+  .kcol.k-todo { border-top: 2px solid var(--gray); }
+  .kcol.k-doing { border-top: 2px solid var(--blue); }
+  .kcol.k-done { border-top: 2px solid var(--green); }
+  .kcol.k-blocked { border-top: 2px solid var(--red); }
+
+  .tcard {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+    cursor: pointer; transition: all .15s;
+  }
+  .tcard:hover { border-color: #3a4a6e; background: var(--card-hover); transform: translateY(-1px); }
+  .tcard .tt { font-size: 13px; font-weight: 600; line-height: 1.45; margin-bottom: 6px; }
+  .tcard .td { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tcard .tfoot { display: flex; align-items: center; gap: 6px; }
+  .tcard .tag2 { font-size: 10px; padding: 1px 7px; border-radius: 5px; }
+  .tcard .tag2.pri-高 { color: var(--red); background: rgba(248,113,113,.12); }
+  .tcard .tag2.pri-中 { color: var(--orange); background: rgba(251,191,36,.12); }
+  .tcard .tag2.pri-低 { color: var(--gray); background: rgba(148,163,184,.12); }
+  .tcard .agent { margin-left: auto; font-size: 10px; color: var(--accent); background: rgba(76,194,255,.1); padding: 1px 7px; border-radius: 5px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kcol.k-done .tcard { opacity: .65; }
+  .kcol.k-done .tcard:hover { opacity: 1; }
+
+  /* ---------- 弹窗 ---------- */
+  .modal-mask {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(6,9,16,.72); backdrop-filter: blur(4px);
+    align-items: flex-start; justify-content: center; padding: 50px 16px;
+    overflow-y: auto;
+  }
+  .modal-mask.show { display: flex; }
+  .modal {
+    background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: 16px; width: min(560px, 100%);
+    box-shadow: var(--shadow); animation: pop .18s ease;
+  }
+  @keyframes pop { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .modal .mhead {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .modal .mhead h2 { font-size: 15px; }
+  .modal .mbody { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .modal .mfoot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+  .field label .req { color: var(--red); }
+  .field input, .field select, .field textarea {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 9px; color: var(--text); padding: 9px 12px;
+    font-size: 13px; font-family: inherit; outline: none; transition: border .2s;
+    width: 100%;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+  .field textarea { resize: vertical; min-height: 70px; line-height: 1.6; }
+  .field textarea.tall { min-height: 110px; }
+  .field .hint { font-size: 11px; color: var(--text-faint); line-height: 1.5; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips .chip-tag {
+    font-size: 12px; padding: 4px 12px; border-radius: 8px;
+    border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; background: var(--bg);
+    transition: all .15s;
+  }
+  .chips .chip-tag.active { background: rgba(139,124,246,.15); color: var(--accent2); border-color: var(--accent2); }
+
+  /* ---------- Toast ---------- */
+  #toast {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 20px; border-radius: 10px; font-size: 13px;
+    box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: all .25s; z-index: 200;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: #2a3650; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a6e; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---------- AI 监管报告 ---------- */
+  .report-mask {
+    display: none; position: fixed; inset: 0; z-index: 90;
+    background: rgba(6,9,16,.78); backdrop-filter: blur(6px);
+  }
+  .report-mask.show { display: block; }
+  .report-panel {
+    position: fixed; inset: 0; z-index: 95;
+    display: none; flex-direction: column;
+    background: var(--bg);
+  }
+  .report-panel.show { display: flex; }
+  .report-panel .r-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 22px; border-bottom: 1px solid var(--border);
+    background: rgba(14,19,32,.8); backdrop-filter: blur(8px);
+  }
+  .report-panel .r-head h2 { font-size: 16px; }
+  .report-panel .r-head .sub { font-size: 12px; color: var(--text-faint); }
+  .report-panel .r-body { flex: 1; overflow-y: auto; padding: 20px 22px 60px; }
+
+  .r-summary {
+    background: linear-gradient(135deg, rgba(76,194,255,.1), rgba(139,124,246,.1));
+    border: 1px solid rgba(76,194,255,.28); border-radius: 14px;
+    padding: 16px 18px; margin-bottom: 18px; line-height: 1.7; font-size: 13.5px;
+  }
+  .r-summary .lab { color: var(--accent); font-weight: 700; margin-right: 6px; }
+
+  .r-insights { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .insight {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .insight .i-top { display: flex; align-items: center; gap: 10px; }
+  .insight .i-name { font-size: 14.5px; font-weight: 700; flex: 1; }
+  .health {
+    width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
+    font-weight: 800; font-size: 15px; color: #fff; flex-shrink: 0;
+  }
+  .health.hi { background: linear-gradient(135deg, #34d399, #059669); box-shadow: 0 4px 14px rgba(52,211,153,.3); }
+  .health.mid { background: linear-gradient(135deg, #fbbf24, #f59e0b); box-shadow: 0 4px 14px rgba(251,191,36,.3); }
+  .health.lo { background: linear-gradient(135deg, #f87171, #dc2626); box-shadow: 0 4px 14px rgba(248,113,113,.3); }
+  .insight .i-reason { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+  .insight .i-sec { font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: .5px; }
+  .insight .risk-list, .insight .sug-list { display: flex; flex-direction: column; gap: 6px; }
+  .risk-item {
+    font-size: 12.5px; color: var(--red); background: rgba(248,113,113,.07);
+    border-left: 2px solid var(--red); padding: 6px 10px; border-radius: 0 7px 7px 0; line-height: 1.5;
+  }
+  .sug-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 12.5px; color: var(--text);
+    background: rgba(139,124,246,.07); border-left: 2px solid var(--accent2);
+    padding: 7px 10px; border-radius: 0 7px 7px 0; line-height: 1.5;
+  }
+  .sug-item .sug-text { flex: 1; }
+  .sug-item .apply-btn {
+    flex-shrink: 0; font-size: 11px; padding: 3px 10px; border-radius: 7px;
+    border: 1px solid var(--accent2); color: var(--accent2); background: transparent; cursor: pointer;
+    transition: all .15s;
+  }
+  .sug-item .apply-btn:hover { background: var(--accent2); color: #fff; }
+  .sug-item .apply-btn.done { opacity: .45; pointer-events: none; }
+
+  .r-global { background: var(--bg-soft); border: 1px dashed var(--border); border-radius: 12px; padding: 14px 16px; }
+  .r-global .lab { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+  .r-global li { font-size: 12.5px; color: var(--text-dim); line-height: 1.7; margin-left: 18px; }
+
+  .r-loading { text-align: center; padding: 70px 20px; color: var(--text-dim); }
+  .spinner {
+    width: 34px; height: 34px; border-radius: 50%; margin: 0 auto 14px;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- AI 指令弹窗 ---------- */
+  .cmd-chat { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; }
+  .cmd-msg { font-size: 13px; line-height: 1.7; padding: 10px 13px; border-radius: 11px; max-width: 92%; }
+  .cmd-msg.user { align-self: flex-end; background: linear-gradient(135deg, rgba(76,194,255,.18), rgba(139,124,246,.18)); border: 1px solid rgba(76,194,255,.3); }
+  .cmd-msg.ai { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); color: var(--text-dim); white-space: pre-wrap; }
+  .cmd-msg.ai .op { display: flex; align-items: center; gap: 8px; padding: 6px 0; color: var(--text); border-bottom: 1px dashed var(--border); }
+  .cmd-msg.ai .op:last-child { border-bottom: none; }
+  .op-tag { font-size: 10px; padding: 1px 7px; border-radius: 5px; flex-shrink: 0; font-weight: 600; }
+  .op-tag.create { color: var(--green); background: rgba(52,211,153,.12); }
+  .op-tag.update { color: var(--blue); background: rgba(96,165,250,.12); }
+  .op-tag.delete { color: var(--red); background: rgba(248,113,113,.12); }
+  .cmd-input-row { display: flex; gap: 8px; margin-top: 4px; }
+  .cmd-input-row input { flex: 1; }
+
+  /* ---------- 通用：小工具 ---------- */
+  .switch { position: relative; width: 38px; height: 21px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .slider {
+    position: absolute; inset: 0; border-radius: 20px; background: var(--border); transition: .2s; cursor: pointer;
+  }
+  .switch .slider::before {
+    content: ""; position: absolute; width: 15px; height: 15px; border-radius: 50%;
+    left: 3px; top: 3px; background: #fff; transition: .2s;
+  }
+  .switch input:checked + .slider { background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  .switch input:checked + .slider::before { transform: translateX(17px); }
+  .ep-card { border: 1px solid var(--border); border-radius: 11px; padding: 12px; background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
+  .ep-card .ep-top { display: flex; align-items: center; gap: 10px; }
+  .ep-card .ep-top .ep-name { font-weight: 700; font-size: 13.5px; flex: 1; }
+  .ep-card .ep-top .switch { transform: scale(.9); }
+  .ep-card textarea { min-height: 44px; font-family: Consolas, monospace; font-size: 11.5px; }
+  .ai-loading-btn { position: relative; pointer-events: none; opacity: .75; }
+  .ai-loading-btn::after {
+    content: ""; display: inline-block; width: 11px; height: 11px; margin-left: 8px;
+    border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%;
+    animation: spin .7s linear infinite; vertical-align: -1px;
+  }
+
+  /* ---------- 总览仪表盘 ---------- */
+  #dash { padding: 14px 22px 4px; }
+  .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .stat-card .s-num { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat-card .s-lab { font-size: 11px; color: var(--text-faint); }
+  .stat-card .s-num.accent { color: var(--accent); }
+  .stat-card .s-num.green { color: var(--green); }
+  .stat-card .s-num.orange { color: var(--orange); }
+  .stat-card .s-num.red { color: var(--red); }
+  .stat-card .s-num.purple { color: var(--accent2); }
+  .chart-row { display: grid; grid-template-columns: 340px 1fr; gap: 12px; margin-bottom: 12px; }
+  @media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+  }
+  .chart-card h4 { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .chart-card .chart-body { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .donut-legend { display: flex; flex-direction: column; gap: 5px; font-size: 11.5px; color: var(--text-dim); }
+  .donut-legend .lg { display: flex; align-items: center; gap: 7px; }
+  .donut-legend .lg i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+  .donut-legend .lg b { color: var(--text); font-variant-numeric: tabular-nums; margin-left: auto; padding-left: 12px; }
+  .bars { display: flex; flex-direction: column; gap: 7px; width: 100%; }
+  .bar-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
+  .bar-row .b-name { width: 140px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+  .bar-row .b-track { flex: 1; height: 10px; background: var(--bg-soft); border-radius: 5px; overflow: hidden; }
+  .bar-row .b-fill { height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .5s ease; }
+  .bar-row .b-num { width: 34px; text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+  .rd-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 12px;
+    margin-left: 4px; vertical-align: 1px;
+  }
+  .rd-hi { color: var(--green); background: rgba(52,211,153,.12); }
+  .rd-mid { color: var(--orange); background: rgba(251,191,36,.12); }
+  .rd-lo { color: var(--red); background: rgba(248,113,113,.12); }
+
+  /* ---------- Markdown 渲染 ---------- */
+  .md-body { font-size: 13px; line-height: 1.75; color: var(--text); }
+  .md-body .md-p { margin: 0 0 8px; }
+  .md-body .md-h3 { font-size: 14.5px; font-weight: 800; margin: 12px 0 6px; color: var(--accent); }
+  .md-body .md-h4 { font-size: 13.5px; font-weight: 700; margin: 10px 0 5px; color: var(--accent2); }
+  .md-body .md-h5 { font-size: 13px; font-weight: 700; margin: 8px 0 4px; }
+  .md-body .md-ul, .md-body .md-ol { margin: 0 0 8px 4px; padding-left: 20px; }
+  .md-body .md-li { margin: 3px 0; }
+  .md-body .md-code {
+    background: rgba(76,194,255,.12); color: var(--accent); padding: 1px 6px;
+    border-radius: 5px; font-family: Consolas, monospace; font-size: 12px;
+  }
+  .md-body .md-pre {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 9px;
+    padding: 10px 12px; overflow-x: auto; font-family: Consolas, monospace; font-size: 12px;
+    line-height: 1.6; margin: 0 0 10px; white-space: pre-wrap;
+  }
+  .md-body .md-quote {
+    border-left: 3px solid var(--accent2); background: rgba(139,124,246,.08);
+    padding: 6px 12px; margin: 0 0 8px; border-radius: 0 8px 8px 0; color: var(--text-dim);
+  }
+  .md-body .md-hr { border: none; border-top: 1px dashed var(--border); margin: 10px 0; }
+  .md-body strong { color: var(--text); }
+
+  /* ---------- 就绪度检查清单 ---------- */
+  .readiness-top { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+  .rd-ring {
+    width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
+    display: grid; place-items: center; font-weight: 800; font-size: 14px; color: #fff;
+  }
+  .rd-ring.rd-hi { background: linear-gradient(135deg, #34d399, #059669); }
+  .rd-ring.rd-mid { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+  .rd-ring.rd-lo { background: linear-gradient(135deg, #f87171, #dc2626); }
+  .rd-items { display: flex; flex-direction: column; gap: 6px; }
+  .rd-item {
+    display: flex; align-items: center; gap: 8px; font-size: 12.5px;
+    padding: 6px 10px; border-radius: 8px;
+  }
+  .rd-item.ok { color: var(--text); background: rgba(52,211,153,.06); }
+  .rd-item.no { color: var(--text-dim); background: rgba(248,113,113,.05); }
+  .rd-item .mk { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; flex-shrink: 0; }
+  .rd-item.ok .mk { background: rgba(52,211,153,.18); color: var(--green); }
+  .rd-item.no .mk { background: rgba(248,113,113,.15); color: var(--red); }
+  .rd-item .pt { margin-left: auto; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+  /* ---------- 趋势图 ---------- */
+  .trend-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .trend-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11.5px; color: var(--text-dim); }
+  .trend-legend .tl { display: flex; align-items: center; gap: 6px; }
+  .trend-legend .tl i { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .trend-empty { padding: 40px 20px; text-align: center; color: var(--text-faint); }
+  .trend-empty .big { font-size: 34px; margin-bottom: 10px; }
+
+  /* ---------- 备份 / 提炼 ---------- */
+  .backup-list { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-dim); max-height: 120px; overflow-y: auto; }
+  .backup-list .bk { display: flex; justify-content: space-between; padding: 4px 8px; background: var(--bg); border-radius: 6px; }
+  .summ-box {
+    background: var(--bg-soft); border: 1px dashed var(--border); border-radius: 10px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.7; display: flex; flex-direction: column; gap: 10px;
+  }
+  .summ-box .sec { display: flex; flex-direction: column; gap: 6px; }
+  .summ-box .sec .lab { font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: .5px; }
+  .summ-box .sec .body { color: var(--text-dim); font-size: 12.5px; line-height: 1.6; }
+  .summ-box .sec .tasks { display: flex; flex-direction: column; gap: 5px; }
+  .summ-box .sec .task-row {
+    display: flex; align-items: center; gap: 8px; font-size: 12.5px;
+    background: var(--bg); border-radius: 7px; padding: 6px 10px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="mark">⇄</div>
+    <div>
+      <h1>AI 交接看板</h1>
+      <div class="sub">多项目任务中枢 · 切换智能体无缝交付</div>
+    </div>
+  </div>
+  <div class="search-wrap">
+    <div class="search-box">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="search" type="text" placeholder="搜索项目名称 / 标签 / 背景 / 交接说明…" oninput="renderOverview()">
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn" onclick="openAICmd()">🤖 AI 指令</button>
+    <button class="btn" onclick="openReport()">📊 AI 监管</button>
+    <button class="btn" onclick="openAISettings()">⚙️</button>
+    <button class="btn primary" onclick="openProjectModal()">＋ 新建项目</button>
+  </div>
+</header>
+
+<div class="filter-bar">
+  <button class="chip active" data-f="全部" onclick="setFilter(this,'全部')">全部</button>
+  <button class="chip" data-f="进行中" onclick="setFilter(this,'进行中')">进行中</button>
+  <button class="chip" data-f="规划中" onclick="setFilter(this,'规划中')">规划中</button>
+  <button class="chip" data-f="已暂停" onclick="setFilter(this,'已暂停')">已暂停</button>
+  <button class="chip" data-f="已完成" onclick="setFilter(this,'已完成')">已完成</button>
+  <div class="spacer"></div>
+  <span class="count" id="proj-count"></span>
+</div>
+
+<!-- 总览视图 -->
+<div id="view-overview">
+  <div id="dash"></div>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">
+    <div class="big">🗂️</div>
+    <div>还没有项目，点右上角「新建项目」开始搭建你的交接看板吧</div>
+  </div>
+</div>
+
+<!-- 详情视图 -->
+<div id="view-detail">
+  <div class="detail-scroll">
+    <div class="d-head">
+      <button class="btn" onclick="showOverview()">← 返回总览</button>
+      <span class="title" id="d-name"></span>
+      <span class="badge" id="d-status"></span>
+      <span class="badge pr-" id="d-priority"></span>
+      <div class="spacer"></div>
+      <button class="btn" onclick="openTaskModal()">＋ 新建任务</button>
+      <button class="btn" onclick="editProject()">✎ 编辑项目</button>
+      <button class="btn danger" onclick="deleteProject()">🗑 删除</button>
+    </div>
+
+    <div class="d-layout">
+      <div>
+        <div class="handoff-box">
+          <div class="tip">💡 要换 AI 智能体接手？点一下复制交接摘要，直接粘贴给新智能体即可无缝开工</div>
+          <div class="btns">
+            <button class="btn primary small" onclick="copyHandoffText()">📋 复制交接摘要</button>
+            <button class="btn small" onclick="copyHandoffMarkdown()">📄 复制 Markdown</button>
+            <button class="btn small" onclick="openHandoffPackage()">📦 完整交接包</button>
+            <button class="btn small" onclick="openAgentsMD()">🤖 生成 AGENTS.md</button>
+            <button class="btn small" onclick="openSummarize()">📥 会话提炼</button>
+          </div>
+        </div>
+
+        <div class="panel" id="readiness-panel">
+          <h3>🧭 交接就绪度</h3>
+          <div id="readiness-body"></div>
+        </div>
+
+        <div class="panel">
+          <h3>📊 进度</h3>
+          <div class="kv">
+            <div class="row"><span class="k">完成进度</span><span class="v" id="d-progress-val"></span></div>
+            <div class="row"><span class="k">代码路径</span><span class="v mono" id="d-repo"></span></div>
+            <div class="row"><span class="k">标签</span><span class="v" id="d-tags"></span></div>
+            <div class="row"><span class="k">最近更新</span><span class="v" id="d-updated"></span></div>
+          </div>
+          <div class="progress-row" style="margin-top:12px">
+            <div class="bar"><i id="d-progress-bar" style="width:0%"></i></div>
+            <span class="num" id="d-progress-num"></span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>📝 项目背景</h3>
+          <div class="body dim" id="d-background"></div>
+        </div>
+
+        <div class="panel">
+          <h3 style="justify-content:space-between">🤝 交接说明（给智能体）
+            <span style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0">
+              <span style="font-size:11px;font-weight:400;color:var(--text-faint)">Markdown 渲染</span>
+              <button class="btn small" onclick="openAIHandoff()">✨ AI 生成</button>
+            </span>
+          </h3>
+          <div class="body md-body" id="d-handoff"></div>
+        </div>
+
+        <div class="panel">
+          <h3>🎯 下一步行动</h3>
+          <div class="body" id="d-next"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel" style="margin-bottom:0">
+          <h3>🗃 任务看板 <span style="margin-left:auto; text-transform:none; letter-spacing:0; font-weight:400; color:var(--text-faint)" id="d-task-total"></span></h3>
+          <div class="kanban">
+            <div class="kcol k-todo">
+              <div class="khead"><span class="dot"></span>待办<span class="n" id="c-todo">0</span></div>
+              <div id="col-todo"></div>
+            </div>
+            <div class="kcol k-doing">
+              <div class="khead"><span class="dot"></span>进行中<span class="n" id="c-doing">0</span></div>
+              <div id="col-doing"></div>
+            </div>
+            <div class="kcol k-done">
+              <div class="khead"><span class="dot"></span>已完成<span class="n" id="c-done">0</span></div>
+              <div id="col-done"></div>
+            </div>
+            <div class="kcol k-blocked">
+              <div class="khead"><span class="dot"></span>阻塞<span class="n" id="c-blocked">0</span></div>
+              <div id="col-blocked"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 项目弹窗 -->
+<div class="modal-mask" id="proj-modal">
+  <div class="modal">
+    <div class="mhead"><h2 id="proj-modal-title">新建项目</h2><button class="btn icon" onclick="closeModal('proj-modal')">✕</button></div>
+    <div class="mbody">
+      <div class="field"><label>项目名称 <span class="req">*</span></label><input id="f-name" placeholder="例如：EduSmart 学生管理系统"></div>
+      <div class="row3">
+        <div class="field"><label>状态</label><select id="f-status">
+          <option>规划中</option><option>进行中</option><option>已暂停</option><option>已完成</option>
+        </select></div>
+        <div class="field"><label>优先级</label><select id="f-priority">
+          <option>高</option><option>中</option><option>低</option>
+        </select></div>
+        <div class="field"><label>进度 %</label><input id="f-progress" type="number" min="0" max="100" value="0"></div>
+      </div>
+      <div class="field">
+        <label>标签（点击切换，可输入自定义后按回车添加）</label>
+        <div class="chips" id="f-tag-chips">
+          <span class="chip-tag" data-t="全栈">全栈</span>
+          <span class="chip-tag" data-t="AI 写作">AI 写作</span>
+          <span class="chip-tag" data-t="工具">工具</span>
+          <span class="chip-tag" data-t="前端">前端</span>
+          <span class="chip-tag" data-t="后端">后端</span>
+          <span class="chip-tag" data-t="安全">安全</span>
+          <span class="chip-tag" data-t="学习">学习</span>
+        </div>
+        <input id="f-tag-input" placeholder="输入新标签后按回车添加" style="margin-top:8px">
+      </div>
+      <div class="field"><label>代码路径（可选）</label><input id="f-repo" placeholder="例如：D:\longmao\edu-smart"></div>
+      <div class="field"><label>项目背景</label><textarea id="f-bg" placeholder="这个项目是做什么的？技术栈、架构、核心模块……"></textarea></div>
+      <div class="field">
+        <label>交接说明（写给未来接手的 AI 智能体）</label>
+        <textarea class="tall" id="f-handoff" placeholder="写清楚：技术栈与目录结构、已定的关键决策、已知的坑、测试/运行命令、约定与注意事项……交接越具体，接手越顺利"></textarea>
+        <div class="hint">新智能体接手时会优先看这里，写清楚能省掉一大半重复沟通</div>
+      </div>
+      <div class="field"><label>下一步行动</label><textarea id="f-next" placeholder="最近要推进的一件事是什么？"></textarea></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" onclick="closeModal('proj-modal')">取消</button>
+      <button class="btn primary" onclick="saveProject()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 任务弹窗 -->
+<div class="modal-mask" id="task-modal">
+  <div class="modal">
+    <div class="mhead"><h2 id="task-modal-title">新建任务</h2><button class="btn icon" onclick="closeModal('task-modal')">✕</button></div>
+    <div class="mbody">
+      <div class="field"><label>任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调"></div>
+      <div class="field"><label>任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、验收标准……"></textarea></div>
+      <div class="row3">
+        <div class="field"><label>状态</label><select id="t-status">
+          <option>待办</option><option>进行中</option><option>已完成</option><option>阻塞</option>
+        </select></div>
+        <div class="field"><label>优先级</label><select id="t-priority">
+          <option>高</option><option>中</option><option>低</option>
+        </select></div>
+        <div class="field"><label>负责 AI（可选）</label><input id="t-agent" placeholder="如 cline / 豆包"></div>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" onclick="closeModal('task-modal')">取消</button>
+      <button class="btn primary" onclick="saveTask()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- AI 监管报告面板 -->
+<div class="report-mask" id="report-mask" onclick="closeReport()"></div>
+<div class="report-panel" id="report-panel">
+  <div class="r-head">
+    <button class="btn" onclick="closeReport()">← 返回</button>
+    <h2>📊 AI 监管报告</h2>
+    <span class="sub" id="report-meta"></span>
+    <div class="spacer" style="flex:1"></div>
+    <button class="btn" id="report-refresh-btn" onclick="openReport()">🔄 重新分析</button>
+  </div>
+  <div class="r-body" id="report-body">
+    <div class="r-loading"><div class="spinner"></div><div>AI 正在分析全部项目，请稍候…</div></div>
+  </div>
+</div>
+
+<!-- AI 设置弹窗 -->
+<div class="modal-mask" id="ai-settings-modal">
+  <div class="modal" style="width:min(680px,100%)">
+    <div class="mhead"><h2>⚙️ AI 设置</h2><button class="btn icon" onclick="closeModal('ai-settings-modal')">✕</button></div>
+    <div class="mbody">
+      <div class="field"><label>默认模型</label>
+        <select id="ai-active-model"></select>
+        <div class="hint">监管分析、指令解析、交接生成默认使用的模型；调用失败会自动切换其他端点</div>
+      </div>
+      <div class="field"><label>AI 端点（Key 已脱敏显示，直接粘贴新 Key 可替换）</label>
+        <div id="ai-endpoints" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+      <div class="field"><label>定时自动监管</label>
+        <div class="row3">
+          <div class="field"><label>启用</label>
+            <label class="switch"><input type="checkbox" id="ai-sched-enabled"><span class="slider"></span></label>
+          </div>
+          <div class="field"><label>频率</label><select id="ai-sched-freq"><option value="daily">每天</option><option value="weekly">每周</option></select></div>
+          <div class="field"><label>时间</label><input type="time" id="ai-sched-time" value="09:00"></div>
+        </div>
+        <div class="hint">到点后自动生成监管报告并存入「历史报告」，不修改项目数据；最近运行：<span id="ai-sched-last">—</span></div>
+      </div>
+      <div class="field"><label>数据备份（本地快照，保留最近 10 份）</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn" id="backup-btn" onclick="backupNow()">💾 立即备份</button>
+          <span style="font-size:11px;color:var(--text-faint)" id="backup-tip"></span>
+        </div>
+        <div class="backup-list" id="backup-list"></div>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" id="ai-test-btn" onclick="testAI()">🔌 测试连接</button>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn" onclick="closeModal('ai-settings-modal')">取消</button>
+      <button class="btn primary" onclick="saveAISettings()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI 指令弹窗 -->
+<div class="modal-mask" id="ai-cmd-modal">
+  <div class="modal" style="width:min(620px,100%)">
+    <div class="mhead"><h2>🤖 AI 指令</h2><button class="btn icon" onclick="closeModal('ai-cmd-modal')">✕</button></div>
+    <div class="mbody">
+      <div class="cmd-chat" id="cmd-chat">
+        <div class="cmd-msg ai">你好！用大白话告诉我想做什么，例如：<br>·「给 EduSmart 加一个任务：完成部署文档，优先级高」<br>·「把墨匠的进度改成 85%」<br>·「把正在进行的项目标记为已完成」<br>我会解析成具体操作，你确认后执行。</div>
+      </div>
+      <div class="cmd-input-row">
+        <input id="cmd-input" placeholder="输入指令，如：给进行中的项目加任务…" onkeydown="if(event.key==='Enter')sendCommand()">
+        <button class="btn primary" id="cmd-send-btn" onclick="sendCommand()">发送</button>
+      </div>
+      <div style="display:none" id="cmd-exec-row">
+        <button class="btn primary" style="width:100%" onclick="executeActions()">✅ 确认执行以上操作</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI 交接生成弹窗 -->
+<div class="modal-mask" id="ai-handoff-modal">
+  <div class="modal" style="width:min(680px,100%)">
+    <div class="mhead"><h2>✨ AI 生成交接说明</h2><button class="btn icon" onclick="closeModal('ai-handoff-modal')">✕</button></div>
+    <div class="mbody">
+      <div class="row2">
+        <div class="field"><label>模式</label>
+          <select id="ai-handoff-mode"><option value="generate">全新生成</option><option value="polish">润色现有说明</option></select>
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <button class="btn primary" id="ai-handoff-gen-btn" onclick="generateHandoff()">✨ 生成</button>
+        </div>
+      </div>
+      <div class="field"><label>生成结果（可直接编辑后应用）</label>
+        <textarea class="tall" id="ai-handoff-result" style="min-height:260px" placeholder="点击生成后，AI 撰写的交接说明会显示在这里…"></textarea>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" onclick="closeModal('ai-handoff-modal')">取消</button>
+      <button class="btn primary" onclick="applyHandoff()">✅ 应用到项目</button>
+    </div>
+  </div>
+</div>
+
+<!-- 健康趋势图弹窗 -->
+<div class="modal-mask" id="trend-modal">
+  <div class="modal" style="width:min(760px,100%)">
+    <div class="mhead"><h2>📈 项目健康分趋势</h2><button class="btn icon" onclick="closeModal('trend-modal')">✕</button></div>
+    <div class="mbody">
+      <div id="trend-body"><div class="r-loading"><div class="spinner"></div><div>加载趋势数据…</div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 完整交接包弹窗 -->
+<div class="modal-mask" id="package-modal">
+  <div class="modal" style="width:min(760px,100%)">
+    <div class="mhead"><h2 id="package-title">📦 完整交接包</h2><button class="btn icon" onclick="closeModal('package-modal')">✕</button></div>
+    <div class="mbody">
+      <div class="field"><label>交接包内容（Markdown，可直接编辑后再导出）</label>
+        <textarea class="tall" id="package-content" style="min-height:320px;font-family:Consolas,monospace;font-size:12px" readonly></textarea>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" onclick="copyPackage()">📋 复制</button>
+      <button class="btn" id="package-save-btn" onclick="savePackage(event)">💾 保存到桌面</button>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn primary" onclick="closeModal('package-modal')">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- AGENTS.md 生成弹窗 -->
+<div class="modal-mask" id="agentsmd-modal">
+  <div class="modal" style="width:min(760px,100%)">
+    <div class="mhead"><h2>🤖 生成 AGENTS.md <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">Linux Foundation 标准 · 给 AI 编码代理的项目上下文</span></h2><button class="btn icon" onclick="closeModal('agentsmd-modal')">✕</button></div>
+    <div class="mbody">
+      <div class="field"><label>保存路径（默认写入项目代码仓库根目录）</label>
+        <input id="agentsmd-path" placeholder="D:\longmao\edu-smart\AGENTS.md"></div>
+      <div class="field"><label>AGENTS.md 内容（可直接编辑）</label>
+        <textarea class="tall" id="agentsmd-content" style="min-height:300px;font-family:Consolas,monospace;font-size:12px" placeholder="点击「✨ 生成」让 AI 按标准撰写…（AI 不可用时自动使用本地模板）"></textarea>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn primary" id="agentsmd-gen-btn" onclick="generateAgentsMD()">✨ 生成</button>
+      <button class="btn" onclick="copyAgentsMD()">📋 复制</button>
+      <button class="btn" id="agentsmd-save-btn" onclick="saveAgentsMD(event)">💾 保存</button>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn" onclick="closeModal('agentsmd-modal')">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- 会话提炼弹窗 -->
+<div class="modal-mask" id="summarize-modal">
+  <div class="modal" style="width:min(720px,100%)">
+    <div class="mhead"><h2>📥 会话提炼 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">把与其他 AI 的对话粘进来，自动提炼成任务与交接更新</span></h2><button class="btn icon" onclick="closeModal('summarize-modal')">✕</button></div>
+    <div class="mbody">
+      <div class="field"><label>粘贴对话记录（从某个 AI 工具的聊天里复制过来）</label>
+        <textarea class="tall" id="summarize-text" style="min-height:180px" placeholder="例如：从 cline / 豆包 / box-agent 的对话里复制这一段：&#10;&#10;我们决定用 pnpm workspace 管理 monorepo，课消逻辑要加事务保护……&#10;下周一要交付 CRM 接口联调……"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn primary" id="summarize-btn" onclick="runSummarize()">✨ AI 提炼</button>
+      </div>
+      <div id="summarize-result" style="display:none"></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" onclick="closeModal('summarize-modal')">取消</button>
+      <button class="btn primary" id="summarize-apply-btn" style="display:none" onclick="applySummarize()">✅ 应用：创建任务并更新</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ 全局状态 ============
+let projects = [];           // 总览数据
+let stats = null;            // 统计/就绪度数据
+let current = null;          // 当前详情项目
+let currentPid = null;
+let filter = "全部";
+let editTagIndex = -1;       // 项目标签编辑用
+let selTags = new Set();
+let editTaskId = null;
+let editProjectId = null;
+
+const STATUS_COLORS = { "规划中": "gray", "进行中": "blue", "已暂停": "orange", "已完成": "green" };
+const TASK_STATUSES = ["待办", "进行中", "已完成", "阻塞"];
+const STATUS_SET = new Set(["规划中", "进行中", "已暂停", "已完成"]);
+const PRIORITY_SET = new Set(["高", "中", "低"]);
+
+// ============ 工具 ============
+async function api(path, opts) {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  if (!res.ok) {
+    let msg = "请求失败 (" + res.status + ")";
+    try { const j = await res.json(); if (j.detail) msg = j.detail; } catch (e) {}
+    throw new Error(msg);
+  }
+  const ct = res.headers.get("content-type") || "";
+  return ct.includes("application/json") ? res.json() : res.text();
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove("show");
+  document.getElementById(id).querySelector(".modal").style.animation = "none";
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.add("show");
+}
+
+document.querySelectorAll(".modal-mask").forEach(m => {
+  m.addEventListener("click", e => { if (e.target === m) m.classList.remove("show"); });
+});
+
+// ============ 总览 ============
+async function loadOverview() {
+  try {
+    const [pData, sData] = await Promise.all([api("/api/projects"), api("/api/stats")]);
+    projects = pData.projects;
+    stats = sData;
+    renderDash();
+    renderOverview();
+  } catch (e) {
+    toast("加载失败：" + e.message);
+  }
+}
+
+function setFilter(el, f) {
+  filter = f;
+  document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+  el.classList.add("active");
+  renderOverview();
+}
+
+function renderOverview() {
+  const q = (document.getElementById("search").value || "").trim().toLowerCase();
+  let list = projects.filter(p => {
+    if (filter !== "全部" && p.status !== filter) return false;
+    if (!q) return true;
+    const hay = (p.name + " " + (p.tags || []).join(" ") + " " + p.next_action + " " + (p.repo_path || "")).toLowerCase();
+    return hay.includes(q);
+  });
+  document.getElementById("proj-count").textContent = "共 " + list.length + " 个项目";
+  const grid = document.getElementById("grid");
+  const empty = document.getElementById("empty");
+  empty.style.display = list.length ? "none" : "block";
+  grid.innerHTML = list.map(p => cardHTML(p)).join("");
+  bindCardEvents();
+}
+
+function cardHTML(p) {
+  const c = p.task_counts || {};
+  const st = STATUS_SET.has(p.status) ? p.status : "规划中";
+  const pri = PRIORITY_SET.has(p.priority) ? p.priority : "中";
+  const rd = (stats && stats.readiness || []).find(x => x.id === p.id);
+  const prog = Math.max(0, Math.min(100, Number(p.progress) || 0));
+  const rdBadge = rd ? `<span class="rd-badge rd-${rd.score >= 80 ? "hi" : rd.score >= 50 ? "mid" : "lo"}" title="交接就绪度 ${rd.score}/100">就绪 ${rd.score}</span>` : "";
+  return `<div class="pcard" data-pid="${esc(p.id)}">
+    <div class="top">
+      <div>
+        <div class="name">${esc(p.name)}${rdBadge}</div>
+        <div style="margin-top:6px"><span class="badge st-${st}">${esc(st)}</span>
+        <span class="badge pr-${pri}" style="background:transparent;padding-left:2px">优先级 ${esc(pri)}</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn small" data-act="edit">编辑</button>
+        <button class="btn small danger" data-act="del">删除</button>
+      </div>
+    </div>
+    <div class="progress-row">
+      <div class="bar"><i style="width:${prog}%"></i></div>
+      <span class="num">${prog}%</span>
+    </div>
+    <div class="stats">
+      <span class="stat s-todo">待办 <b>${c["待办"] || 0}</b></span>
+      <span class="stat s-doing">进行中 <b>${c["进行中"] || 0}</b></span>
+      <span class="stat s-done">已完成 <b>${c["已完成"] || 0}</b></span>
+      <span class="stat s-blocked">阻塞 <b>${c["阻塞"] || 0}</b></span>
+    </div>
+    ${p.next_action ? `<div class="next-action"><span class="lab">下一步</span>${esc(p.next_action)}</div>` : ""}
+    ${(p.tags && p.tags.length) ? `<div class="tags">${p.tags.map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
+    <div class="meta"><span>更新于 ${esc(p.updated_at)}</span><span>${p.total_tasks} 个任务</span></div>
+  </div>`;
+}
+
+// 卡片交互统一走事件委托：不再把项目名拼进内联 onclick
+// （原先 confirmDeleteProject('id','${esc(name)}') 里 &#39; 会被 HTML 解码回单引号，含撇号的项目名直接让按钮报语法错误）
+function bindCardEvents() {
+  const grid = document.getElementById("grid");
+  if (!grid || grid.dataset.bound) return;
+  grid.dataset.bound = "1";
+  grid.addEventListener("click", e => {
+    const card = e.target.closest(".pcard");
+    if (!card) return;
+    const pid = card.dataset.pid;
+    if (e.target.closest(".actions")) {
+      const actBtn = e.target.closest("[data-act]");
+      if (!actBtn) return;            // 点在按钮外的空白处，不打开详情
+      const p = (projects || []).find(x => x.id === pid);
+      if (actBtn.dataset.act === "edit") openProjectModal(pid);
+      else confirmDeleteProject(pid, p ? p.name : "");
+      return;
+    }
+    openDetail(pid);
+  });
+}
+
+// ============ 详情 ============
+async function openDetail(pid) {
+  try {
+    current = await api("/api/projects/" + pid);
+    currentPid = pid;
+    document.getElementById("view-overview").style.display = "none";
+    document.getElementById("view-detail").classList.add("active");
+    renderDetail();
+  } catch (e) { toast("打开失败：" + e.message); }
+}
+
+function showOverview() {
+  document.getElementById("view-overview").style.display = "block";
+  document.getElementById("view-detail").classList.remove("active");
+  loadOverview();
+}
+
+function renderDetail() {
+  const p = current;
+  const stName = STATUS_SET.has(p.status) ? p.status : "规划中";
+  const prName = PRIORITY_SET.has(p.priority) ? p.priority : "中";
+  const prog = Math.max(0, Math.min(100, Number(p.progress) || 0));
+  document.getElementById("d-name").textContent = p.name;
+  const st = document.getElementById("d-status");
+  st.className = "badge st-" + stName;
+  st.textContent = stName;
+  const pr = document.getElementById("d-priority");
+  pr.className = "badge pr-" + prName;
+  pr.textContent = "优先级 " + prName;
+  document.getElementById("d-progress-val").textContent = prog + "%";
+  document.getElementById("d-progress-num").textContent = prog + "%";
+  document.getElementById("d-progress-bar").style.width = prog + "%";
+  document.getElementById("d-repo").textContent = p.repo_path || "—";
+  document.getElementById("d-tags").textContent = (p.tags || []).join("、") || "—";
+  document.getElementById("d-updated").textContent = p.updated_at || "—";
+  document.getElementById("d-background").innerHTML = renderMarkdown(p.background || "（未填写）");
+  document.getElementById("d-handoff").innerHTML = renderMarkdown(p.handoff_note || "（未填写，建议补充给智能体的交接说明）");
+  document.getElementById("d-next").innerHTML = renderMarkdown(p.next_action || "（未填写）");
+  renderReadiness(p.id);
+  const tasks = p.tasks || [];
+  document.getElementById("d-task-total").textContent = "共 " + tasks.length + " 个任务";
+  const cols = { "待办": "col-todo", "进行中": "col-doing", "已完成": "col-done", "阻塞": "col-blocked" };
+  const counts = { "待办": 0, "进行中": 0, "已完成": 0, "阻塞": 0 };
+  for (const k of Object.keys(cols)) document.getElementById(cols[k]).innerHTML = "";
+  tasks.forEach(t => {
+    const tst = STATUS_SET.has(t.status) ? t.status : "待办";
+    const tpri = PRIORITY_SET.has(t.priority) ? t.priority : "中";
+    counts[tst] = (counts[tst] || 0) + 1;
+    const el = document.createElement("div");
+    el.className = "tcard";
+    el.onclick = () => openTaskModal(t.id);
+    el.innerHTML = `
+      <div class="tt">${esc(t.title)}</div>
+      ${t.desc ? `<div class="td">${esc(t.desc)}</div>` : ""}
+      <div class="tfoot">
+        <span class="tag2 pri-${tpri}">${esc(tpri)}</span>
+        ${t.agent ? `<span class="agent">🤖 ${esc(t.agent)}</span>` : ""}
+      </div>`;
+    document.getElementById(cols[tst] || "col-todo").appendChild(el);
+  });
+  for (const [k, v] of Object.entries(counts)) {
+    document.getElementById("c-" + ({ "待办": "todo", "进行中": "doing", "已完成": "done", "阻塞": "blocked" }[k])).textContent = v;
+  }
+}
+
+// ============ 交接导出 ============
+async function copyHandoffText() {
+  const p = current;
+  const lines = [];
+  lines.push(`【${p.name}】项目交接摘要`);
+  lines.push(`状态：${p.status}（进度 ${p.progress}%）| 优先级：${p.priority} | 标签：${(p.tags||[]).join("、") || "无"}${p.repo_path ? ` | 代码路径：${p.repo_path}` : ""}`);
+  lines.push(`最近更新：${p.updated_at}`);
+  lines.push("");
+  if (p.background) { lines.push("【项目背景】"); lines.push(p.background); lines.push(""); }
+  if (p.handoff_note) { lines.push("【交接说明（请务必先读）】"); lines.push(p.handoff_note); lines.push(""); }
+  if (p.next_action) { lines.push("【下一步行动】"); lines.push(p.next_action); lines.push(""); }
+  const tasks = p.tasks || [];
+  if (tasks.length) {
+    lines.push("【任务清单】");
+    tasks.forEach(t => lines.push(`- [${t.status}] ${t.title}（${t.priority}）${t.agent ? `由 ${t.agent} 负责` : ""}${t.desc ? `：${t.desc}` : ""}`));
+    lines.push("");
+  }
+  lines.push("—— 来自 AI 交接看板");
+  try { await navigator.clipboard.writeText(lines.join("\n")); toast("交接摘要已复制 ✓"); }
+  catch (e) { fallbackCopy(lines.join("\n")); }
+}
+
+async function copyHandoffMarkdown() {
+  try {
+    const md = await api("/api/export/" + currentPid);
+    try { await navigator.clipboard.writeText(md); toast("Markdown 交接文档已复制 ✓"); }
+    catch (e) { fallbackCopy(md); }
+  } catch (e) { toast("导出失败：" + e.message); }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); toast("已复制 ✓"); } catch (e) { toast("复制失败，请手动复制"); }
+  document.body.removeChild(ta);
+}
+
+// ============ 项目增删改 ============
+function openProjectModal(id) {
+  editProjectId = id || null;
+  selTags = new Set();
+  document.getElementById("proj-modal-title").textContent = id ? "编辑项目" : "新建项目";
+  document.getElementById("f-name").value = "";
+  document.getElementById("f-status").value = "规划中";
+  document.getElementById("f-priority").value = "中";
+  document.getElementById("f-progress").value = "0";
+  document.getElementById("f-repo").value = "";
+  document.getElementById("f-bg").value = "";
+  document.getElementById("f-handoff").value = "";
+  document.getElementById("f-next").value = "";
+  document.querySelectorAll("#f-tag-chips .chip-tag").forEach(c => c.classList.remove("active"));
+  if (id) {
+    const p = projects.find(x => x.id === id);
+    if (p) {
+      document.getElementById("f-name").value = p.name;
+      document.getElementById("f-status").value = p.status;
+      document.getElementById("f-priority").value = p.priority;
+      document.getElementById("f-progress").value = p.progress;
+      document.getElementById("f-repo").value = p.repo_path || "";
+      document.getElementById("f-bg").value = p.background || "";
+      document.getElementById("f-handoff").value = p.handoff_note || "";
+      document.getElementById("f-next").value = p.next_action || "";
+      (p.tags || []).forEach(t => {
+        selTags.add(t);
+        document.querySelectorAll("#f-tag-chips .chip-tag").forEach(c => { if (c.dataset.t === t) c.classList.add("active"); });
+      });
+    }
+  }
+  openModal("proj-modal");
+}
+
+document.querySelectorAll("#f-tag-chips .chip-tag").forEach(c => {
+  c.addEventListener("click", () => {
+    const t = c.dataset.t;
+    if (selTags.has(t)) { selTags.delete(t); c.classList.remove("active"); }
+    else { selTags.add(t); c.classList.add("active"); }
+  });
+});
+
+document.getElementById("f-tag-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const v = e.target.value.trim();
+    if (!v || selTags.has(v)) return;
+    selTags.add(v);
+    // 动态加一个 chip
+    const chip = document.createElement("span");
+    chip.className = "chip-tag active";
+    chip.dataset.t = v;
+    chip.textContent = v;
+    chip.addEventListener("click", () => {
+      selTags.delete(v); chip.classList.remove("active");
+      if (!chip.classList.contains("active") && ![...document.querySelectorAll("#f-tag-chips .chip-tag")].some(x => x.dataset.t === v && x.classList.contains("active"))) {
+        chip.remove();
+      }
+    });
+    document.getElementById("f-tag-chips").appendChild(chip);
+    e.target.value = "";
+  }
+});
+
+async function saveProject() {
+  const name = document.getElementById("f-name").value.trim();
+  if (!name) { toast("请填写项目名称"); return; }
+  const body = {
+    name,
+    status: document.getElementById("f-status").value,
+    priority: document.getElementById("f-priority").value,
+    progress: Math.min(100, Math.max(0, parseInt(document.getElementById("f-progress").value) || 0)),
+    tags: [...selTags],
+    repo_path: document.getElementById("f-repo").value.trim(),
+    background: document.getElementById("f-bg").value.trim(),
+    handoff_note: document.getElementById("f-handoff").value.trim(),
+    next_action: document.getElementById("f-next").value.trim(),
+  };
+  try {
+    if (editProjectId) {
+      await api("/api/projects/" + editProjectId, { method: "PUT", body: JSON.stringify(body) });
+      toast("项目已更新 ✓");
+    } else {
+      const created = await api("/api/projects", { method: "POST", body: JSON.stringify(body) });
+      toast("项目已创建 ✓");
+    }
+    closeModal("proj-modal");
+    if (document.getElementById("view-detail").classList.contains("active") && editProjectId === currentPid) {
+      current = await api("/api/projects/" + currentPid);
+      renderDetail();
+    }
+    loadOverview();
+  } catch (e) { toast("保存失败：" + e.message); }
+}
+
+async function confirmDeleteProject(id, name) {
+  if (!confirm(`确定删除项目「${name}」吗？该项目下的所有任务也会一并删除。`)) return;
+  try {
+    await api("/api/projects/" + id, { method: "DELETE" });
+    toast("项目已删除");
+    loadOverview();
+  } catch (e) { toast("删除失败：" + e.message); }
+}
+
+function editProject() { openProjectModal(currentPid); }
+
+async function deleteProject() {
+  if (!confirm(`确定删除项目「${current.name}」吗？该操作不可恢复。`)) return;
+  try {
+    await api("/api/projects/" + currentPid, { method: "DELETE" });
+    toast("项目已删除");
+    showOverview();
+  } catch (e) { toast("删除失败：" + e.message); }
+}
+
+// ============ 任务增删改 ============
+function openTaskModal(taskId) {
+  editTaskId = taskId || null;
+  document.getElementById("task-modal-title").textContent = taskId ? "编辑任务" : "新建任务";
+  document.getElementById("t-title").value = "";
+  document.getElementById("t-desc").value = "";
+  document.getElementById("t-status").value = "待办";
+  document.getElementById("t-priority").value = "中";
+  document.getElementById("t-agent").value = "";
+  if (taskId) {
+    const t = (current.tasks || []).find(x => x.id === taskId);
+    if (t) {
+      document.getElementById("t-title").value = t.title;
+      document.getElementById("t-desc").value = t.desc || "";
+      document.getElementById("t-status").value = t.status;
+      document.getElementById("t-priority").value = t.priority;
+      document.getElementById("t-agent").value = t.agent || "";
+    }
+  }
+  openModal("task-modal");
+}
+
+async function saveTask() {
+  const title = document.getElementById("t-title").value.trim();
+  if (!title) { toast("请填写任务标题"); return; }
+  const body = {
+    title,
+    desc: document.getElementById("t-desc").value.trim(),
+    status: document.getElementById("t-status").value,
+    priority: document.getElementById("t-priority").value,
+    agent: document.getElementById("t-agent").value.trim(),
+  };
+  try {
+    if (editTaskId) {
+      await api("/api/tasks/" + editTaskId, { method: "PUT", body: JSON.stringify(body) });
+      toast("任务已更新 ✓");
+    } else {
+      await api("/api/projects/" + currentPid + "/tasks", { method: "POST", body: JSON.stringify(body) });
+      toast("任务已创建 ✓");
+    }
+    closeModal("task-modal");
+    current = await api("/api/projects/" + currentPid);
+    renderDetail();
+    loadOverview();
+  } catch (e) { toast("保存失败：" + e.message); }
+}
+
+// 键盘：Esc 关弹窗
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") document.querySelectorAll(".modal-mask.show").forEach(m => m.classList.remove("show"));
+});
+
+// ============ AI 设置 ============
+let aiConfig = null;
+let pendingActions = [];
+
+async function openAISettings() {
+  try {
+    aiConfig = await api("/api/ai/config");
+    renderEndpoints(aiConfig.ai.endpoints || []);
+    // 默认模型
+    const sel = document.getElementById("ai-active-model");
+    const models = [];
+    (aiConfig.ai.endpoints || []).forEach(ep => (ep.models || []).forEach(m => { if (!models.includes(m)) models.push(m); }));
+    sel.innerHTML = models.map(m => `<option ${m === aiConfig.ai.active_model ? "selected" : ""}>${esc(m)}</option>`).join("");
+    // 定时
+    const s = (aiConfig.ai.schedule || {});
+    document.getElementById("ai-sched-enabled").checked = !!s.enabled;
+    document.getElementById("ai-sched-freq").value = s.frequency || "daily";
+    document.getElementById("ai-sched-time").value = s.time || "09:00";
+    document.getElementById("ai-sched-last").textContent = s.last_run || "—";
+    loadBackups();
+    openModal("ai-settings-modal");
+  } catch (e) { toast("加载配置失败：" + e.message); }
+}
+
+function renderEndpoints(eps) {
+  const wrap = document.getElementById("ai-endpoints");
+  wrap.innerHTML = eps.map((ep, i) => `
+    <div class="ep-card">
+      <div class="ep-top">
+        <input data-i="${i}" data-f="name" class="ep-name-input" value="${esc(ep.name)}" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
+        <label class="switch"><input type="checkbox" data-i="${i}" data-f="enabled" ${ep.enabled ? "checked" : ""}><span class="slider"></span></label>
+      </div>
+      <div class="field"><label>Base URL</label>
+        <input data-i="${i}" data-f="base_url" value="${esc(ep.base_url)}" placeholder="https://.../v1"></div>
+      <div class="field"><label>API Keys（每行一个，可多 Key 轮询）</label>
+        <textarea data-i="${i}" data-f="keys" placeholder="sk-... 每行一个">${(ep.api_keys || []).join("\n")}</textarea></div>
+      <div class="field"><label>模型（逗号分隔，按优先级排序）</label>
+        <input data-i="${i}" data-f="models" value="${esc((ep.models || []).join(", "))}"></div>
+    </div>`).join("");
+}
+
+async function saveAISettings() {
+  const epEls = [...document.querySelectorAll("#ai-endpoints .ep-card")];
+  const endpoints = epEls.map(card => ({
+    name: card.querySelector('[data-f="name"]').value.trim(),
+    base_url: card.querySelector('[data-f="base_url"]').value.trim(),
+    api_keys: card.querySelector('[data-f="keys"]').value.split("\n").map(s => s.trim()).filter(Boolean),
+    models: card.querySelector('[data-f="models"]').value.split(/[,，]/).map(s => s.trim()).filter(Boolean),
+    enabled: card.querySelector('[data-f="enabled"]').checked,
+  }));
+  const body = {
+    endpoints,
+    active_model: document.getElementById("ai-active-model").value,
+    schedule: {
+      enabled: document.getElementById("ai-sched-enabled").checked,
+      frequency: document.getElementById("ai-sched-freq").value,
+      time: document.getElementById("ai-sched-time").value,
+    },
+  };
+  try {
+    await api("/api/ai/config", { method: "PUT", body: JSON.stringify(body) });
+    toast("AI 设置已保存 ✓");
+    closeModal("ai-settings-modal");
+  } catch (e) { toast("保存失败：" + e.message); }
+}
+
+async function testAI() {
+  const btn = document.getElementById("ai-test-btn");
+  btn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/ai/test", { method: "POST" });
+    if (r.ok) toast("连接成功：" + r.endpoint + " → " + (r.reply || "OK") + " ✓");
+    else toast("连接失败：" + r.error);
+  } catch (e) { toast("测试失败：" + e.message); }
+  btn.classList.remove("ai-loading-btn");
+}
+
+// ============ AI 监管报告 ============
+let currentReport = null;
+
+async function openReport(rid) {
+  const panel = document.getElementById("report-panel");
+  document.getElementById("report-mask").classList.add("show");
+  panel.classList.add("show");
+  document.getElementById("report-body").innerHTML = '<div class="r-loading"><div class="spinner"></div><div>AI 正在分析全部项目，请稍候…</div></div>';
+  document.getElementById("report-meta").textContent = rid ? "历史报告" : "生成中…";
+  try {
+    if (rid) {
+      currentReport = await api("/api/ai/reports/" + rid);
+      document.getElementById("report-meta").textContent = "历史报告 · " + currentReport.created_at + " · " + (currentReport.endpoint || "");
+    } else {
+      currentReport = await api("/api/ai/analyze", { method: "POST" });
+      document.getElementById("report-meta").textContent = "生成于 " + currentReport.created_at + " · " + (currentReport.endpoint || "");
+    }
+    renderReport(currentReport);
+  } catch (e) {
+    document.getElementById("report-body").innerHTML = '<div class="r-loading" style="color:var(--red)">分析失败：' + esc(e.message) + '<br><br><button class="btn" onclick="openReport()">重试</button></div>';
+  }
+}
+
+function closeReport() {
+  document.getElementById("report-mask").classList.remove("show");
+  document.getElementById("report-panel").classList.remove("show");
+}
+
+function healthClass(h) {
+  h = Number(h) || 0;
+  return h >= 70 ? "hi" : h >= 45 ? "mid" : "lo";
+}
+
+function renderReport(r) {
+  const body = document.getElementById("report-body");
+  const insights = (r.insights || []).map(it => `
+    <div class="insight">
+      <div class="i-top">
+        <div class="health ${healthClass(it.health)}">${Number(it.health) || "—"}</div>
+        <div>
+          <div class="i-name">${esc(it.name || "")}</div>
+          <div class="i-reason">${esc(it.reason || "")}</div>
+        </div>
+      </div>
+      ${(it.risks || []).length ? `<div class="i-sec">⚠ 风险点</div><div class="risk-list">${it.risks.map(x => `<div class="risk-item">${esc(x)}</div>`).join("")}</div>` : ""}
+      ${(it.suggestions || []).length ? `<div class="i-sec">💡 建议</div><div class="sug-list">${it.suggestions.map((s, i) => `
+        <div class="sug-item"><div class="sug-text">${esc(s.text || "")}</div>
+        <button class="apply-btn" data-pid="${esc(it.id || "")}" data-txt="${esc(s.text || "")}" onclick="applySuggestion(this)">应用</button></div>`).join("")}</div>` : ""}
+    </div>`).join("");
+  const global = (r.global_suggestions || []).length ? `
+    <div class="r-global">
+      <div class="lab">🌐 全局建议</div>
+      <ul>${r.global_suggestions.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+    </div>` : "";
+  body.innerHTML = `
+    <div class="r-summary"><span class="lab">📌 监管摘要</span>${esc(r.summary || "（无摘要）")}</div>
+    ${insights ? `<div class="r-insights">${insights}</div>` : '<div class="r-loading" style="padding:30px">（无项目洞察）</div>'}
+    ${global}`;
+}
+
+async function applySuggestion(btn) {
+  const pid = btn.dataset.pid;
+  const txt = btn.dataset.txt;
+  if (!pid || !txt) return;
+  if (!confirm("把这条建议写入该项目的「下一步行动」？")) return;
+  try {
+    await api("/api/ai/apply-suggestions", {
+      method: "POST",
+      body: JSON.stringify([{ project_id: pid, field: "next_action", value: txt }]),
+    });
+    btn.classList.add("done");
+    btn.textContent = "已应用 ✓";
+    toast("建议已写入项目下一步行动 ✓");
+  } catch (e) { toast("应用失败：" + e.message); }
+}
+
+// ============ AI 指令（自然语言维护） ============
+function openAICmd() {
+  pendingActions = [];
+  document.getElementById("cmd-exec-row").style.display = "none";
+  openModal("ai-cmd-modal");
+}
+
+function cmdAddMsg(cls, html) {
+  const chat = document.getElementById("cmd-chat");
+  const div = document.createElement("div");
+  div.className = "cmd-msg " + cls;
+  div.innerHTML = html;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+const OP_TAG = { create_project: "新建项目", update_project: "改项目", delete_project: "删项目", create_task: "加任务", update_task: "改任务", delete_task: "删任务" };
+
+function renderActions(actions) {
+  pendingActions = actions;
+  const row = document.getElementById("cmd-exec-row");
+  if (!actions || !actions.length) { row.style.display = "none"; return; }
+  row.style.display = "block";
+  const btn = row.querySelector("button");
+  btn.textContent = `✅ 确认执行以上 ${actions.length} 个操作`;
+  const list = actions.map(a => {
+    const tag = OP_TAG[a.type] || a.type;
+    const cls = a.type.startsWith("delete") ? "delete" : a.type.startsWith("update") ? "update" : "create";
+    const desc = describeAction(a);
+    return `<div class="op"><span class="op-tag ${cls}">${tag}</span><span>${esc(desc)}</span></div>`;
+  }).join("");
+  const holder = document.getElementById("cmd-actions-holder");
+  if (holder) holder.remove();
+  const wrap = document.createElement("div");
+  wrap.id = "cmd-actions-holder";
+  wrap.innerHTML = list;
+  cmdAddMsg("ai", wrap.innerHTML);
+}
+
+function describeAction(a) {
+  switch (a.type) {
+    case "create_project": return `新建项目「${a.name || ""}」` + (a.priority ? `（优先级${a.priority}）` : "");
+    case "update_project": return `项目「${a.project_id || a.name || ""}」的 ${a.field || ""} 改为「${a.value || ""}」`;
+    case "delete_project": return `删除项目「${a.project_id || a.name || ""}」`;
+    case "create_task": return `在项目「${a.project_id || ""}」下新建任务「${a.title || ""}」` + (a.priority ? `（${a.priority}）` : "");
+    case "update_task": return `任务「${a.task_id || a.title || ""}」的 ${a.field || ""} 改为「${a.value || ""}」`;
+    case "delete_task": return `删除任务「${a.task_id || a.title || ""}」`;
+    default: return JSON.stringify(a);
+  }
+}
+
+async function sendCommand() {
+  const input = document.getElementById("cmd-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  cmdAddMsg("user", esc(text));
+  const sendBtn = document.getElementById("cmd-send-btn");
+  sendBtn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/ai/command", { method: "POST", body: JSON.stringify({ text }) });
+    const parsed = r.parsed || {};
+    if (parsed.need_clarification) {
+      cmdAddMsg("ai", "🤔 需要补充：" + esc(parsed.need_clarification));
+      document.getElementById("cmd-exec-row").style.display = "none";
+    } else if (parsed.actions && parsed.actions.length) {
+      renderActions(parsed.actions);
+    } else {
+      cmdAddMsg("ai", "没解析出可执行的操作，换个说法试试？");
+      document.getElementById("cmd-exec-row").style.display = "none";
+    }
+  } catch (e) {
+    cmdAddMsg("ai", "❌ " + esc(e.message));
+  }
+  sendBtn.classList.remove("ai-loading-btn");
+}
+
+async function executeActions() {
+  if (!pendingActions || !pendingActions.length) return;
+  const btn = document.getElementById("cmd-exec-row").querySelector("button");
+  btn.classList.add("ai-loading-btn");
+  btn.textContent = "执行中…";
+  let ok = 0, fail = 0;
+  for (const a of pendingActions) {
+    try {
+      await execSingleAction(a);
+      ok++;
+    } catch (e) {
+      fail++;
+      cmdAddMsg("ai", "❌ " + esc(describeAction(a)) + " 执行失败：" + esc(e.message));
+    }
+  }
+  btn.classList.remove("ai-loading-btn");
+  document.getElementById("cmd-exec-row").style.display = "none";
+  cmdAddMsg("ai", `✅ 执行完成：成功 ${ok} 个，失败 ${fail} 个`);
+  loadOverview();
+  if (document.getElementById("view-detail").classList.contains("active") && currentPid) {
+    current = await api("/api/projects/" + currentPid);
+    renderDetail();
+  }
+}
+
+async function execSingleAction(a) {
+  const type = a.type;
+  if (type === "create_project") {
+    await api("/api/projects", { method: "POST", body: JSON.stringify({
+      name: a.name || "新项目", status: a.status || "规划中", priority: a.priority || "中",
+      progress: Number(a.progress) || 0, next_action: a.next_action || "", handoff_note: a.handoff_note || "", background: a.background || "",
+    }) });
+  } else if (type === "update_project") {
+    const p = await api("/api/projects/" + a.project_id);
+    p[a.field] = a.value;
+    await api("/api/projects/" + a.project_id, { method: "PUT", body: JSON.stringify(p) });
+  } else if (type === "delete_project") {
+    await api("/api/projects/" + a.project_id, { method: "DELETE" });
+  } else if (type === "create_task") {
+    await api("/api/projects/" + a.project_id + "/tasks", { method: "POST", body: JSON.stringify({
+      title: a.title || "新任务", desc: a.desc || "", priority: a.priority || "中",
+      status: a.status || "待办", agent: a.agent || "",
+    }) });
+  } else if (type === "update_task") {
+    const tid = await resolveTaskId(a);
+    const project = await findProjectOfTask(a);
+    if (!tid || !project) throw new Error("找不到对应任务");
+    const task = project.tasks.find(t => t.id === tid);
+    task[a.field] = a.value;
+    await api("/api/tasks/" + tid, { method: "PUT", body: JSON.stringify(task) });
+  } else if (type === "delete_task") {
+    const tid = await resolveTaskId(a);
+    if (!tid) throw new Error("找不到对应任务");
+    await api("/api/tasks/" + tid, { method: "DELETE" });
+  } else {
+    throw new Error("不支持的操作类型：" + type);
+  }
+}
+
+async function resolveTaskId(a) {
+  if (a.task_id) return a.task_id;
+  const project = await findProjectOfTask(a);
+  if (!project) return null;
+  const t = (project.tasks || []).find(x => x.title === a.title || (a.title && x.title.includes(a.title)));
+  return t ? t.id : null;
+}
+
+async function findProjectOfTask(a) {
+  if (a.project_id) return api("/api/projects/" + a.project_id);
+  // 按名称匹配
+  if (a.project_name) {
+    const all = await api("/api/projects");
+    const p = all.projects.find(x => x.name === a.project_name || x.name.includes(a.project_name));
+    return p ? api("/api/projects/" + p.id) : null;
+  }
+  return null;
+}
+
+// ============ AI 交接说明生成 ============
+async function openAIHandoff() {
+  if (!currentPid) return;
+  document.getElementById("ai-handoff-mode").value = "generate";
+  document.getElementById("ai-handoff-result").value = "";
+  openModal("ai-handoff-modal");
+}
+
+async function generateHandoff() {
+  const mode = document.getElementById("ai-handoff-mode").value;
+  const btn = document.getElementById("ai-handoff-gen-btn");
+  btn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/ai/handoff/" + currentPid, { method: "POST", body: JSON.stringify({ mode }) });
+    document.getElementById("ai-handoff-result").value = r.text;
+    toast("生成完成 ✓");
+  } catch (e) { toast("生成失败：" + e.message); }
+  btn.classList.remove("ai-loading-btn");
+}
+
+async function applyHandoff() {
+  const text = document.getElementById("ai-handoff-result").value.trim();
+  if (!text) { toast("内容为空，先点「生成」试试"); return; }
+  if (!confirm("将生成的交接说明写入项目并覆盖现有内容？")) return;
+  try {
+    const p = await api("/api/projects/" + currentPid);
+    p.handoff_note = text;
+    await api("/api/projects/" + currentPid, { method: "PUT", body: JSON.stringify(p) });
+    toast("交接说明已更新 ✓");
+    closeModal("ai-handoff-modal");
+    current = await api("/api/projects/" + currentPid);
+    renderDetail();
+  } catch (e) { toast("应用失败：" + e.message); }
+}
+
+// ============ 仪表盘 / 图表 ============
+const CHART_COLORS = ["#94a3b8", "#60a5fa", "#fbbf24", "#34d399"];
+const TREND_COLORS = ["#4cc2ff", "#8b7cf6", "#34d399", "#fbbf24", "#f87171", "#60a5fa", "#f472b6", "#a3e635"];
+
+function donutSVG(dist, colors, size = 112, r = 40) {
+  const total = Object.values(dist).reduce((a, b) => a + b, 0) || 1;
+  const C = 2 * Math.PI * r;
+  let offset = 0, segs = "";
+  Object.values(dist).forEach((v, i) => {
+    if (!v) return;
+    const dash = (v / total) * C;
+    segs += `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="15" stroke-dasharray="${dash} ${C - dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${size / 2} ${size / 2})"><title>${Object.keys(dist)[i]}: ${v}</title></circle>`;
+    offset += dash;
+  });
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${segs}
+    <text x="50%" y="47%" text-anchor="middle" fill="#e6ecf7" font-size="21" font-weight="800">${total}</text>
+    <text x="50%" y="62%" text-anchor="middle" fill="#5f6f8f" font-size="9">项目</text></svg>`;
+}
+
+function renderDash() {
+  const el = document.getElementById("dash");
+  if (!stats || !stats.project_total) { el.innerHTML = ""; return; }
+  const sd = stats.status_dist || {};
+  const legend = Object.entries(sd).map(([k, v]) =>
+    `<span class="lg"><i style="background:${CHART_COLORS[["规划中", "进行中", "已暂停", "已完成"].indexOf(k)] || "#94a3b8"}"></i>${k}<b>${v}</b></span>`).join("");
+  const show = projects.slice(0, 10);
+  const bars = show.map(p => `
+    <div class="bar-row"><span class="b-name" title="${esc(p.name)}">${esc(p.name)}</span>
+    <div class="b-track"><div class="b-fill" style="width:${p.progress}%"></div></div>
+    <span class="b-num">${p.progress}%</span></div>`).join("");
+  el.innerHTML = `
+    <div class="stat-cards">
+      <div class="stat-card"><span class="s-num accent">${stats.project_total}</span><span class="s-lab">项目总数</span></div>
+      <div class="stat-card"><span class="s-num" style="color:var(--blue)">${sd["进行中"] || 0}</span><span class="s-lab">进行中</span></div>
+      <div class="stat-card"><span class="s-num green">${sd["已完成"] || 0}</span><span class="s-lab">已完成</span></div>
+      <div class="stat-card"><span class="s-num purple">${stats.total_tasks}</span><span class="s-lab">任务总数</span></div>
+      <div class="stat-card"><span class="s-num red">${stats.blocked_tasks}</span><span class="s-lab">阻塞任务</span></div>
+      <div class="stat-card"><span class="s-num accent">${stats.avg_progress}%</span><span class="s-lab">平均进度</span></div>
+      <div class="stat-card"><span class="s-num orange">${stats.avg_readiness}</span><span class="s-lab">平均就绪度</span></div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-card"><h4>📊 项目状态分布</h4>
+        <div class="chart-body">${donutSVG(sd, CHART_COLORS)}<div class="donut-legend">${legend}</div></div>
+      </div>
+      <div class="chart-card">
+        <h4>📶 项目进度对比
+          <span style="margin-left:auto;display:flex;gap:8px;text-transform:none;letter-spacing:0">
+            <button class="btn small" onclick="openTrends()">📈 健康趋势</button>
+            <button class="btn small" onclick="openAllPackage()">📦 导出全部交接包</button>
+          </span>
+        </h4>
+        <div class="bars">${bars}</div>
+        ${projects.length > 10 ? `<div style="font-size:11px;color:var(--text-faint);margin-top:6px">仅显示前 10 个项目，共 ${projects.length} 个</div>` : ""}
+      </div>
+    </div>`;
+}
+
+// ============ Markdown 渲染（轻量、安全） ============
+function renderMarkdown(text) {
+  if (!text) return '<span style="color:var(--text-faint)">（未填写）</span>';
+  let s = esc(text);
+  s = s.replace(/```([\s\S]*?)```/g, (m, code) => `<pre class="md-pre">${code.trim()}</pre>`);
+  s = s.replace(/`([^`\n]+)`/g, '<code class="md-code">$1</code>');
+  s = s.replace(/^### (.*)$/gm, '<h5 class="md-h5">$1</h5>');
+  s = s.replace(/^## (.*)$/gm, '<h4 class="md-h4">$1</h4>');
+  s = s.replace(/^# (.*)$/gm, '<h3 class="md-h3">$1</h3>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|\n)&gt; (.*)$/gm, '$1<blockquote class="md-quote">$2</blockquote>');
+  s = s.replace(/^---\s*$/gm, '<hr class="md-hr">');
+  s = s.replace(/(?:^|\n)((?:[-*] .*(?:\n|$))+)/g, (m, block) => {
+    const items = block.trim().split("\n").map(l => l.replace(/^[-*] /, "")).map(i => `<li class="md-li">${i}</li>`).join("");
+    return '\n<ul class="md-ul">' + items + "</ul>\n";
+  });
+  s = s.replace(/(?:^|\n)((?:\d+\. .*(?:\n|$))+)/g, (m, block) => {
+    const items = block.trim().split("\n").map(l => l.replace(/^\d+\. /, "")).map(i => `<li class="md-li">${i}</li>`).join("");
+    return '\n<ol class="md-ol">' + items + "</ol>\n";
+  });
+  s = s.split(/\n{2,}/).map(p => p.trim()).filter(Boolean).map(p => {
+    if (/^<(\w+)/.test(p)) return p;
+    return `<p class="md-p">${p.replace(/\n/g, "<br>")}</p>`;
+  }).join("\n");
+  return s;
+}
+
+// ============ 就绪度检查清单 ============
+function renderReadiness(pid) {
+  const body = document.getElementById("readiness-body");
+  if (!body) return;
+  const rd = (stats && stats.readiness || []).find(x => x.id === pid);
+  if (!rd) { body.innerHTML = '<div style="font-size:12px;color:var(--text-faint)">暂无数据</div>'; return; }
+  const cls = rd.score >= 80 ? "rd-hi" : rd.score >= 50 ? "rd-mid" : "rd-lo";
+  const tip = rd.score >= 80 ? "交接准备充分，可以放心交给新智能体 👍" : rd.score >= 50 ? "基本可用，建议按清单补齐缺口" : "交接信息不足，强烈建议补全再交接";
+  body.innerHTML = `
+    <div class="readiness-top">
+      <div class="rd-ring ${cls}">${rd.score}</div>
+      <div style="font-size:12px;color:var(--text-dim);line-height:1.6">满分 100 分<br>${tip}</div>
+    </div>
+    <div class="rd-items">
+      ${rd.items.map(it => `<div class="rd-item ${it.ok ? "ok" : "no"}"><span class="mk">${it.ok ? "✓" : "✗"}</span><span>${esc(it.label)}</span><span class="pt">${it.score} 分</span></div>`).join("")}
+    </div>`;
+}
+
+// ============ 健康分趋势图 ============
+async function openTrends() {
+  openModal("trend-modal");
+  document.getElementById("trend-body").innerHTML = '<div class="r-loading"><div class="spinner"></div><div>加载趋势数据…</div></div>';
+  try {
+    const d = await api("/api/ai/trends");
+    renderTrends(d.series || []);
+  } catch (e) {
+    document.getElementById("trend-body").innerHTML = '<div class="trend-empty" style="color:var(--red)">加载失败：' + esc(e.message) + "</div>";
+  }
+}
+
+function renderTrends(series) {
+  const body = document.getElementById("trend-body");
+  if (!series.length) {
+    body.innerHTML = '<div class="trend-empty"><div class="big">📉</div>还没有监管报告数据。先去「📊 AI 监管」生成报告，就能看到各项目健康分随时间的趋势。</div>';
+    return;
+  }
+  const times = [...new Set(series.flatMap(s => (s.points || []).map(p => p.time)))].sort();
+  const W = 680, H = 320, padL = 46, padB = 36, padT = 18, padR = 18;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const x = i => times.length <= 1 ? padL + iw / 2 : padL + iw * (i / (times.length - 1));
+  const y = v => padT + ih * (1 - (Math.max(0, Math.min(100, Number(v) || 0)) / 100));
+  let svg = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="background:var(--bg-soft);border-radius:10px;border:1px solid var(--border)">`;
+  for (let g = 0; g <= 4; g++) {
+    const gy = padT + ih * (g / 4);
+    const val = Math.round(100 - 100 * (g / 4));
+    svg += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="#2a3650" stroke-width="1" stroke-dasharray="4 4"/>`;
+    svg += `<text x="${padL - 8}" y="${gy + 4}" text-anchor="end" fill="#5f6f8f" font-size="10">${val}</text>`;
+  }
+  const step = times.length > 6 ? Math.ceil(times.length / 6) : 1;
+  times.forEach((t, i) => {
+    if (i % step !== 0 && i !== times.length - 1) return;
+    const label = String(t || "").slice(5, 16);
+    svg += `<text x="${x(i)}" y="${H - 12}" text-anchor="middle" fill="#5f6f8f" font-size="9">${esc(label)}</text>`;
+  });
+  series.forEach((s, si) => {
+    const col = TREND_COLORS[si % TREND_COLORS.length];
+    const pts = (s.points || []).map((p, i) => `${x(i)},${y(p.health)}`).join(" ");
+    if ((s.points || []).length > 1) svg += `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/>`;
+    (s.points || []).forEach((p, i) => {
+      svg += `<circle cx="${x(i)}" cy="${y(p.health)}" r="3.5" fill="${col}" stroke="#0e1320" stroke-width="1.5"><title>${esc(s.name)} ${esc(p.time)}: ${p.health}分</title></circle>`;
+    });
+  });
+  svg += "</svg>";
+  const legend = series.map((s, si) => `<span class="tl"><i style="background:${TREND_COLORS[si % TREND_COLORS.length]}"></i>${esc(s.name)}</span>`).join("");
+  body.innerHTML = `<div class="trend-wrap">${svg}<div class="trend-legend">${legend}</div></div>`;
+}
+
+// ============ 完整交接包 ============
+let packageMode = "single";
+
+async function openHandoffPackage() {
+  packageMode = "single";
+  document.getElementById("package-title").textContent = "📦 完整交接包 · " + (current ? current.name : "");
+  try {
+    const md = await api("/api/export/" + currentPid);
+    document.getElementById("package-content").value = md;
+    openModal("package-modal");
+  } catch (e) { toast("生成失败：" + e.message); }
+}
+
+async function openAllPackage() {
+  packageMode = "all";
+  document.getElementById("package-title").textContent = "📦 全项目交接包";
+  try {
+    const md = await api("/api/export-all");
+    document.getElementById("package-content").value = md;
+    openModal("package-modal");
+  } catch (e) { toast("生成失败：" + e.message); }
+}
+
+async function copyPackage() {
+  const ta = document.getElementById("package-content");
+  try { await navigator.clipboard.writeText(ta.value); toast("交接包已复制 ✓"); }
+  catch (e) { fallbackCopy(ta.value); }
+}
+
+async function savePackage(ev) {
+  const content = document.getElementById("package-content").value;
+  const name = (packageMode === "all" ? "全项目交接包" : (current ? current.name : "项目")) + "_" + new Date().toISOString().slice(0, 10) + ".md";
+  const btn = (ev && ev.currentTarget) || document.getElementById("package-save-btn");
+  btn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/export/save", { method: "POST", body: JSON.stringify({ filename: name, content }) });
+    toast("已保存：" + r.path);
+  } catch (e) { toast("保存失败：" + e.message); }
+  btn.classList.remove("ai-loading-btn");
+}
+
+// ============ AGENTS.md 生成 ============
+async function openAgentsMD() {
+  if (!currentPid) return;
+  const pathInput = document.getElementById("agentsmd-path");
+  pathInput.value = current.repo_path ? (current.repo_path.replace(/[\\/]+$/, "") + "\\AGENTS.md") : "";
+  document.getElementById("agentsmd-content").value = "";
+  openModal("agentsmd-modal");
+}
+
+async function generateAgentsMD() {
+  const btn = document.getElementById("agentsmd-gen-btn");
+  btn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/export/agentsmd/" + currentPid, { method: "POST" });
+    document.getElementById("agentsmd-content").value = r.text;
+    toast(r.source === "ai" ? "AI 已按标准生成 AGENTS.md ✓" : "已用本地模板生成（AI 暂时不可用）");
+  } catch (e) { toast("生成失败：" + e.message); }
+  btn.classList.remove("ai-loading-btn");
+}
+
+function copyAgentsMD() {
+  const ta = document.getElementById("agentsmd-content");
+  if (!ta.value.trim()) { toast("内容为空，先点「生成」"); return; }
+  try { navigator.clipboard.writeText(ta.value); toast("已复制 ✓"); }
+  catch (e) { fallbackCopy(ta.value); }
+}
+
+async function saveAgentsMD(ev) {
+  const content = document.getElementById("agentsmd-content").value;
+  if (!content.trim()) { toast("内容为空，先点「生成」"); return; }
+  let path = document.getElementById("agentsmd-path").value.trim();
+  if (!path) { toast("请填写保存路径"); return; }
+  if (!/\.(md|txt|agentsmd)$/i.test(path)) { toast("路径需以 .md / .txt 结尾"); return; }
+  const btn = (ev && ev.currentTarget) || document.getElementById("agentsmd-save-btn");
+  btn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/export/save", { method: "POST", body: JSON.stringify({ filename: "AGENTS.md", content, path }) });
+    toast("已保存：" + r.path + " ✓");
+  } catch (e) { toast("保存失败：" + e.message); }
+  btn.classList.remove("ai-loading-btn");
+}
+
+// ============ 会话提炼 ============
+let summarizeData = null;
+
+async function openSummarize() {
+  if (!currentPid) return;
+  summarizeData = null;
+  document.getElementById("summarize-text").value = "";
+  document.getElementById("summarize-result").style.display = "none";
+  document.getElementById("summarize-apply-btn").style.display = "none";
+  openModal("summarize-modal");
+}
+
+async function runSummarize() {
+  const text = document.getElementById("summarize-text").value.trim();
+  if (text.length < 10) { toast("请粘贴至少 10 个字的对话内容"); return; }
+  const btn = document.getElementById("summarize-btn");
+  btn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/ai/summarize", { method: "POST", body: JSON.stringify({ pid: currentPid, text }) });
+    summarizeData = r.parsed;
+    renderSummarizeResult(r.parsed);
+  } catch (e) { toast("提炼失败：" + e.message); }
+  btn.classList.remove("ai-loading-btn");
+}
+
+function renderSummarizeResult(d) {
+  const box = document.getElementById("summarize-result");
+  box.style.display = "block";
+  const tasks = (d.new_tasks || []).map(t =>
+    `<div class="task-row"><span class="tag2 pri-${t.priority || "中"}">${t.priority || "中"}</span><span>${esc(t.title)}</span></div>`).join("");
+  const nextSec = d.next_action ? `<div class="sec"><span class="lab">🎯 建议下一步</span><div class="body">${esc(d.next_action)}</div></div>` : "";
+  const handoffSec = d.handoff_note_updates ? `<div class="sec"><span class="lab">🤝 建议补充进交接说明</span><div class="body">${esc(d.handoff_note_updates)}</div></div>` : "";
+  box.innerHTML = `<div class="summ-box">
+    <div class="sec"><span class="lab">📌 总结</span><div class="body">${esc(d.summary || "（无）")}</div></div>
+    ${tasks ? `<div class="sec"><span class="lab">➕ 建议新增任务（${(d.new_tasks || []).length} 个）</span><div class="tasks">${tasks}</div></div>` : ""}
+    ${nextSec}
+    ${handoffSec}
+  </div>`;
+  document.getElementById("summarize-apply-btn").style.display =
+    ((d.new_tasks || []).length || d.next_action || d.handoff_note_updates) ? "block" : "none";
+}
+
+async function applySummarize() {
+  if (!summarizeData) return;
+  if (!confirm("将创建提炼出的任务，并更新「下一步行动」与交接说明，确认？")) return;
+  const btn = document.getElementById("summarize-apply-btn");
+  btn.classList.add("ai-loading-btn");
+  let ok = 0, fail = 0;
+  try {
+    for (const t of (summarizeData.new_tasks || [])) {
+      try {
+        await api("/api/projects/" + currentPid + "/tasks", { method: "POST", body: JSON.stringify({
+          title: t.title || "提炼任务", desc: t.desc || "", priority: t.priority || "中", status: t.status || "待办", agent: "",
+        }) });
+        ok++;
+      } catch (e) { fail++; }
+    }
+    const p = await api("/api/projects/" + currentPid);
+    let changed = false;
+    if (summarizeData.next_action && summarizeData.next_action !== p.next_action) {
+      p.next_action = summarizeData.next_action; changed = true;
+    }
+    if (summarizeData.handoff_note_updates) {
+      const note = (p.handoff_note || "") + (p.handoff_note ? "\n\n" : "") + "**会话提炼补充**：" + summarizeData.handoff_note_updates;
+      if (note !== p.handoff_note) { p.handoff_note = note; changed = true; }
+    }
+    if (changed) await api("/api/projects/" + currentPid, { method: "PUT", body: JSON.stringify(p) });
+    toast(`应用完成：新增任务 ${ok} 个，失败 ${fail} 个 ✓`);
+    closeModal("summarize-modal");
+    current = await api("/api/projects/" + currentPid);
+    renderDetail();
+    loadOverview();
+  } catch (e) { toast("应用失败：" + e.message); }
+  btn.classList.remove("ai-loading-btn");
+}
+
+// ============ 数据备份 ============
+async function backupNow() {
+  const btn = document.getElementById("backup-btn");
+  btn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/backup", { method: "POST" });
+    toast("备份成功：共 " + r.total + " 份 ✓");
+    document.getElementById("backup-tip").textContent = "最新备份：" + r.folder.split(/[\\/]/).pop();
+    loadBackups();
+  } catch (e) { toast("备份失败：" + e.message); }
+  btn.classList.remove("ai-loading-btn");
+}
+
+async function loadBackups() {
+  const list = document.getElementById("backup-list");
+  if (!list) return;
+  try {
+    const r = await api("/api/backups");
+    list.innerHTML = (r.backups || []).length
+      ? r.backups.map(b => `<div class="bk"><span>📦 ${esc(b.time)}</span><span>${b.files.join("、")}</span></div>`).join("")
+      : '<div style="padding:6px 2px">暂无备份</div>';
+  } catch (e) { list.innerHTML = '<div style="padding:6px 2px">加载失败</div>'; }
+}
+
+// ============ 启动 ============
+loadOverview();
+</script>
+</body>
+</html>
