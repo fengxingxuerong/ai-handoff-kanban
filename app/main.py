@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator
 
 from . import llm
+from .version import APP_VERSION, BUILD_TIME
 
 APP_NAME = "ai-kanban"
 DEFAULT_STATUS = ["规划中", "进行中", "已暂停", "已完成"]
@@ -517,8 +518,21 @@ class TaskIn(BaseModel):
     status: Literal["待办", "进行中", "已完成", "阻塞"] = "待办"
     priority: Literal["高", "中", "低"] = "中"
     agent: str = ""
+    due_date: str = ""            # 截止日期 YYYY-MM-DD，空=未设置
     refs: list[str] = []          # 相关代码位置，如 app/main.py:120；交接时用来说明"改哪里"
     depends_on: list[str] = []    # 前置任务 id（同一项目内），用于排"先做哪个"
+
+    @field_validator("due_date", mode="before")
+    @classmethod
+    def _clean_due(cls, v):
+        v = (v or "").strip()
+        if not v:
+            return ""
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            return ""
+        return v
 
     @field_validator("refs", mode="before")
     @classmethod
@@ -574,7 +588,13 @@ def index():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "data_file": str(DATA_FILE)}
+    return {
+        "ok": True,
+        "data_file": str(DATA_FILE),
+        "version": APP_VERSION,
+        "build_time": BUILD_TIME,
+        "frozen": bool(getattr(sys, "_MEIPASS", None)),   # True=跑在打包后的 exe 里
+    }
 
 
 # ---- 项目 CRUD ----
@@ -683,7 +703,8 @@ def create_task(pid: str, body: TaskIn):
         "id": uuid.uuid4().hex[:12],
         "title": body.title.strip(), "desc": body.desc,
         "status": body.status, "priority": body.priority,
-        "agent": body.agent.strip(), "created_at": now, "updated_at": now,
+        "agent": body.agent.strip(), "due_date": body.due_date,
+        "created_at": now, "updated_at": now,
         "refs": clean_refs(body.refs),
         "depends_on": clean_deps(body.depends_on, ids),
     }
@@ -721,7 +742,8 @@ def update_task(tid: str, body: TaskIn):
         t.update({
             "title": body.title.strip(), "desc": body.desc,
             "status": body.status, "priority": body.priority,
-            "agent": body.agent.strip(), "updated_at": now,
+            "agent": body.agent.strip(), "due_date": body.due_date,
+            "updated_at": now,
             "refs": clean_refs(body.refs),
             "depends_on": deps,
         })
@@ -832,6 +854,23 @@ def export_handoff(pid: str):
 #  统计 / 就绪度 / 完整交接包 / 趋势
 # =====================================================================
 
+def _due_state(t: dict) -> str:
+    """任务截止状态：overdue=已逾期 / soon=2 天内临期 / ok=正常 / 空=未设截止或已完成"""
+    due = (t.get("due_date") or "").strip()
+    if not due or t.get("status") == "已完成":
+        return ""
+    try:
+        d = datetime.strptime(due, "%Y-%m-%d").date()
+    except ValueError:
+        return ""
+    today = datetime.now().date()
+    if d < today:
+        return "overdue"
+    if (d - today).days <= 2:
+        return "soon"
+    return "ok"
+
+
 @app.get("/api/stats")
 def api_stats():
     data = get_projects_data()
@@ -840,6 +879,8 @@ def api_stats():
     task_dist = {s: 0 for s in DEFAULT_TASK_STATUS}
     total_tasks = 0
     blocked = 0
+    overdue = 0
+    duesoon = 0
     progresses = []
     readiness = []
     for p in projects:
@@ -852,6 +893,11 @@ def api_stats():
             total_tasks += 1
             if ts == "阻塞":
                 blocked += 1
+            ds = _due_state(t)
+            if ds == "overdue":
+                overdue += 1
+            elif ds == "soon":
+                duesoon += 1
         readiness.append({
             "id": p["id"], "name": p["name"],
             "score": _readiness_score(p), "items": _readiness_items(p),
@@ -864,6 +910,8 @@ def api_stats():
         "task_dist": task_dist,
         "total_tasks": total_tasks,
         "blocked_tasks": blocked,
+        "overdue_tasks": overdue,
+        "duesoon_tasks": duesoon,
         "avg_progress": avg_progress,
         "avg_readiness": avg_readiness,
         "readiness": readiness,
@@ -924,7 +972,7 @@ def save_export(body: SaveExportBody):
         target = Path(body.path.strip())
         suffix = target.suffix.lower()
         if suffix not in (".md", ".txt", ".markdown", ".agentsmd"):
-            raise HTTPException(400, "仅支持保存为 .md / .txt 文件")
+            raise HTTPException(400, "仅支持保存为 .md / .txt / .markdown / .agentsmd 文件")
         if _is_forbidden_target(target):
             raise HTTPException(400, "不允许写入系统目录，请换一个路径")
         try:
@@ -1179,6 +1227,12 @@ def create_backup():
         if src.exists():
             shutil.copy2(src, folder / name)
             copied.append(name)
+    # 监管报告一并备份（恢复后健康趋势才不会空）
+    reports = reports_dir()
+    if reports.exists() and any(reports.iterdir()):
+        report_dst = folder / "reports"
+        shutil.copytree(reports, report_dst, dirs_exist_ok=True)
+        copied.append("reports/")
     # 只保留最近 10 份
     for old in sorted(backups.glob("backup_*"), reverse=True)[10:]:
         shutil.rmtree(old, ignore_errors=True)
@@ -1196,6 +1250,52 @@ def list_backups():
             files = []
         out.append({"name": b.name, "time": b.name.replace("backup_", "").replace("_", " "), "files": files})
     return {"backups": out}
+
+
+# ---- 全量数据导出 / 导入（跨机迁移） ----
+
+@app.get("/api/data/export")
+def export_all_data():
+    data = get_projects_data()
+    return {
+        "app": "ai-kanban",
+        "version": APP_VERSION,
+        "exported_at": now_str(),
+        "projects": data.get("projects", []),
+    }
+
+
+class ImportBody(BaseModel):
+    content: str = Field(..., min_length=2, max_length=10_000_000)
+
+
+@app.post("/api/data/import")
+def import_all_data(body: ImportBody):
+    try:
+        parsed = json.loads(body.content)
+    except Exception:
+        raise HTTPException(400, "不是合法的 JSON 文件")
+    if not isinstance(parsed, dict):
+        raise HTTPException(400, "文件结构不对：顶层应为对象")
+    if not isinstance(parsed.get("projects"), list):
+        raise HTTPException(400, "文件里没有 projects 数据")
+    try:
+        cleaned = _sanitize(parsed)
+    except Exception:
+        cleaned = parsed
+    projects = cleaned.get("projects")
+    if not isinstance(projects, list):
+        raise HTTPException(400, "文件里没有 projects 数据")
+    projects = [p for p in projects if isinstance(p, dict) and p.get("id") and p.get("name")]
+    # 导入前自动留一份快照（零删除安全网，随时可从备份回滚）
+    try:
+        create_backup()
+    except Exception:
+        pass
+    data = get_projects_data()
+    data["projects"] = projects
+    write_projects_data(data)
+    return {"ok": True, "imported": len(projects)}
 
 
 # ---- 数据恢复：从 .bak 或历史快照还原（损坏自愈之后还能回去） ----
@@ -1546,6 +1646,7 @@ def _projects_brief(projects: list[dict]) -> list[dict]:
             "next_action": (p.get("next_action") or "")[:300],
             "background": (p.get("background") or "")[:300],
             "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", ""),
+                       **({"due_date": t["due_date"]} if t.get("due_date") else {}),
                        **({"refs": t["refs"]} if t.get("refs") else {})}
                       for t in (p.get("tasks") or [])[:40]],
         }

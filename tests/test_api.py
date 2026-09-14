@@ -14,6 +14,9 @@ def server(app_client):
 def test_health_and_index(server):
     status, body = server.get("/api/health")
     assert status == 200 and body["ok"] is True
+    # 版本号是判断"dist 里的 exe 是否落后于源码"的唯一依据，不能缺
+    assert body["version"] and body["build_time"]
+    assert body["frozen"] is False          # 测试里一定跑在源码模式下
 
     status, html = server.get("/")
     assert status == 200 and "AI 交接看板" in html
@@ -78,3 +81,70 @@ def test_sample_data_is_desensitized(server):
     blob = str(data)
     for leak in ("sqli-scanner", "longmao", "QuAiWei", "墨匠", "EduSmart"):
         assert leak not in blob, f"示例数据仍泄露 {leak}"
+
+
+# ---------------- 截止日期 ----------------
+
+def test_task_due_date_roundtrip(server):
+    status, proj = server.create_project("截止日期项目")
+    pid = proj["id"]
+    status, task = server.post(f"/api/projects/{pid}/tasks", {
+        "title": "有截止的任务", "due_date": "2026-12-31",
+    })
+    assert status in (200, 201) and task["due_date"] == "2026-12-31"
+    # 非法日期被清洗为空，不报错
+    status, task2 = server.post(f"/api/projects/{pid}/tasks", {
+        "title": "非法日期", "due_date": "明天下午",
+    })
+    assert status in (200, 201) and task2["due_date"] == ""
+    # 更新截止日期
+    status, updated = server.put(f"/api/tasks/{task['id']}", {
+        "title": "有截止的任务", "due_date": "2027-01-15",
+    })
+    assert status == 200 and updated["due_date"] == "2027-01-15"
+
+
+def test_stats_due_counters(server):
+    from datetime import date, timedelta
+    status, proj = server.create_project("临期逾期项目")
+    pid = proj["id"]
+    today = date.today()
+    server.post(f"/api/projects/{pid}/tasks", {"title": "逾期任务", "due_date": (today - timedelta(days=3)).isoformat()})
+    server.post(f"/api/projects/{pid}/tasks", {"title": "临期任务", "due_date": (today + timedelta(days=1)).isoformat()})
+    server.post(f"/api/projects/{pid}/tasks", {"title": "远期任务", "due_date": (today + timedelta(days=30)).isoformat()})
+    server.post(f"/api/projects/{pid}/tasks", {"title": "已完成不算逾期", "due_date": (today - timedelta(days=5)).isoformat(), "status": "已完成"})
+    status, stats = server.get("/api/stats")
+    assert status == 200
+    assert stats["overdue_tasks"] >= 1, "逾期任务应被统计（已完成的不算）"
+    assert stats["duesoon_tasks"] >= 1, "2 天内临期任务应被统计"
+
+
+# ---------------- 全量数据导入导出 ----------------
+
+def test_data_export_import_roundtrip(server):
+    status, proj = server.create_project("迁移项目")
+    pid = proj["id"]
+    server.post(f"/api/projects/{pid}/tasks", {"title": "迁移任务", "due_date": "2026-12-01"})
+    status, exported = server.get("/api/data/export")
+    assert status == 200 and exported.get("app") == "ai-kanban"
+    assert isinstance(exported.get("projects"), list) and len(exported["projects"]) >= 1
+    import json as _json
+    content = _json.dumps(exported, ensure_ascii=False)
+    # 删掉后用导出内容恢复
+    assert server.delete(f"/api/projects/{pid}")[0] == 200
+    _, after_del = server.get("/api/projects")
+    assert all(p["id"] != pid for p in after_del["projects"])
+    status, r = server.post("/api/data/import", {"content": content})
+    assert status == 200 and r.get("ok") is True and r.get("imported", 0) >= 1
+    _, restored = server.get("/api/projects")
+    assert any(p["id"] == pid for p in restored["projects"]), "导入后项目应恢复"
+    status, detail = server.get(f"/api/projects/{pid}")
+    assert status == 200 and detail["tasks"], "导入后任务应恢复"
+    assert detail["tasks"][0]["title"] == "迁移任务"
+    assert detail["tasks"][0]["due_date"] == "2026-12-01"
+
+
+def test_data_import_rejects_garbage(server):
+    assert server.post("/api/data/import", {"content": "不是json"})[0] == 400
+    assert server.post("/api/data/import", {"content": "[1,2,3]"})[0] == 400
+    assert server.post("/api/data/import", {"content": '{"projects": "不是列表"}'})[0] == 400

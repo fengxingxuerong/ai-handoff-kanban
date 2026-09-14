@@ -533,6 +533,14 @@
   .trend-empty { padding: 40px 20px; text-align: center; color: var(--text-faint); }
   .trend-empty .big { font-size: 34px; margin-bottom: 10px; }
 
+  /* ---------- 截止日期 / 拖拽 ---------- */
+  .due-badge { font-size: 10px; padding: 1px 7px; border-radius: 5px; margin-left: 6px; display: inline-block; vertical-align: 1px; }
+  .due-overdue { color: var(--red); background: rgba(248,113,113,.15); font-weight: 700; }
+  .due-soon { color: var(--orange); background: rgba(251,191,36,.15); }
+  .due-ok { color: var(--text-dim); background: var(--bg-soft); }
+  .tcard.dragging { opacity: .45; }
+  .kcol.drag-over { background: rgba(76,194,255,.08); border-color: var(--accent); border-style: dashed; }
+
   /* ---------- 备份 / 提炼 ---------- */
   .backup-list { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-dim); max-height: 120px; overflow-y: auto; }
   .backup-list .bk { display: flex; justify-content: space-between; padding: 4px 8px; background: var(--bg); border-radius: 6px; }
@@ -758,6 +766,9 @@
         </select></div>
         <div class="field"><label>负责 AI（可选）</label><input id="t-agent" placeholder="如 cline / 豆包"></div>
       </div>
+      <div class="field"><label>截止日期（可选）</label><input type="date" id="t-due">
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了截止日期，仪表盘会统计临期/逾期，任务卡上也会标出来</div>
+      </div>
     </div>
     <div class="mfoot">
       <button class="btn" data-act="closeModal" data-arg="task-modal">取消</button>
@@ -788,6 +799,7 @@
   <div class="modal" style="width:min(680px,100%)">
     <div class="mhead"><h2>⚙️ AI 设置</h2><button class="btn icon" data-act="closeModal" data-arg="ai-settings-modal">✕</button></div>
     <div class="mbody">
+      <div class="hint" id="app-version">版本加载中…</div>
       <div class="field"><label>默认模型</label>
         <select id="ai-active-model"></select>
         <div class="hint">监管分析、指令解析、交接生成默认使用的模型；调用失败会自动切换其他端点</div>
@@ -806,9 +818,12 @@
         <div class="hint">到点后自动生成监管报告并存入「历史报告」，不修改项目数据；最近运行：<span id="ai-sched-last">—</span></div>
       </div>
       <div class="field"><label>数据备份（本地快照，保留最近 10 份）</label>
-        <div style="display:flex;gap:8px;align-items:center">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn" id="backup-btn" data-act="backupNow">💾 立即备份</button>
           <button class="btn" data-act="showRecoverable">↩ 数据恢复</button>
+          <button class="btn" data-act="exportData">📤 导出全部数据</button>
+          <button class="btn" data-act="importData">📥 导入数据</button>
+          <input type="file" id="import-file" accept=".json" style="display:none">
           <span style="font-size:11px;color:var(--text-faint)" id="backup-tip"></span>
         </div>
         <div class="backup-list" id="backup-list"></div>
@@ -1146,6 +1161,8 @@ const ACTIONS = {
   // —— AI 能力 ——
   testAI: () => testAI(),
   backupNow: () => backupNow(),
+  exportData: () => exportData(),
+  importData: () => importData(),
   showRecoverable: () => showRecoverable(),
   restoreData: (arg) => restoreData(arg),
   sendCommand: () => sendCommand(),
@@ -1245,7 +1262,14 @@ function renderDetail() {
     counts[tst] = (counts[tst] || 0) + 1;
     const el = document.createElement("div");
     el.className = "tcard";
+    el.draggable = true;
     el.onclick = () => openTaskModal(t.id);
+    el.ondragstart = (e) => {
+      e.dataTransfer.setData("text/plain", t.id);
+      e.dataTransfer.effectAllowed = "move";
+      el.classList.add("dragging");
+    };
+    el.ondragend = () => el.classList.remove("dragging");
     const refHtml = (t.refs && t.refs.length)
       ? `<div class="td" style="font-family:Consolas,monospace;font-size:11px">📍 ${t.refs.map(r => esc(r)).join("、")}</div>`
       : "";
@@ -1258,8 +1282,10 @@ function renderDetail() {
           return `<div class="td" style="font-size:11px">⛓ 前置：${titles.map(esc).join("、")}</div>`;
         })()
       : "";
+    const di = dueInfo(t);
+    const dueHtml = di ? `<span class="due-badge ${di.cls}">📅 ${esc(di.text)}</span>` : "";
     el.innerHTML = `
-      <div class="tt">${esc(t.title)}</div>
+      <div class="tt">${esc(t.title)}${dueHtml}</div>
       ${t.desc ? `<div class="td">${esc(t.desc)}</div>` : ""}
       ${refHtml}
       ${depHtml}
@@ -1441,6 +1467,7 @@ function openTaskModal(taskId) {
   document.getElementById("t-priority").value = "中";
   document.getElementById("t-agent").value = "";
   document.getElementById("t-refs").value = "";
+  document.getElementById("t-due").value = "";
   const depsSel = document.getElementById("t-deps");
   depsSel.innerHTML = (current && current.tasks ? current.tasks : [])
     .filter(x => x.id !== taskId)
@@ -1454,6 +1481,7 @@ function openTaskModal(taskId) {
       document.getElementById("t-priority").value = t.priority;
       document.getElementById("t-agent").value = t.agent || "";
       document.getElementById("t-refs").value = (t.refs || []).join(", ");
+      document.getElementById("t-due").value = t.due_date || "";
       const mine = t.depends_on || [];
       Array.from(depsSel.options).forEach(o => { o.selected = mine.includes(o.value); });
     }
@@ -1470,6 +1498,7 @@ async function saveTask() {
     status: document.getElementById("t-status").value,
     priority: document.getElementById("t-priority").value,
     agent: document.getElementById("t-agent").value.trim(),
+    due_date: document.getElementById("t-due").value || "",
     refs: document.getElementById("t-refs").value.split(",").map(s => s.trim()).filter(Boolean),
     depends_on: Array.from(document.getElementById("t-deps").selectedOptions).map(o => o.value),
   };
@@ -1855,6 +1884,64 @@ function donutSVG(dist, colors, size = 112, r = 40) {
     <text x="50%" y="62%" text-anchor="middle" fill="#5f6f8f" font-size="9">项目</text></svg>`;
 }
 
+// ============ 截止日期与拖拽 ============
+function dueInfo(t) {
+  const due = (t.due_date || "").trim();
+  if (!due || t.status === "已完成") return null;
+  const d = new Date(due + "T00:00:00");
+  if (isNaN(d)) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((d - today) / 86400000);
+  if (days < 0) return { cls: "due-overdue", text: "逾期 " + due.slice(5) };
+  if (days <= 2) return { cls: "due-soon", text: "临期 " + due.slice(5) };
+  return { cls: "due-ok", text: due.slice(5) };
+}
+
+async function moveTaskTo(tid, status) {
+  const t = (current.tasks || []).find(x => x.id === tid);
+  if (!t || t.status === status) return;
+  try {
+    await api("/api/tasks/" + tid, { method: "PUT", body: JSON.stringify({
+      title: t.title, desc: t.desc || "", status, priority: t.priority,
+      agent: t.agent || "", due_date: t.due_date || "",
+      refs: t.refs || [], depends_on: t.depends_on || [],
+    }) });
+    toast(`任务已移至「${status}」✓`);
+    current = await api("/api/projects/" + currentPid);
+    renderDetail();
+    loadOverview();
+  } catch (e) { toast("移动失败：" + e.message); }
+}
+
+(function bindKanbanDnD() {
+  const wrap = document.querySelector(".kanban");
+  if (!wrap) return;
+  const COL_MAP = { "k-todo": "待办", "k-doing": "进行中", "k-done": "已完成", "k-blocked": "阻塞" };
+  wrap.addEventListener("dragover", e => {
+    const col = e.target.closest(".kcol");
+    if (!col) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    col.classList.add("drag-over");
+  });
+  wrap.addEventListener("dragleave", e => {
+    const col = e.target.closest(".kcol");
+    if (col && !col.contains(e.relatedTarget)) col.classList.remove("drag-over");
+  });
+  wrap.addEventListener("drop", e => {
+    const col = e.target.closest(".kcol");
+    if (!col) return;
+    e.preventDefault();
+    col.classList.remove("drag-over");
+    const tid = e.dataTransfer.getData("text/plain");
+    if (!tid) return;
+    for (const [cls, st] of Object.entries(COL_MAP)) {
+      if (col.classList.contains(cls)) { moveTaskTo(tid, st); break; }
+    }
+  });
+})();
+
 function renderDash() {
   const el = document.getElementById("dash");
   if (!stats || !stats.project_total) { el.innerHTML = ""; return; }
@@ -1873,6 +1960,8 @@ function renderDash() {
       <div class="stat-card"><span class="s-num green">${sd["已完成"] || 0}</span><span class="s-lab">已完成</span></div>
       <div class="stat-card"><span class="s-num purple">${stats.total_tasks}</span><span class="s-lab">任务总数</span></div>
       <div class="stat-card"><span class="s-num red">${stats.blocked_tasks}</span><span class="s-lab">阻塞任务</span></div>
+      <div class="stat-card"><span class="s-num orange">${stats.duesoon_tasks || 0}</span><span class="s-lab">临期任务(2天内)</span></div>
+      <div class="stat-card"><span class="s-num ${stats.overdue_tasks ? "red" : ""}" style="${stats.overdue_tasks ? "" : "color:var(--text-faint)"}">${stats.overdue_tasks || 0}</span><span class="s-lab">逾期任务</span></div>
       <div class="stat-card"><span class="s-num accent">${stats.avg_progress}%</span><span class="s-lab">平均进度</span></div>
       <div class="stat-card"><span class="s-num orange">${stats.avg_readiness}</span><span class="s-lab">平均就绪度</span></div>
     </div>
@@ -2238,7 +2327,8 @@ async function applySummarize() {
   btn.classList.remove("ai-loading-btn");
 }
 
-// ============ 数据备份 ============async function backupNow() {
+// ============ 数据备份 ============
+async function backupNow() {
   const btn = document.getElementById("backup-btn");
   btn.classList.add("ai-loading-btn");
   try {
@@ -2308,6 +2398,16 @@ async function restoreData(source) {
 }
 
 // ============ 启动 ============
+async function loadVersion() {
+  try {
+    const h = await api("/api/health");
+    document.getElementById("app-version").textContent =
+      `AI 交接看板 v${h.version} · build ${h.build_time} · ${h.frozen ? "打包版" : "源码运行"}`;
+  } catch (e) {
+    document.getElementById("app-version").textContent = "版本信息读取失败";
+  }
+}
+loadVersion();
 loadOverview();
 </script>
 </body>

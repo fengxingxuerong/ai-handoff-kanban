@@ -65,3 +65,34 @@ def test_card_uses_data_attributes_not_inline_js():
     card = re.search(r"function cardHTML\(p\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert 'data-pid="' in card
     assert "onclick" not in card
+
+
+def test_version_is_displayed():
+    """版本号必须在界面上看得见——否则判断 exe 是否落后于源码又得靠比对时间戳"""
+    assert 'id="app-version"' in HTML
+    assert "async function loadVersion()" in HTML
+    assert "/api/health" in HTML
+
+
+def test_due_date_ui():
+    """截止日期：弹窗输入、任务卡徽章、仪表盘统计、AI brief 都要接上"""
+    assert 'id="t-due"' in HTML, "任务弹窗缺截止日期输入"
+    assert "function dueInfo" in HTML, "缺日期状态计算"
+    assert "due-overdue" in HTML and "due-soon" in HTML, "缺逾期/临期徽章样式"
+    assert "overdue_tasks" in HTML and "duesoon_tasks" in HTML, "仪表盘缺临期/逾期统计"
+
+
+def test_kanban_drag_and_drop():
+    """四列看板拖拽改状态"""
+    assert "el.draggable = true" in HTML, "任务卡应可拖拽"
+    assert 'addEventListener("drop"' in HTML, "看板缺 drop 处理"
+    assert "moveTaskTo" in HTML, "缺拖拽落点处理函数"
+
+
+def test_data_import_export_ui():
+    """导入导出按钮存在且注册进 ACTIONS"""
+    assert 'data-act="exportData"' in HTML
+    assert 'data-act="importData"' in HTML
+    assert "exportData" in ACTIONS_KEYS
+    assert "importData" in ACTIONS_KEYS
+    assert 'id="import-file"' in HTML, "缺导入文件选择器"
