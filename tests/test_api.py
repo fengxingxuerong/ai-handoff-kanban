@@ -2,6 +2,14 @@
 """基础接口：项目/任务 CRUD、交接导出、删除后 404"""
 from __future__ import annotations
 
+import pytest
+
+
+@pytest.fixture
+def server(app_client):
+    """进程内客户端（原为子进程实例）：更快，且能被覆盖率统计"""
+    return app_client
+
 
 def test_health_and_index(server):
     status, body = server.get("/api/health")

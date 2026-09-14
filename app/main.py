@@ -539,8 +539,9 @@ def _build_handoff_markdown(p: dict) -> str:
         lines.append("| 任务 | 状态 | 优先级 | 负责AI | 描述 |")
         lines.append("| --- | --- | --- | --- | --- |")
         for t in tasks:
+            title = (t.get("title") or "").replace("|", "\\|").replace("\n", " ")
             desc = (t.get("desc") or "").replace("|", "\\|").replace("\n", " ")
-            lines.append(f"| {t['title']} | {t['status']} | {t['priority']} | {t.get('agent','') or '—'} | {desc} |")
+            lines.append(f"| {title} | {t['status']} | {t['priority']} | {t.get('agent','') or '—'} | {desc} |")
         lines.append("")
     lines.append("---")
     lines.append("由 AI 交接看板自动生成")
@@ -875,20 +876,19 @@ def _extract_json(text: str) -> dict | list:
         return json.loads(s)
     except Exception:
         pass
-    start = s.find("{")
-    end = s.rfind("}")
-    if start != -1 and end > start:
+    # 前后缀有噪声时，取「出现位置更靠前」的那个候选：
+    # 否则像「前缀 [{"a":1}] 后缀」这种会先命中内层对象，把数组吞掉。
+    candidates = []
+    for open_ch, close_ch in (("{", "}"), ("[", "]")):
+        start = s.find(open_ch)
+        end = s.rfind(close_ch)
+        if start != -1 and end > start:
+            candidates.append((start, s[start:end + 1]))
+    for _, chunk in sorted(candidates, key=lambda x: x[0]):
         try:
-            return json.loads(s[start:end + 1])
+            return json.loads(chunk)
         except Exception:
-            pass
-    start = s.find("[")
-    end = s.rfind("]")
-    if start != -1 and end > start:
-        try:
-            return json.loads(s[start:end + 1])
-        except Exception:
-            pass
+            continue
     raise ValueError("无法从 LLM 输出中解析 JSON")
 
 

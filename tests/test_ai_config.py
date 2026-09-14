@@ -8,9 +8,17 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
+
+import pytest
 
 from app.main import _period_key  # noqa: E402
-from datetime import datetime
+
+
+@pytest.fixture
+def seeded_server(seeded_client):
+    """进程内客户端 + 预置 config.json（原为子进程实例）"""
+    return seeded_client
 
 
 def read_cfg(api):

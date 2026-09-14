@@ -24,11 +24,18 @@ def free_port() -> int:
 
 
 class Api:
-    """极简 HTTP 客户端，支持自定义 Host / Origin / Token 以便测试防护逻辑。"""
+    """极简客户端，支持自定义 Host / Origin / Token 以便测试防护逻辑。
 
-    def __init__(self, base: str, token: str | None = None):
+    两种传输：
+    - client=None  → 真打 HTTP（子进程起的 uvicorn，保真度最高）
+    - client=TestClient(...) → 进程内直接调 ASGI，快很多且能被覆盖率统计
+    """
+
+    def __init__(self, base: str = "", token: str | None = None, client=None, data_dir=None):
         self.base = base.rstrip("/")
         self.token = token
+        self.client = client
+        self.data_dir = data_dir
 
     def request(self, method, path, body=None, origin=None, host=None, token=...):
         data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
@@ -40,6 +47,17 @@ class Api:
             headers["Origin"] = origin
         if host:
             headers["Host"] = host
+
+        if self.client is not None:
+            r = self.client.request(method, path, content=data, headers=headers)
+            ct = r.headers.get("content-type", "")
+            if "json" in ct:
+                try:
+                    return r.status_code, r.json()
+                except Exception:
+                    return r.status_code, r.text
+            return r.status_code, r.text
+
         req = urllib.request.Request(self.base + path, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=20) as resp:
@@ -137,9 +155,22 @@ def fresh_server(tmp_path):
 
 
 @pytest.fixture
-def seeded_server(tmp_path):
-    """预置 config.json（含假 Key）的实例，用于验证配置读写与掩码往返"""
-    data_dir = tmp_path / "kanban-seed"
+def app_client(tmp_path, monkeypatch):
+    """进程内客户端：不起子进程，快且能被覆盖率统计。
+
+    注意 base_url 必须是 127.0.0.1，否则 Host 校验中间件会把默认的 testserver 拒掉。
+    """
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    data_dir = tmp_path / "kanban-inproc"
+    monkeypatch.setenv("KANBAN_DATA_DIR", str(data_dir))
+    with TestClient(app, base_url="http://127.0.0.1") as c:
+        yield Api(client=c, data_dir=data_dir)
+
+
+def _seed_config(data_dir: Path) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
     cfg = {
         "ai": {
@@ -156,6 +187,28 @@ def seeded_server(tmp_path):
         }
     }
     (data_dir / "config.json").write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+
+
+@pytest.fixture
+def seeded_client(tmp_path, monkeypatch):
+    """进程内客户端 + 预置 config.json（含假 Key）"""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    data_dir = tmp_path / "kanban-seed-inproc"
+    _seed_config(data_dir)
+    monkeypatch.setenv("KANBAN_DATA_DIR", str(data_dir))
+    monkeypatch.delenv("KANBAN_TOKEN", raising=False)
+    with TestClient(app, base_url="http://127.0.0.1") as c:
+        yield Api(client=c, data_dir=data_dir)
+
+
+@pytest.fixture
+def seeded_server(tmp_path):
+    """子进程版：预置 config.json（含假 Key）"""
+    data_dir = tmp_path / "kanban-seed"
+    _seed_config(data_dir)
     with _server_ctx(data_dir, {}) as (api, _proc):
         api.data_dir = data_dir
         yield api

@@ -563,7 +563,7 @@
   <div class="search-wrap">
     <div class="search-box">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <input id="search" type="text" placeholder="搜索项目名称 / 标签 / 背景 / 交接说明…" oninput="renderOverview()">
+      <input id="search" type="text" placeholder="搜索项目名称 / 标签 / 背景 / 交接说明…">
     </div>
   </div>
   <div class="header-actions">
@@ -1145,6 +1145,16 @@ document.addEventListener("keydown", e => {
   const el = e.target.closest("[data-enter]");
   if (el) runAction(el.dataset.enter, e, el);
 });
+
+// 搜索框防抖：卡片是全量重渲染，逐字符触发在项目多时会卡
+let searchTimer = null;
+const searchInput = document.getElementById("search");
+if (searchInput) {
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderOverview, 120);
+  });
+}
 
 // ============ 详情 ============
 async function openDetail(pid) {

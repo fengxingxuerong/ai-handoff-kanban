@@ -51,7 +51,7 @@ build.bat
 ├── app/main.py             # FastAPI 后端：项目/任务 CRUD + AI 监管/指令/交接/定时 API
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
 ├── web/index.html          # 前端看板（单页，深色主题，含 AI 界面；事件统一走 data-act 委托）
-├── tests/                  # pytest 套件（自动起隔离服务，AI 用例默认跳过）
+├── tests/                  # pytest 套件 116 项（含内置假 LLM 端点，不消耗配额）
 ├── scripts/desktop.py      # PyWebview 桌面壳（端口检测 + 后台自启服务）
 ├── scripts/start_desktop.bat  # 源码双击启动
 ├── scripts/init_ai_config.py  # 本机 AI 端点初始化（Key 从环境变量/私有文件读，脚本内不含 Key）
@@ -59,6 +59,7 @@ build.bat
 ├── scripts/regression_test.py # 手工回归：并发/特殊字符/白名单/防护/鉴权
 ├── scripts/ai_smoke_test.py # 手工冒烟：AI 功能（真实调用 LLM）
 ├── scripts/frozen_smoke.py # 冻结版自查：启动 dist 里的 exe 真打一遍接口
+├── scripts/bench.py        # 读写性能基准（先量再改）
 ├── build.bat               # 一键打包 exe
 ├── pytest.ini              # pytest 配置
 ├── .github/workflows/test.yml # CI：push/PR 自动跑测试
@@ -72,16 +73,32 @@ build.bat
 rem 一次性装测试依赖
 .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 
-rem 全量测试（自动起隔离的临时服务，跑完自动关；AI 用例默认跳过）
+rem 全量测试（自动起隔离环境，跑完自动关；带覆盖率，低于 90% 直接失败）
 .venv\Scripts\python.exe -m pytest -v
 
-rem 只在需要真实模型配额时跑 AI 用例
+rem 只在需要真实模型配额时跑 AI 用例（其余 AI 用例走内置假端点，不消耗配额）
 set KANBAN_LIVE=1
 .venv\Scripts\python.exe -m pytest tests\test_ai.py -v
+
+rem 读写性能基准（先量再改）
+.venv\Scripts\python.exe scripts\bench.py 1000
 ```
 
-`tests/` 覆盖：基础 CRUD 与导出、字段白名单、并发写入不丢数据、Host/Origin 防护、
-保存路径限制、Token 鉴权，以及前端契约（页面内联事件必须为零、每个 `data-act` 必须有实现）。
+`tests/` 共 116 项，覆盖：
+
+| 文件 | 覆盖内容 |
+| --- | --- |
+| `test_api.py` | 基础 CRUD、导出、统计、示例数据脱敏 |
+| `test_security.py` | 字段白名单、特殊字符名称、Host/Origin 防护、保存路径限制、Token 鉴权 |
+| `test_concurrency.py` | 并发写入不丢更新（20/30 并发落盘）、字段与任务混合写入 |
+| `test_ai_endpoints.py` | 全部 AI 路径（分析/提炼/指令/交接/AGENTS.md/建议落地/趋势），含乱码输出、端点全挂、本地兜底 |
+| `test_llm_gateway.py` | 网关容灾：多 Key 轮询、429/5xx 切端点、全失败聚合报错、JSON 容错、掩码、配置兼容 |
+| `test_ai_config.py` | 配置读写与掩码往返（改端点名不丢 Key）、调度周期键 |
+| `test_misc.py` | 备份、导出落盘回退、脏数据规范化、损坏文件恢复、404 边界 |
+| `test_frontend.py` | 前端契约：内联事件必须为零、每个 `data-act` 必须有实现、搜索防抖 |
+
+AI 用例默认打本地假端点（`tests/llm_stub.py`，OpenAI 兼容），**不消耗任何模型配额**；
+只有 `KANBAN_LIVE=1` 的 `test_ai.py` 会走真实模型。
 
 需要对着已跑起来的实例做手工冒烟时，用 `scripts/` 下三个独立脚本：
 

@@ -16,7 +16,7 @@
 | `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程 |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
-| `tests/` | pytest 套件：接口、并发、安全、前端契约（AI 用例需 `KANBAN_LIVE=1`） |
+| `tests/` | pytest 套件 116 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90% |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log` |
 | `scripts/*_test.py` | 手工冒烟：smoke_test / regression_test / ai_smoke_test |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
@@ -31,10 +31,13 @@ scripts\start_desktop.bat
 rem 只起后端（调试用）
 .venv\Scripts\python.exe -m uvicorn app.main:app --port 18320
 
-rem 测试（pytest 会自动起隔离的临时服务并回收；无需手工开服务）
+rem 测试（pytest 自动起隔离环境并回收；带覆盖率，门檻 90%）
 .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .venv\Scripts\python.exe -m pytest -v
 set KANBAN_LIVE=1 && .venv\Scripts\python.exe -m pytest tests\test_ai.py -v
+
+rem 性能基准（改数据层前先量）
+.venv\Scripts\python.exe scripts\bench.py 1000
 
 rem 打包（改完源码必须重打，否则 dist 里的 exe 是旧版本）
 build.bat
@@ -70,6 +73,31 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 5. **密钥绝不进项目目录**。Key 只存在于 `%USERPROFILE%\.ai-kanban\config.json` 或
    `keys.local.json`，初始化脚本从环境变量读（`KANBAN_KEY_<端点名>`）。
 6. **示例数据（`_SAMPLE_DATA`）必须保持脱敏**，不能出现真实项目名与本机路径 —— 它会随 exe 分发。
+
+## 性能基线（2026-09-14 实测，本机）
+
+数据层是「整份 JSON 读改写」，延迟随项目数线性增长。`scripts/bench.py` 可复现：
+
+| 数据集 | GET /api/projects | GET /api/stats | GET /api/projects/{pid} | GET /api/export-all | POST 新建任务 |
+| --- | --- | --- | --- | --- | --- |
+| 1000 项目 / 4.1 MB | 49 ms | 62 ms | 26 ms | 37 ms | 26 ms |
+| 5000 项目 / 20.7 MB | 242 ms | 322 ms | 128 ms | 177 ms | 124 ms |
+
+**结论：先不加缓存。** 这是本机单人看板，真实规模是几十个项目（≈个位数毫秒），
+加 mtime 缓存会引入失效风险却换不来可感知收益。等到「列表接口 > 300ms」成为日常体验问题时
+再考虑分片存储或 SQLite —— 那时也应该是先改存储层，而不是加一层缓存糊住。
+
+## 测试约定
+
+1. **默认用进程内客户端**（`app_client` / `seeded_client` 夹具，走 `TestClient`）：快，
+   而且能被覆盖率统计。只有**并发用例**用子进程起的真服务（`fresh_server`），因为要真正的并行。
+2. **AI 用例一律打本地假端点** `tests/llm_stub.py`（OpenAI 兼容，可注入文本/JSON/状态码/
+   指定 Key 固定失败），不要在常规测试里消耗真实配额。需要真模型的用例放 `test_ai.py`，
+   用 `KANBAN_LIVE=1` 显式启用。
+3. **前端契约测试是硬约束**：页面里出现任何内联事件属性、或 `data-act` 没有在 `ACTIONS` 注册，
+   `test_frontend.py` 直接红。新增按钮必须"加 `data-act` + 注册实现"。
+4. 覆盖率门槛写在 `pytest.ini`（`fail_under = 90`）。剩下的未覆盖行基本是
+   `_is_forbidden_target` 的异常分支、`_scheduler_loop` 的常驻循环等难以稳定触发的路径。
 
 ## 容易踩的坑
 

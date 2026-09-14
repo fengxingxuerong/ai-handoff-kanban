@@ -10,6 +10,18 @@ import pytest
 WEIRD = "张三's 项目 <b>\"引号\"</b>"
 
 
+@pytest.fixture
+def server(app_client):
+    """进程内客户端（原为子进程实例）"""
+    return app_client
+
+
+@pytest.fixture
+def fresh_server(app_client):
+    """进程内客户端，每个用例一个干净数据目录"""
+    return app_client
+
+
 def test_special_char_name_roundtrip(fresh_server):
     """含撇号/引号/尖括号的项目名可创建、读回、删除（曾导致卡片按钮 JS 语法错误）"""
     status, project = fresh_server.create_project(WEIRD)
@@ -89,15 +101,16 @@ def test_export_save_writes_to_temp(fresh_server):
     os.remove(target)
 
 
-def test_token_required_for_write(token_server):
-    """开了 KANBAN_TOKEN：无 Token 的写请求 401，带对了就通"""
+def test_token_required_for_write(app_client, monkeypatch):
+    """开了 KANBAN_TOKEN：无 Token 的写请求 401，带对了就通（读接口不受影响）"""
+    monkeypatch.setenv("KANBAN_TOKEN", "pytest-token")
     body = {"name": "token 测试", "status": "进行中", "progress": 0, "priority": "中"}
 
-    assert token_server.get("/api/health")[0] == 200
+    assert app_client.get("/api/health")[0] == 200
 
-    assert token_server.request("POST", "/api/projects", body, token=None)[0] == 401
-    assert token_server.request("POST", "/api/projects", body, token="wrong-token")[0] == 401
+    assert app_client.request("POST", "/api/projects", body, token=None)[0] == 401
+    assert app_client.request("POST", "/api/projects", body, token="wrong-token")[0] == 401
 
-    status, project = token_server.request("POST", "/api/projects", body)
+    status, project = app_client.request("POST", "/api/projects", body, token="pytest-token")
     assert status == 201
-    assert token_server.delete(f"/api/projects/{project['id']}")[0] == 200
+    assert app_client.delete(f"/api/projects/{project['id']}", token="pytest-token")[0] == 200

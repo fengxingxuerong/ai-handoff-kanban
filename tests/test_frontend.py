@@ -21,9 +21,17 @@ DATA_ACTS = set(re.findall(r'data-act="([^"]+)"', HTML))
 
 
 def test_no_inline_handlers():
-    assert not re.search(r'onclick="', HTML), "仍有内联 onclick"
-    assert not re.search(r'onkeydown="', HTML), "仍有内联 onkeydown"
+    """页面里不该有任何内联事件属性（onclick / oninput / onchange ...）"""
+    inline = re.findall(r'\son(?:click|input|change|submit|keyup|keydown|keypress|blur|focus|load|error)=\s*"', HTML)
+    assert not inline, f"仍有内联事件属性：{inline}"
     assert not re.search(r'onclick="[^"]*\$\{', HTML), "仍有插值进内联事件"
+
+
+def test_search_input_is_debounced():
+    """搜索框改为防抖监听（卡片全量重渲染，逐字符触发会卡）"""
+    assert 'id="search"' in HTML
+    assert 'searchInput.addEventListener("input"' in HTML
+    assert "setTimeout(renderOverview" in HTML
 
 
 def test_actions_table_exists():
