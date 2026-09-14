@@ -15,29 +15,9 @@ from llm_stub import StubLLM
 
 
 @pytest.fixture
-def ai(tmp_path, monkeypatch):
-    stub = StubLLM().start()
-    data_dir = tmp_path / "kanban-ai"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    cfg = {
-        "ai": {
-            "endpoints": [stub.endpoint("桩端点")],
-            "active_model": "stub-model",
-            "schedule": {"enabled": False, "frequency": "daily", "time": "09:00", "last_run": ""},
-        }
-    }
-    (data_dir / "config.json").write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
-
-    from fastapi.testclient import TestClient
-
-    from app.main import app
-
-    monkeypatch.setenv("KANBAN_DATA_DIR", str(data_dir))
-    with TestClient(app, base_url="http://127.0.0.1") as c:
-        api = Api(client=c, data_dir=data_dir)
-        api.stub = stub
-        yield api
-    stub.stop()
+def ai(ai_client):
+    """假 LLM 端点上的进程内客户端（夹具定义在 conftest，便于其它测试文件复用）"""
+    return ai_client
 
 
 def first_project(api) -> dict:

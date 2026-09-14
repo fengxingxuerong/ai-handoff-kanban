@@ -18,6 +18,7 @@
 - **数据一键备份**：本地快照备份项目与配置（保留最近 10 份），可在 AI 设置里随时备份查看
 - **定时自动监管**：设置每天/每周自动生成监管报告，存入历史报告随时回看
 - **多端点容灾**：SenseNova（多 Key 轮询）/ AMD / OpenRouter / NVIDIA 任一失败自动切换
+- **多智能体入口文件**：一次生成 AGENTS.md / CLAUDE.md / Cursor / Copilot / Gemini / Cline / Aider / Windsurf 八个入口
 
 ## 使用方式
 
@@ -35,6 +36,25 @@ start_desktop.bat
 ```
 
 （首次需先 `pip install -r requirements.txt`）
+
+### 多智能体入口文件（一次全出）
+
+详情页 →「AGENTS.md」→ 底部「一键写出各工具入口」：填上项目根目录，一次生成八个入口文件，
+**`AGENTS.md` 是唯一事实来源，其余都是它的投影**（`CLAUDE.md` 只写 `@AGENTS.md` 做桥接、不复制正文，
+避免八份内容各写各的慢慢漂移）：
+
+```
+AGENTS.md                            ← 正文（AI 生成；AI 不可用时自动用本地模板）
+CLAUDE.md                            ← @AGENTS.md 桥接（Claude Code 不直接读 AGENTS.md）
+.cursor/rules/project.mdc            ← 带 frontmatter（description / globs / alwaysApply）
+.github/copilot-instructions.md
+GEMINI.md
+.clinerules/project.md
+CONVENTIONS.md                       ← Aider
+.windsurfrules
+```
+
+留空目录只预览不写盘；写入同样受系统目录拦截保护；前端预览过的内容再写盘时不会重复调用模型。
 
 ### 方式三：自行打包
 

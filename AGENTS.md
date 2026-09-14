@@ -74,6 +74,21 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
    `keys.local.json`，初始化脚本从环境变量读（`KANBAN_KEY_<端点名>`）。
 6. **示例数据（`_SAMPLE_DATA`）必须保持脱敏**，不能出现真实项目名与本机路径 —— 它会随 exe 分发。
 
+## 多智能体入口文件（别退化成 N 份副本）
+
+`app/main.py` 的 `AGENT_ENTRY_TARGETS` + `build_agent_entries()` 把一份正文投影成各工具要求的入口：
+
+```
+AGENTS.md                          正文（唯一事实来源）
+CLAUDE.md                          @AGENTS.md 桥接（Claude Code 不直接读 AGENTS.md）
+.cursor/rules/project.mdc          frontmatter + 正文
+.github/copilot-instructions.md
+GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
+```
+
+**硬性约定**：`CLAUDE.md` 永远只写桥接，**不要把正文复制进去** —— 复制就意味着两份内容会漂移。
+新增工具支持时改 `AGENT_ENTRY_TARGETS` 一处即可，`test_agent_files.py` 会校验路径集合。
+
 ## 性能基线（2026-09-14 实测，本机）
 
 数据层是「整份 JSON 读改写」，延迟随项目数线性增长。`scripts/bench.py` 可复现：

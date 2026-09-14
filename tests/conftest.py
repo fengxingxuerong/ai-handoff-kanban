@@ -170,6 +170,33 @@ def app_client(tmp_path, monkeypatch):
         yield Api(client=c, data_dir=data_dir)
 
 
+@pytest.fixture
+def ai_client(tmp_path, monkeypatch):
+    """进程内客户端 + 假 LLM 端点（不消耗真实配额）；api.stub 可用来注入响应"""
+    from fastapi.testclient import TestClient
+    from llm_stub import StubLLM
+
+    from app.main import app
+
+    stub = StubLLM().start()
+    data_dir = tmp_path / "kanban-ai"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "config.json").write_text(json.dumps({
+        "ai": {
+            "endpoints": [stub.endpoint("桩端点")],
+            "active_model": "stub-model",
+            "schedule": {"enabled": False, "frequency": "daily", "time": "09:00", "last_run": ""},
+        }
+    }, ensure_ascii=False), encoding="utf-8")
+
+    monkeypatch.setenv("KANBAN_DATA_DIR", str(data_dir))
+    with TestClient(app, base_url="http://127.0.0.1") as c:
+        api = Api(client=c, data_dir=data_dir)
+        api.stub = stub
+        yield api
+    stub.stop()
+
+
 def _seed_config(data_dir: Path) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
     cfg = {

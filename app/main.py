@@ -749,6 +749,12 @@ def export_agentsmd(pid: str):
     if not found:
         raise HTTPException(404, "项目不存在")
     p = found[1]
+    text, src, ep = _generate_agents_md(p)
+    return {"text": text, "endpoint": ep, "source": src}
+
+
+def _generate_agents_md(p: dict) -> tuple[str, str, str]:
+    """生成 AGENTS.md 正文；返回 (内容, 来源, 端点)；LLM 不可用时退回本地规则版"""
     sys_msg = (
         "你是一位资深软件工程师，负责为项目编写 AGENTS.md —— 这是 Linux Foundation 标准的项目上下文文件，"
         "相当于给 AI 编码代理看的 README。要求：\n"
@@ -768,12 +774,116 @@ def export_agentsmd(pid: str):
     }, ensure_ascii=False, indent=1)
     try:
         cfg = llm.load_config()
-        text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}], temperature=0.2)
+        text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg},
+                                  {"role": "user", "content": user_msg}], temperature=0.2)
         if not text or len(text.strip()) < 30:
             raise ValueError("生成内容过短")
-        return {"text": text.strip(), "endpoint": ep, "source": "ai"}
+        return text.strip(), "ai", ep
     except Exception:
-        return {"text": _build_agents_md_local(p), "endpoint": "", "source": "local"}
+        return _build_agents_md_local(p), "local", ""
+
+
+# ---- 多智能体入口文件（对比同类：Claude/Cursor/Copilot/Gemini/Cline/Aider/Windsurf 各要各的入口） ----
+
+# 各工具的入口文件路径：AGENTS.md 是唯一事实来源，其余都是它的投影
+AGENT_ENTRY_TARGETS: dict[str, str] = {
+    "agents": "AGENTS.md",
+    "claude": "CLAUDE.md",
+    "cursor": ".cursor/rules/project.mdc",
+    "copilot": ".github/copilot-instructions.md",
+    "gemini": "GEMINI.md",
+    "cline": ".clinerules/project.md",
+    "aider": "CONVENTIONS.md",
+    "windsurf": ".windsurfrules",
+}
+
+# Claude Code 不直接读 AGENTS.md，官方给的方式是让 CLAUDE.md 导入它
+CLAUDE_BRIDGE = (
+    "# CLAUDE.md\n"
+    "\n"
+    "<!-- 项目约定统一维护在 AGENTS.md，本文件只做桥接，避免两份内容各写各的、慢慢漂移 -->\n"
+    "\n"
+    "@AGENTS.md\n"
+)
+
+
+def _cursor_rule(content: str, p: dict) -> str:
+    """Cursor Project Rules 需要 YAML frontmatter（描述 / 作用范围 / 是否常驻）"""
+    desc = f"{p.get('name', '项目')} 的工程约定（由 AI 交接看板生成）"
+    return f"---\ndescription: {desc}\nglobs:\nalwaysApply: true\n---\n\n{content}\n"
+
+
+def build_agent_entries(p: dict, content: str, targets: list[str] | None = None) -> dict[str, str]:
+    """把同一份内容投影成各工具要求的入口文件，返回 {相对路径: 内容}
+
+    相对路径来自白名单，不接受调用方传入，因此不存在路径穿越。
+    """
+    picked = targets if targets else list(AGENT_ENTRY_TARGETS)
+    out: dict[str, str] = {}
+    for t in picked:
+        rel = AGENT_ENTRY_TARGETS.get(t)
+        if not rel or rel in out:
+            continue
+        if t == "claude":
+            out[rel] = CLAUDE_BRIDGE
+        elif t == "cursor":
+            out[rel] = _cursor_rule(content, p)
+        else:
+            out[rel] = content if content.endswith("\n") else content + "\n"
+    return out
+
+
+class AgentFilesBody(BaseModel):
+    dir: str = ""                       # 目标仓库根目录；留空表示只预览不写盘
+    targets: list[str] | None = None
+    content: str | None = None          # 前端已预览过的内容，传回来可省一次模型调用
+
+
+@app.post("/api/export/agent-files/{pid}")
+def export_agent_files(pid: str, body: AgentFilesBody):
+    found = find_project(pid)
+    if not found:
+        raise HTTPException(404, "项目不存在")
+    p = found[1]
+
+    if body.content and body.content.strip():
+        content, source, endpoint = body.content.strip(), "passed-in", ""
+    else:
+        content, source, endpoint = _generate_agents_md(p)
+
+    entries = build_agent_entries(p, content, body.targets)
+    result = {
+        "source": source, "endpoint": endpoint,
+        "files": [{"path": rel, "content": text} for rel, text in entries.items()],
+        "written": [], "preview": True,
+    }
+
+    target_dir = (body.dir or "").strip()
+    if not target_dir:
+        return result
+
+    base = Path(target_dir)
+    if _is_forbidden_target(base):
+        raise HTTPException(400, "不允许写入系统目录，请换一个项目目录")
+    written, skipped = [], []
+    for rel, text in entries.items():
+        target = base / rel
+        if _is_forbidden_target(target):
+            skipped.append(rel)
+            continue
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8")
+            written.append(rel)
+        except Exception:
+            skipped.append(rel)
+    result["written"] = written
+    result["skipped"] = skipped
+    result["dir"] = str(base)
+    result["preview"] = False
+    if not written:
+        raise HTTPException(500, "没有任何文件写入成功，请检查目录是否存在且可写")
+    return result
 
 
 # ---- 数据一键备份 ----
