@@ -900,6 +900,10 @@
           <button class="btn" data-act="previewAgentFiles">预览入口</button>
           <button class="btn primary" id="agentsmd-write-btn" data-act="writeAgentFiles">写入项目目录</button>
         </div>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--text-dim)">
+          <input type="checkbox" id="agentsmd-overwrite" style="width:auto">
+          覆盖仓库里已有的入口文件（默认跳过，避免把你手写的 AGENTS.md / CLAUDE.md 冲掉）
+        </label>
         <div style="font-size:11px;color:var(--text-faint);margin-top:6px;line-height:1.7">
           AGENTS.md · CLAUDE.md（桥接 @AGENTS.md，Claude Code 只认这个）· .cursor/rules/project.mdc（带 frontmatter）·
           .github/copilot-instructions.md · GEMINI.md · .clinerules/project.md · CONVENTIONS.md（Aider）· .windsurfrules
@@ -1001,6 +1005,9 @@ async function loadOverview() {
     const [pData, sData] = await Promise.all([api("/api/projects"), api("/api/stats")]);
     projects = pData.projects;
     stats = sData;
+    if (pData.data_recovered) {
+      toast("检测到数据文件损坏：已备份为 projects.json.bak 并重置为空看板");
+    }
     renderDash();
     renderOverview();
   } catch (e) {
@@ -2009,19 +2016,32 @@ const AGENT_ENTRY_HINT = "AGENTS.md / CLAUDE.md / .cursor/rules/project.mdc / .g
 
 function agentFilesBody() {
   const content = document.getElementById("agentsmd-content").value.trim();
-  return { dir: document.getElementById("agentsmd-dir").value.trim(), content: content || null };
+  return {
+    dir: document.getElementById("agentsmd-dir").value.trim(),
+    content: content || null,
+    overwrite: !!(document.getElementById("agentsmd-overwrite") || {}).checked,
+  };
 }
 
 function renderAgentFiles(res) {
   const box = document.getElementById("agentsmd-files");
   const written = res.written || [];
+  const skippedExisting = res.skipped_existing || [];
+  const failed = res.failed || [];
   const srcName = { ai: "AI 生成", local: "本地模板", "passed-in": "沿用当前内容" }[res.source] || res.source;
-  const head = res.preview ? "预览（未写盘）" : "已写入 " + esc(res.dir || "");
+  const head = res.preview ? "预览（未写盘）" : `已写入 ${written.length} 个到 ${esc(res.dir || "")}`;
   const rows = (res.files || []).map(f => {
-    const right = res.preview ? f.content.length + " 字符" : (written.includes(f.path) ? "已写入" : "跳过");
+    let right;
+    if (res.preview) right = f.content.length + " 字符";
+    else if (written.includes(f.path)) right = "已写入";
+    else if (skippedExisting.includes(f.path)) right = "已存在，跳过";
+    else right = "失败";
     return `<div style="display:flex;justify-content:space-between;gap:12px"><span>${esc(f.path)}</span><span>${esc(right)}</span></div>`;
   }).join("");
-  box.innerHTML = `<div style="margin-bottom:4px;color:var(--text-faint)">${head} · 内容来源：${esc(srcName)}</div>${rows}`;
+  let extra = "";
+  if (skippedExisting.length) extra = `<div style="margin-top:4px;color:var(--text-faint)">跳过了 ${skippedExisting.length} 个已有文件（勾选「覆盖」可强制写入）</div>`;
+  else if (failed.length) extra = `<div style="margin-top:4px;color:#e08080">${failed.length} 个写入失败</div>`;
+  box.innerHTML = `<div style="margin-bottom:4px;color:var(--text-faint)">${head} · 内容来源：${esc(srcName)}</div>${rows}${extra}`;
   box.style.display = "block";
 }
 
@@ -2047,7 +2067,9 @@ async function writeAgentFiles(ev) {
       method: "POST", body: JSON.stringify(agentFilesBody()),
     });
     renderAgentFiles(r);
-    toast(`已写入 ${r.written.length} 个文件到 ${r.dir} ✓`);
+    const extra = (r.skipped_existing || []).length
+      ? `，跳过 ${r.skipped_existing.length} 个已有文件（要覆盖请勾选）` : "";
+    toast(`已写入 ${r.written.length} 个文件到 ${r.dir}${extra} ✓`);
   } catch (e) { toast("写入失败：" + e.message); }
   btn.classList.remove("ai-loading-btn");
 }

@@ -96,6 +96,7 @@ CONVENTIONS.md                       ← Aider
 ```
 
 留空目录只预览不写盘；写入同样受系统目录拦截保护；前端预览过的内容再写盘时不会重复调用模型。
+**仓库里已有的同名文件默认跳过不覆盖**（多半是你手写的），要覆盖得勾上「覆盖仓库里已有的入口文件」。
 
 ### 方式三：自行打包
 
@@ -144,6 +145,9 @@ set KANBAN_LIVE=1
 
 rem 读写性能基准（先量再改）
 .venv\Scripts\python.exe scripts\bench.py 1000
+
+rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 30 条用例，逐条打印目标/输入/预期/实际
+.venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 ```
 
 `tests/` 共 116 项，覆盖：

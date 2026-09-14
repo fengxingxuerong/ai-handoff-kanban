@@ -169,7 +169,11 @@ def _sanitize(data: dict) -> dict:
     return data
 
 
+_DATA_RECOVERED = False          # 数据文件损坏并重建过；上报一次后清掉
+
+
 def _load_data() -> dict:
+    global _DATA_RECOVERED
     f = data_file()
     if not f.exists():
         return json.loads(json.dumps(_SAMPLE_DATA))
@@ -182,6 +186,13 @@ def _load_data() -> dict:
             shutil.copy2(f, f.with_suffix(".json.bak"))
         except Exception:
             pass
+        # 必须把损坏文件就地修好：否则每次请求都要重新解析失败一次 ——
+        # 界面每次启动都会重复提示「数据被重置」，.bak 也被反复覆盖。
+        try:
+            _save_data({"projects": []})
+        except Exception:
+            pass
+        _DATA_RECOVERED = True
         return {"projects": []}
 
 
@@ -426,7 +437,10 @@ def list_projects():
             "created_at": p.get("created_at", ""), "updated_at": p.get("updated_at", ""),
             "task_counts": counts, "total_tasks": len(tasks),
         })
-    return {"projects": out}
+    # 数据文件损坏并重建过：必须让用户知道，否则会以为项目凭空消失
+    global _DATA_RECOVERED
+    recovered, _DATA_RECOVERED = _DATA_RECOVERED, False
+    return {"projects": out, "data_recovered": recovered}
 
 
 @app.post("/api/projects", status_code=201)
@@ -442,6 +456,10 @@ def create_project(body: ProjectIn):
     }
 
     def worker(data: dict):
+        # 首次落盘：磁盘上还没有数据文件时，说明看板从未被真正使用过，
+        # 内置示例数据只用于引导界面，不该跟着用户的第一条真实数据一起写进去。
+        if not data_file().exists():
+            data["projects"] = []
         data.setdefault("projects", []).insert(0, project)
         return True, project
 
@@ -881,6 +899,7 @@ class AgentFilesBody(BaseModel):
     dir: str = ""                       # 目标仓库根目录；留空表示只预览不写盘
     targets: list[str] | None = None
     content: str | None = None          # 前端已预览过的内容，传回来可省一次模型调用
+    overwrite: bool = False             # 默认不覆盖仓库里已有的入口文件（可能是用户手写的）
 
 
 @app.post("/api/export/agent-files/{pid}")
@@ -899,7 +918,7 @@ def export_agent_files(pid: str, body: AgentFilesBody):
     result = {
         "source": source, "endpoint": endpoint,
         "files": [{"path": rel, "content": text} for rel, text in entries.items()],
-        "written": [], "preview": True,
+        "written": [], "skipped_existing": [], "failed": [], "preview": True,
     }
 
     target_dir = (body.dir or "").strip()
@@ -909,23 +928,25 @@ def export_agent_files(pid: str, body: AgentFilesBody):
     base = Path(target_dir)
     if _is_forbidden_target(base):
         raise HTTPException(400, "不允许写入系统目录，请换一个项目目录")
-    written, skipped = [], []
     for rel, text in entries.items():
         target = base / rel
         if _is_forbidden_target(target):
-            skipped.append(rel)
+            result["failed"].append(rel)
+            continue
+        if target.exists() and not body.overwrite:
+            # 仓库里已经有这个文件（可能是用户手写的）——默认不覆盖，交由用户决定
+            result["skipped_existing"].append(rel)
             continue
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text, encoding="utf-8")
-            written.append(rel)
+            result["written"].append(rel)
         except Exception:
-            skipped.append(rel)
-    result["written"] = written
-    result["skipped"] = skipped
+            result["failed"].append(rel)
+
     result["dir"] = str(base)
     result["preview"] = False
-    if not written:
+    if not result["written"] and result["failed"]:
         raise HTTPException(500, "没有任何文件写入成功，请检查目录是否存在且可写")
     return result
 

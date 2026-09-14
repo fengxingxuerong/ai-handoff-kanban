@@ -111,6 +111,7 @@ def test_write_creates_all_entry_files(ai, tmp_path):
     status, res = ai.post(f"/api/export/agent-files/{pid}", {"dir": str(repo), "content": CONTENT})
     assert status == 200 and res["preview"] is False
     assert sorted(res["written"]) == sorted(EXPECTED_PATHS)
+    assert res["skipped_existing"] == []
 
     for rel in EXPECTED_PATHS:
         f = repo / rel
@@ -118,6 +119,33 @@ def test_write_creates_all_entry_files(ai, tmp_path):
         assert f.read_text(encoding="utf-8").strip(), f"{rel} 内容为空"
     assert (repo / ".cursor" / "rules" / "project.mdc").exists(), "嵌套目录要自动创建"
     assert "@AGENTS.md" in (repo / "CLAUDE.md").read_text(encoding="utf-8")
+
+
+def test_existing_files_are_not_overwritten_by_default(ai, tmp_path):
+    """仓库里已有同名文件（多半是用户手写的）时默认跳过，绝不静默覆盖"""
+    pid = ai.get("/api/projects")[1]["projects"][0]["id"]
+    repo = tmp_path / "repo-handwritten"
+    repo.mkdir()
+    mine = "# 我手写的 AGENTS.md\n\n重要内容\n"
+    (repo / "AGENTS.md").write_text(mine, encoding="utf-8")
+
+    status, res = ai.post(f"/api/export/agent-files/{pid}", {"dir": str(repo), "content": CONTENT})
+    assert status == 200
+    assert res["skipped_existing"] == ["AGENTS.md"]
+    assert "AGENTS.md" not in res["written"] and len(res["written"]) == 7
+    assert (repo / "AGENTS.md").read_text(encoding="utf-8") == mine, "手写文件被覆盖了"
+
+
+def test_overwrite_flag_replaces_existing(ai, tmp_path):
+    pid = ai.get("/api/projects")[1]["projects"][0]["id"]
+    repo = tmp_path / "repo-force"
+    repo.mkdir()
+    (repo / "AGENTS.md").write_text("# 旧内容\n", encoding="utf-8")
+
+    status, res = ai.post(f"/api/export/agent-files/{pid}",
+                          {"dir": str(repo), "content": CONTENT, "overwrite": True})
+    assert status == 200 and "AGENTS.md" in res["written"]
+    assert "旧内容" not in (repo / "AGENTS.md").read_text(encoding="utf-8")
 
 
 def test_write_falls_back_to_local_when_llm_down(ai, tmp_path):

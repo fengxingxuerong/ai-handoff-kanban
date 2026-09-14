@@ -28,6 +28,40 @@ def test_corrupt_data_file_is_backed_up_and_reset(app_client):
     assert (app_client.data_dir / "projects.json.bak").exists(), "损坏文件应被备份"
 
 
+def test_corrupt_file_is_healed_so_the_notice_is_not_repeated(app_client):
+    """损坏文件必须就地修好：否则每次请求都重复备份 + 重复提示"""
+    app_client.data_dir.mkdir(parents=True, exist_ok=True)
+    target = app_client.data_dir / "projects.json"
+    target.write_text("坏掉了", encoding="utf-8")
+
+    _, first = app_client.get("/api/projects")
+    assert first["data_recovered"] is True
+    assert json.loads(target.read_text(encoding="utf-8")) == {"projects": []}, "文件应已被修好"
+
+    _, second = app_client.get("/api/projects")
+    assert second["data_recovered"] is False, "提示只应上报一次"
+
+
+def test_first_write_retires_sample_data(app_client):
+    """首次落盘时示例数据应让位，不能永久留在真实看板里"""
+    _, before = app_client.get("/api/projects")
+    assert any(p["name"].startswith("示例项目") for p in before["projects"]), "新装应先看到示例"
+
+    app_client.create_project("我自己的项目")
+    _, after = app_client.get("/api/projects")
+    names = [p["name"] for p in after["projects"]]
+    assert names == ["我自己的项目"], f"示例数据应已让位，实际：{names}"
+
+
+def test_editing_a_sample_project_keeps_it(app_client):
+    """用户要是真动了示例项目（比如拿它当模板改），就不能再把它丢掉"""
+    sample_id = app_client.get("/api/projects")[1]["projects"][0]["id"]
+    app_client.put(f"/api/projects/{sample_id}", {"name": "改过的示例", "status": "进行中"})
+    app_client.create_project("新项目")
+    names = [p["name"] for p in app_client.get("/api/projects")[1]["projects"]]
+    assert "改过的示例" in names and "新项目" in names
+
+
 def test_legacy_junk_is_sanitized_on_load(app_client):
     """老数据里的非法状态/优先级/进度不能流到前端（会被拼进 class 与文本）"""
     app_client.data_dir.mkdir(parents=True, exist_ok=True)
