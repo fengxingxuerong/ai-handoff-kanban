@@ -7,10 +7,13 @@ keys.local.json
 # 环境与构建产物
 .venv/
 build/
+build_*/
 dist/
+dist_*/
 __pycache__/
 *.pyc
 *.spec
+.pytest_cache/
 
 # 本地备份目录
 _backup_*/

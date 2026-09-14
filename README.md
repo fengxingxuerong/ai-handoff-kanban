@@ -47,35 +47,44 @@ build.bat
 项目任务看板/
 ├── app/main.py             # FastAPI 后端：项目/任务 CRUD + AI 监管/指令/交接/定时 API
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
-├── web/index.html          # 前端看板（单页，深色主题，含 AI 界面）
+├── web/index.html          # 前端看板（单页，深色主题，含 AI 界面；事件统一走 data-act 委托）
+├── tests/                  # pytest 套件（自动起隔离服务，AI 用例默认跳过）
 ├── scripts/desktop.py      # PyWebview 桌面壳（端口检测 + 后台自启服务）
 ├── scripts/start_desktop.bat  # 源码双击启动
 ├── scripts/init_ai_config.py  # 本机 AI 端点初始化（Key 从环境变量/私有文件读，脚本内不含 Key）
-├── scripts/smoke_test.py   # 基础 API 冒烟测试
-├── scripts/regression_test.py # 回归测试（并发/特殊字符/字段白名单/防护/鉴权）
-├── scripts/ai_smoke_test.py # AI 功能冒烟测试（真实调用 LLM）
+├── scripts/smoke_test.py   # 手工冒烟：基础 API
+├── scripts/regression_test.py # 手工回归：并发/特殊字符/白名单/防护/鉴权
+├── scripts/ai_smoke_test.py # 手工冒烟：AI 功能（真实调用 LLM）
 ├── build.bat               # 一键打包 exe
+├── pytest.ini              # pytest 配置
+├── .github/workflows/test.yml # CI：push/PR 自动跑测试
 ├── .gitignore              # 排除运行期数据、密钥与构建产物
-└── requirements.txt
+└── requirements.txt / requirements-dev.txt
 ```
 
 ## 测试
 
 ```bat
-rem 基础接口（无需 AI 配额）
-.venv\Scripts\python.exe scripts\smoke_test.py http://127.0.0.1:18320
+rem 一次性装测试依赖
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 
-rem 回归测试：并发写入 / 特殊字符名称 / 字段白名单 / Host-Origin 防护 / 保存路径限制
-.venv\Scripts\python.exe scripts\regression_test.py http://127.0.0.1:18320
+rem 全量测试（自动起隔离的临时服务，跑完自动关；AI 用例默认跳过）
+.venv\Scripts\python.exe -m pytest -v
 
-rem AI 功能（会真实消耗模型配额）
-.venv\Scripts\python.exe scripts\ai_smoke_test.py http://127.0.0.1:18320
+rem 只在需要真实模型配额时跑 AI 用例
+set KANBAN_LIVE=1
+.venv\Scripts\python.exe -m pytest tests\test_ai.py -v
 ```
 
-建议用临时数据目录跑测试，避免污染真实看板：
+`tests/` 覆盖：基础 CRUD 与导出、字段白名单、并发写入不丢数据、Host/Origin 防护、
+保存路径限制、Token 鉴权，以及前端契约（页面内联事件必须为零、每个 `data-act` 必须有实现）。
+
+需要对着已跑起来的实例做手工冒烟时，用 `scripts/` 下三个独立脚本：
 
 ```bat
-set KANBAN_DATA_DIR=%TEMP%\kanban_test
+.venv\Scripts\python.exe scripts\smoke_test.py http://127.0.0.1:18320
+.venv\Scripts\python.exe scripts\regression_test.py http://127.0.0.1:18320
+.venv\Scripts\python.exe scripts\ai_smoke_test.py http://127.0.0.1:18320   rem 会真实消耗配额
 ```
 
 ## 数据与配置说明

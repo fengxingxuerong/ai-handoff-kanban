@@ -567,19 +567,19 @@
     </div>
   </div>
   <div class="header-actions">
-    <button class="btn" onclick="openAICmd()">🤖 AI 指令</button>
-    <button class="btn" onclick="openReport()">📊 AI 监管</button>
-    <button class="btn" onclick="openAISettings()">⚙️</button>
-    <button class="btn primary" onclick="openProjectModal()">＋ 新建项目</button>
+    <button class="btn" data-act="openAICmd">🤖 AI 指令</button>
+    <button class="btn" data-act="openReport">📊 AI 监管</button>
+    <button class="btn" data-act="openAISettings">⚙️</button>
+    <button class="btn primary" data-act="openProjectModal">＋ 新建项目</button>
   </div>
 </header>
 
 <div class="filter-bar">
-  <button class="chip active" data-f="全部" onclick="setFilter(this,'全部')">全部</button>
-  <button class="chip" data-f="进行中" onclick="setFilter(this,'进行中')">进行中</button>
-  <button class="chip" data-f="规划中" onclick="setFilter(this,'规划中')">规划中</button>
-  <button class="chip" data-f="已暂停" onclick="setFilter(this,'已暂停')">已暂停</button>
-  <button class="chip" data-f="已完成" onclick="setFilter(this,'已完成')">已完成</button>
+  <button class="chip active" data-f="全部" data-act="setFilter" data-arg="全部">全部</button>
+  <button class="chip" data-f="进行中" data-act="setFilter" data-arg="进行中">进行中</button>
+  <button class="chip" data-f="规划中" data-act="setFilter" data-arg="规划中">规划中</button>
+  <button class="chip" data-f="已暂停" data-act="setFilter" data-arg="已暂停">已暂停</button>
+  <button class="chip" data-f="已完成" data-act="setFilter" data-arg="已完成">已完成</button>
   <div class="spacer"></div>
   <span class="count" id="proj-count"></span>
 </div>
@@ -598,14 +598,14 @@
 <div id="view-detail">
   <div class="detail-scroll">
     <div class="d-head">
-      <button class="btn" onclick="showOverview()">← 返回总览</button>
+      <button class="btn" data-act="showOverview">← 返回总览</button>
       <span class="title" id="d-name"></span>
       <span class="badge" id="d-status"></span>
       <span class="badge pr-" id="d-priority"></span>
       <div class="spacer"></div>
-      <button class="btn" onclick="openTaskModal()">＋ 新建任务</button>
-      <button class="btn" onclick="editProject()">✎ 编辑项目</button>
-      <button class="btn danger" onclick="deleteProject()">🗑 删除</button>
+      <button class="btn" data-act="openTaskModal">＋ 新建任务</button>
+      <button class="btn" data-act="editProject">✎ 编辑项目</button>
+      <button class="btn danger" data-act="deleteProject">🗑 删除</button>
     </div>
 
     <div class="d-layout">
@@ -613,11 +613,11 @@
         <div class="handoff-box">
           <div class="tip">💡 要换 AI 智能体接手？点一下复制交接摘要，直接粘贴给新智能体即可无缝开工</div>
           <div class="btns">
-            <button class="btn primary small" onclick="copyHandoffText()">📋 复制交接摘要</button>
-            <button class="btn small" onclick="copyHandoffMarkdown()">📄 复制 Markdown</button>
-            <button class="btn small" onclick="openHandoffPackage()">📦 完整交接包</button>
-            <button class="btn small" onclick="openAgentsMD()">🤖 生成 AGENTS.md</button>
-            <button class="btn small" onclick="openSummarize()">📥 会话提炼</button>
+            <button class="btn primary small" data-act="copyHandoffText">📋 复制交接摘要</button>
+            <button class="btn small" data-act="copyHandoffMarkdown">📄 复制 Markdown</button>
+            <button class="btn small" data-act="openHandoffPackage">📦 完整交接包</button>
+            <button class="btn small" data-act="openAgentsMD">🤖 生成 AGENTS.md</button>
+            <button class="btn small" data-act="openSummarize">📥 会话提炼</button>
           </div>
         </div>
 
@@ -649,7 +649,7 @@
           <h3 style="justify-content:space-between">🤝 交接说明（给智能体）
             <span style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0">
               <span style="font-size:11px;font-weight:400;color:var(--text-faint)">Markdown 渲染</span>
-              <button class="btn small" onclick="openAIHandoff()">✨ AI 生成</button>
+              <button class="btn small" data-act="openAIHandoff">✨ AI 生成</button>
             </span>
           </h3>
           <div class="body md-body" id="d-handoff"></div>
@@ -691,7 +691,7 @@
 <!-- 项目弹窗 -->
 <div class="modal-mask" id="proj-modal">
   <div class="modal">
-    <div class="mhead"><h2 id="proj-modal-title">新建项目</h2><button class="btn icon" onclick="closeModal('proj-modal')">✕</button></div>
+    <div class="mhead"><h2 id="proj-modal-title">新建项目</h2><button class="btn icon" data-act="closeModal" data-arg="proj-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><label>项目名称 <span class="req">*</span></label><input id="f-name" placeholder="例如：EduSmart 学生管理系统"></div>
       <div class="row3">
@@ -726,8 +726,8 @@
       <div class="field"><label>下一步行动</label><textarea id="f-next" placeholder="最近要推进的一件事是什么？"></textarea></div>
     </div>
     <div class="mfoot">
-      <button class="btn" onclick="closeModal('proj-modal')">取消</button>
-      <button class="btn primary" onclick="saveProject()">保存</button>
+      <button class="btn" data-act="closeModal" data-arg="proj-modal">取消</button>
+      <button class="btn primary" data-act="saveProject">保存</button>
     </div>
   </div>
 </div>
@@ -735,7 +735,7 @@
 <!-- 任务弹窗 -->
 <div class="modal-mask" id="task-modal">
   <div class="modal">
-    <div class="mhead"><h2 id="task-modal-title">新建任务</h2><button class="btn icon" onclick="closeModal('task-modal')">✕</button></div>
+    <div class="mhead"><h2 id="task-modal-title">新建任务</h2><button class="btn icon" data-act="closeModal" data-arg="task-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><label>任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调"></div>
       <div class="field"><label>任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、验收标准……"></textarea></div>
@@ -750,8 +750,8 @@
       </div>
     </div>
     <div class="mfoot">
-      <button class="btn" onclick="closeModal('task-modal')">取消</button>
-      <button class="btn primary" onclick="saveTask()">保存</button>
+      <button class="btn" data-act="closeModal" data-arg="task-modal">取消</button>
+      <button class="btn primary" data-act="saveTask">保存</button>
     </div>
   </div>
 </div>
@@ -759,14 +759,14 @@
 <div id="toast"></div>
 
 <!-- AI 监管报告面板 -->
-<div class="report-mask" id="report-mask" onclick="closeReport()"></div>
+<div class="report-mask" id="report-mask" data-act="closeReport"></div>
 <div class="report-panel" id="report-panel">
   <div class="r-head">
-    <button class="btn" onclick="closeReport()">← 返回</button>
+    <button class="btn" data-act="closeReport">← 返回</button>
     <h2>📊 AI 监管报告</h2>
     <span class="sub" id="report-meta"></span>
     <div class="spacer" style="flex:1"></div>
-    <button class="btn" id="report-refresh-btn" onclick="openReport()">🔄 重新分析</button>
+    <button class="btn" id="report-refresh-btn" data-act="openReport">🔄 重新分析</button>
   </div>
   <div class="r-body" id="report-body">
     <div class="r-loading"><div class="spinner"></div><div>AI 正在分析全部项目，请稍候…</div></div>
@@ -776,7 +776,7 @@
 <!-- AI 设置弹窗 -->
 <div class="modal-mask" id="ai-settings-modal">
   <div class="modal" style="width:min(680px,100%)">
-    <div class="mhead"><h2>⚙️ AI 设置</h2><button class="btn icon" onclick="closeModal('ai-settings-modal')">✕</button></div>
+    <div class="mhead"><h2>⚙️ AI 设置</h2><button class="btn icon" data-act="closeModal" data-arg="ai-settings-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><label>默认模型</label>
         <select id="ai-active-model"></select>
@@ -797,17 +797,17 @@
       </div>
       <div class="field"><label>数据备份（本地快照，保留最近 10 份）</label>
         <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn" id="backup-btn" onclick="backupNow()">💾 立即备份</button>
+          <button class="btn" id="backup-btn" data-act="backupNow">💾 立即备份</button>
           <span style="font-size:11px;color:var(--text-faint)" id="backup-tip"></span>
         </div>
         <div class="backup-list" id="backup-list"></div>
       </div>
     </div>
     <div class="mfoot">
-      <button class="btn" id="ai-test-btn" onclick="testAI()">🔌 测试连接</button>
+      <button class="btn" id="ai-test-btn" data-act="testAI">🔌 测试连接</button>
       <div class="spacer" style="flex:1"></div>
-      <button class="btn" onclick="closeModal('ai-settings-modal')">取消</button>
-      <button class="btn primary" onclick="saveAISettings()">保存</button>
+      <button class="btn" data-act="closeModal" data-arg="ai-settings-modal">取消</button>
+      <button class="btn primary" data-act="saveAISettings">保存</button>
     </div>
   </div>
 </div>
@@ -815,17 +815,17 @@
 <!-- AI 指令弹窗 -->
 <div class="modal-mask" id="ai-cmd-modal">
   <div class="modal" style="width:min(620px,100%)">
-    <div class="mhead"><h2>🤖 AI 指令</h2><button class="btn icon" onclick="closeModal('ai-cmd-modal')">✕</button></div>
+    <div class="mhead"><h2>🤖 AI 指令</h2><button class="btn icon" data-act="closeModal" data-arg="ai-cmd-modal">✕</button></div>
     <div class="mbody">
       <div class="cmd-chat" id="cmd-chat">
         <div class="cmd-msg ai">你好！用大白话告诉我想做什么，例如：<br>·「给 EduSmart 加一个任务：完成部署文档，优先级高」<br>·「把墨匠的进度改成 85%」<br>·「把正在进行的项目标记为已完成」<br>我会解析成具体操作，你确认后执行。</div>
       </div>
       <div class="cmd-input-row">
-        <input id="cmd-input" placeholder="输入指令，如：给进行中的项目加任务…" onkeydown="if(event.key==='Enter')sendCommand()">
-        <button class="btn primary" id="cmd-send-btn" onclick="sendCommand()">发送</button>
+        <input id="cmd-input" placeholder="输入指令，如：给进行中的项目加任务…" data-enter="sendCommand">
+        <button class="btn primary" id="cmd-send-btn" data-act="sendCommand">发送</button>
       </div>
       <div style="display:none" id="cmd-exec-row">
-        <button class="btn primary" style="width:100%" onclick="executeActions()">✅ 确认执行以上操作</button>
+        <button class="btn primary" style="width:100%" data-act="executeActions">✅ 确认执行以上操作</button>
       </div>
     </div>
   </div>
@@ -834,14 +834,14 @@
 <!-- AI 交接生成弹窗 -->
 <div class="modal-mask" id="ai-handoff-modal">
   <div class="modal" style="width:min(680px,100%)">
-    <div class="mhead"><h2>✨ AI 生成交接说明</h2><button class="btn icon" onclick="closeModal('ai-handoff-modal')">✕</button></div>
+    <div class="mhead"><h2>✨ AI 生成交接说明</h2><button class="btn icon" data-act="closeModal" data-arg="ai-handoff-modal">✕</button></div>
     <div class="mbody">
       <div class="row2">
         <div class="field"><label>模式</label>
           <select id="ai-handoff-mode"><option value="generate">全新生成</option><option value="polish">润色现有说明</option></select>
         </div>
         <div class="field" style="justify-content:flex-end">
-          <button class="btn primary" id="ai-handoff-gen-btn" onclick="generateHandoff()">✨ 生成</button>
+          <button class="btn primary" id="ai-handoff-gen-btn" data-act="generateHandoff">✨ 生成</button>
         </div>
       </div>
       <div class="field"><label>生成结果（可直接编辑后应用）</label>
@@ -849,8 +849,8 @@
       </div>
     </div>
     <div class="mfoot">
-      <button class="btn" onclick="closeModal('ai-handoff-modal')">取消</button>
-      <button class="btn primary" onclick="applyHandoff()">✅ 应用到项目</button>
+      <button class="btn" data-act="closeModal" data-arg="ai-handoff-modal">取消</button>
+      <button class="btn primary" data-act="applyHandoff">✅ 应用到项目</button>
     </div>
   </div>
 </div>
@@ -858,7 +858,7 @@
 <!-- 健康趋势图弹窗 -->
 <div class="modal-mask" id="trend-modal">
   <div class="modal" style="width:min(760px,100%)">
-    <div class="mhead"><h2>📈 项目健康分趋势</h2><button class="btn icon" onclick="closeModal('trend-modal')">✕</button></div>
+    <div class="mhead"><h2>📈 项目健康分趋势</h2><button class="btn icon" data-act="closeModal" data-arg="trend-modal">✕</button></div>
     <div class="mbody">
       <div id="trend-body"><div class="r-loading"><div class="spinner"></div><div>加载趋势数据…</div></div></div>
     </div>
@@ -868,17 +868,17 @@
 <!-- 完整交接包弹窗 -->
 <div class="modal-mask" id="package-modal">
   <div class="modal" style="width:min(760px,100%)">
-    <div class="mhead"><h2 id="package-title">📦 完整交接包</h2><button class="btn icon" onclick="closeModal('package-modal')">✕</button></div>
+    <div class="mhead"><h2 id="package-title">📦 完整交接包</h2><button class="btn icon" data-act="closeModal" data-arg="package-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><label>交接包内容（Markdown，可直接编辑后再导出）</label>
         <textarea class="tall" id="package-content" style="min-height:320px;font-family:Consolas,monospace;font-size:12px" readonly></textarea>
       </div>
     </div>
     <div class="mfoot">
-      <button class="btn" onclick="copyPackage()">📋 复制</button>
-      <button class="btn" id="package-save-btn" onclick="savePackage(event)">💾 保存到桌面</button>
+      <button class="btn" data-act="copyPackage">📋 复制</button>
+      <button class="btn" id="package-save-btn" data-act="savePackage">💾 保存到桌面</button>
       <div class="spacer" style="flex:1"></div>
-      <button class="btn primary" onclick="closeModal('package-modal')">完成</button>
+      <button class="btn primary" data-act="closeModal" data-arg="package-modal">完成</button>
     </div>
   </div>
 </div>
@@ -886,7 +886,7 @@
 <!-- AGENTS.md 生成弹窗 -->
 <div class="modal-mask" id="agentsmd-modal">
   <div class="modal" style="width:min(760px,100%)">
-    <div class="mhead"><h2>🤖 生成 AGENTS.md <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">Linux Foundation 标准 · 给 AI 编码代理的项目上下文</span></h2><button class="btn icon" onclick="closeModal('agentsmd-modal')">✕</button></div>
+    <div class="mhead"><h2>🤖 生成 AGENTS.md <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">Linux Foundation 标准 · 给 AI 编码代理的项目上下文</span></h2><button class="btn icon" data-act="closeModal" data-arg="agentsmd-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><label>保存路径（默认写入项目代码仓库根目录）</label>
         <input id="agentsmd-path" placeholder="D:\longmao\edu-smart\AGENTS.md"></div>
@@ -895,11 +895,11 @@
       </div>
     </div>
     <div class="mfoot">
-      <button class="btn primary" id="agentsmd-gen-btn" onclick="generateAgentsMD()">✨ 生成</button>
-      <button class="btn" onclick="copyAgentsMD()">📋 复制</button>
-      <button class="btn" id="agentsmd-save-btn" onclick="saveAgentsMD(event)">💾 保存</button>
+      <button class="btn primary" id="agentsmd-gen-btn" data-act="generateAgentsMD">✨ 生成</button>
+      <button class="btn" data-act="copyAgentsMD">📋 复制</button>
+      <button class="btn" id="agentsmd-save-btn" data-act="saveAgentsMD">💾 保存</button>
       <div class="spacer" style="flex:1"></div>
-      <button class="btn" onclick="closeModal('agentsmd-modal')">完成</button>
+      <button class="btn" data-act="closeModal" data-arg="agentsmd-modal">完成</button>
     </div>
   </div>
 </div>
@@ -907,19 +907,19 @@
 <!-- 会话提炼弹窗 -->
 <div class="modal-mask" id="summarize-modal">
   <div class="modal" style="width:min(720px,100%)">
-    <div class="mhead"><h2>📥 会话提炼 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">把与其他 AI 的对话粘进来，自动提炼成任务与交接更新</span></h2><button class="btn icon" onclick="closeModal('summarize-modal')">✕</button></div>
+    <div class="mhead"><h2>📥 会话提炼 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">把与其他 AI 的对话粘进来，自动提炼成任务与交接更新</span></h2><button class="btn icon" data-act="closeModal" data-arg="summarize-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><label>粘贴对话记录（从某个 AI 工具的聊天里复制过来）</label>
         <textarea class="tall" id="summarize-text" style="min-height:180px" placeholder="例如：从 cline / 豆包 / box-agent 的对话里复制这一段：&#10;&#10;我们决定用 pnpm workspace 管理 monorepo，课消逻辑要加事务保护……&#10;下周一要交付 CRM 接口联调……"></textarea>
       </div>
       <div style="display:flex;justify-content:flex-end">
-        <button class="btn primary" id="summarize-btn" onclick="runSummarize()">✨ AI 提炼</button>
+        <button class="btn primary" id="summarize-btn" data-act="runSummarize">✨ AI 提炼</button>
       </div>
       <div id="summarize-result" style="display:none"></div>
     </div>
     <div class="mfoot">
-      <button class="btn" onclick="closeModal('summarize-modal')">取消</button>
-      <button class="btn primary" id="summarize-apply-btn" style="display:none" onclick="applySummarize()">✅ 应用：创建任务并更新</button>
+      <button class="btn" data-act="closeModal" data-arg="summarize-modal">取消</button>
+      <button class="btn primary" id="summarize-apply-btn" style="display:none" data-act="applySummarize">✅ 应用：创建任务并更新</button>
     </div>
   </div>
 </div>
@@ -1074,6 +1074,77 @@ function bindCardEvents() {
     openDetail(pid);
   });
 }
+
+// ============ 事件委托总表 ============
+// 全部按钮/控件通过 data-act（可选 data-arg）声明行为，由此处统一分发：
+// 页面里不再有内联 onclick，既避免拼串注入，也便于一眼看清所有交互入口。
+const ACTIONS = {
+  // —— 顶部与总览 ——
+  openProjectModal: () => openProjectModal(),
+  openAICmd: () => openAICmd(),
+  openReport: () => openReport(),
+  openAISettings: () => openAISettings(),
+  setFilter: (arg, ev, el) => setFilter(el, arg),
+  showOverview: () => showOverview(),
+  openTrends: () => openTrends(),
+  openAllPackage: () => openAllPackage(),
+  // —— 详情页 ——
+  openTaskModal: () => openTaskModal(),
+  editProject: () => editProject(),
+  deleteProject: () => deleteProject(),
+  copyHandoffText: () => copyHandoffText(),
+  copyHandoffMarkdown: () => copyHandoffMarkdown(),
+  openHandoffPackage: () => openHandoffPackage(),
+  openAgentsMD: () => openAgentsMD(),
+  openSummarize: () => openSummarize(),
+  openAIHandoff: () => openAIHandoff(),
+  applySuggestion: (arg, ev, el) => applySuggestion(el),
+  // —— 弹窗通用 ——
+  closeModal: arg => closeModal(arg),
+  closeReport: () => closeReport(),
+  // —— 表单保存 ——
+  saveProject: () => saveProject(),
+  saveTask: () => saveTask(),
+  saveAISettings: () => saveAISettings(),
+  savePackage: (arg, ev, el) => savePackage({ currentTarget: el }),
+  saveAgentsMD: (arg, ev, el) => saveAgentsMD({ currentTarget: el }),
+  // —— AI 能力 ——
+  testAI: () => testAI(),
+  backupNow: () => backupNow(),
+  sendCommand: () => sendCommand(),
+  executeActions: () => executeActions(),
+  generateHandoff: () => generateHandoff(),
+  applyHandoff: () => applyHandoff(),
+  generateAgentsMD: () => generateAgentsMD(),
+  copyAgentsMD: () => copyAgentsMD(),
+  copyPackage: () => copyPackage(),
+  runSummarize: () => runSummarize(),
+  applySummarize: () => applySummarize(),
+};
+
+function runAction(name, ev, el) {
+  const fn = ACTIONS[name];
+  if (!fn) { console.warn("未注册的操作：" + name); return; }
+  try {
+    fn(el.dataset.arg, ev, el);
+  } catch (err) {
+    console.error("操作执行失败：" + name, err);
+    toast("操作失败：" + (err && err.message ? err.message : err));
+  }
+}
+
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  if (el.closest("#grid .pcard")) return;   // 项目卡片由 bindCardEvents 单独处理（需要 pid）
+  runAction(el.dataset.act, e, el);
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  const el = e.target.closest("[data-enter]");
+  if (el) runAction(el.dataset.enter, e, el);
+});
 
 // ============ 详情 ============
 async function openDetail(pid) {
@@ -1442,7 +1513,7 @@ async function openReport(rid) {
     }
     renderReport(currentReport);
   } catch (e) {
-    document.getElementById("report-body").innerHTML = '<div class="r-loading" style="color:var(--red)">分析失败：' + esc(e.message) + '<br><br><button class="btn" onclick="openReport()">重试</button></div>';
+    document.getElementById("report-body").innerHTML = '<div class="r-loading" style="color:var(--red)">分析失败：' + esc(e.message) + '<br><br><button class="btn" data-act="openReport">重试</button></div>';
   }
 }
 
@@ -1470,7 +1541,7 @@ function renderReport(r) {
       ${(it.risks || []).length ? `<div class="i-sec">⚠ 风险点</div><div class="risk-list">${it.risks.map(x => `<div class="risk-item">${esc(x)}</div>`).join("")}</div>` : ""}
       ${(it.suggestions || []).length ? `<div class="i-sec">💡 建议</div><div class="sug-list">${it.suggestions.map((s, i) => `
         <div class="sug-item"><div class="sug-text">${esc(s.text || "")}</div>
-        <button class="apply-btn" data-pid="${esc(it.id || "")}" data-txt="${esc(s.text || "")}" onclick="applySuggestion(this)">应用</button></div>`).join("")}</div>` : ""}
+        <button class="apply-btn" data-pid="${esc(it.id || "")}" data-txt="${esc(s.text || "")}" data-act="applySuggestion">应用</button></div>`).join("")}</div>` : ""}
     </div>`).join("");
   const global = (r.global_suggestions || []).length ? `
     <div class="r-global">
@@ -1736,8 +1807,8 @@ function renderDash() {
       <div class="chart-card">
         <h4>📶 项目进度对比
           <span style="margin-left:auto;display:flex;gap:8px;text-transform:none;letter-spacing:0">
-            <button class="btn small" onclick="openTrends()">📈 健康趋势</button>
-            <button class="btn small" onclick="openAllPackage()">📦 导出全部交接包</button>
+            <button class="btn small" data-act="openTrends">📈 健康趋势</button>
+            <button class="btn small" data-act="openAllPackage">📦 导出全部交接包</button>
           </span>
         </h4>
         <div class="bars">${bars}</div>

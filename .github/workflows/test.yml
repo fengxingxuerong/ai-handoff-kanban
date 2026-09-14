@@ -1,0 +1,30 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: 运行测试
+        # AI 用例默认跳过（需要真实模型配额）；这里只跑确定性用例
+        run: python -m pytest -v
+
+      - name: 前端契约（内联事件是否清零）
+        run: python -m pytest tests/test_frontend.py -v

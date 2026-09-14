@@ -15,35 +15,37 @@
 | --- | --- |
 | `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程 |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
-| `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖） |
+| `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
+| `tests/` | pytest 套件：接口、并发、安全、前端契约（AI 用例需 `KANBAN_LIVE=1`） |
 | `scripts/desktop.py` | 桌面壳：探测端口 → 后台起 uvicorn → 开 Pywebview 窗口 |
-| `scripts/*_test.py` | smoke_test（基础）/ regression_test（回归）/ ai_smoke_test（真实调 LLM） |
+| `scripts/*_test.py` | 手工冒烟：smoke_test / regression_test / ai_smoke_test |
 | `build.bat` | 建 venv、装依赖、PyInstaller 打包 |
 
 ## 精确命令
 
 ```bat
-rem 源码启动（前端改完直接刷新窗口即可，无需构建）
-.venv\Scripts\start_desktop.bat
+rem 源码启动（改前端只需刷新窗口，无需构建）
+scripts\start_desktop.bat
 
-rem 只起后端（调试用；改前端后刷浏览器）
+rem 只起后端（调试用）
 .venv\Scripts\python.exe -m uvicorn app.main:app --port 18320
 
-rem 测试（务必用临时数据目录，别污染 ~/.ai-kanban）
-set KANBAN_DATA_DIR=%TEMP%\kanban_test
-.venv\Scripts\python.exe scripts\smoke_test.py http://127.0.0.1:18320
-.venv\Scripts\python.exe scripts\regression_test.py http://127.0.0.1:18320
+rem 测试（pytest 会自动起隔离的临时服务并回收；无需手工开服务）
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.venv\Scripts\python.exe -m pytest -v
+set KANBAN_LIVE=1 && .venv\Scripts\python.exe -m pytest tests\test_ai.py -v
 
 rem 打包（改完源码必须重打，否则 dist 里的 exe 是旧版本）
 build.bat
 ```
 
-打包等价命令（`build.bat` 内部就是这条；`--add-data "web;web"` 与两个 `--hidden-import` 缺一不可）：
+打包等价命令（`build.bat` 内部就是这条；`--add-data` 与两个 `--hidden-import` 缺一不可，
+且路径必须用 `%~dp0` 绝对形式 —— `--specpath build` 会让相对路径按 spec 目录解析，导致找不到 `web`）：
 
 ```bat
-.venv\Scripts\python.exe -m PyInstaller -F -w -n "AI交接看板" scripts/desktop.py ^
-  --hidden-import app.main --hidden-import uvicorn --add-data "web;web" --paths . ^
-  --distpath dist --workpath build --specpath build
+.venv\Scripts\python.exe -m PyInstaller -F -w -n "AI交接看板" scripts\desktop.py ^
+  --hidden-import app.main --hidden-import uvicorn --add-data "%~dp0web;web" --paths "%~dp0" ^
+  --distpath dist --workpath build --specpath build --noconfirm
 ```
 
 ## 硬性约定
@@ -53,9 +55,11 @@ build.bat
    历史事故：20 并发创建全部返回 201，实际只落盘 3 条，数据静默丢失。
    定位用 `mutate_project(pid, fn)` / `mutate_task(tid, fn)`。
 2. **`fn(data)` 返回 `(changed, result)`**，`changed=False` 时不落盘，避免无意义写放大。
-3. **前端不要往内联事件里拼数据**。历史事故：`onclick="confirmDeleteProject('id','${esc(name)}')"`
-   里 `&#39;` 会被 HTML 解码回单引号，项目名带撇号时按钮直接报 JS 语法错误。
-   动态列表一律 `data-*` + 事件委托（见 `bindCardEvents`）。
+3. **前端交互一律走 `data-act`，不写内联事件**。页面里 `onclick`/`onkeydown` 必须保持为 0：
+   新增按钮 = 加 `data-act="名字"`（可带 `data-arg="值"`）+ 在 `ACTIONS` 表里注册实现，
+   由 `runAction()` 统一分发（`tests/test_frontend.py` 会强制这条）。
+   历史事故：`onclick="confirmDeleteProject('id','${esc(name)}')"` 里 `&#39;` 会被 HTML 解码回单引号，
+   项目名带撇号时按钮直接报 JS 语法错误。动态列表另用 `data-pid` + 局部委托（见 `bindCardEvents`）。
 4. **状态与优先级只能取固定值**：项目 `规划中/进行中/已暂停/已完成`，任务 `待办/进行中/已完成/阻塞`，
    优先级 `高/中/低`。前后端各有一层白名单：后端 `ProjectIn/TaskIn` 用 `Literal` 返回 422，
    前端用 `STATUS_SET/PRIORITY_SET` 兜底（这两个值会被拼进 class 名与文本）。
@@ -78,17 +82,27 @@ build.bat
 
 ## 当前进度与下一步
 
-状态：可用（进度 90%）。2026-09-14 完成一轮加固：
+状态：可用（进度 95%）。2026-09-14 完成两轮加固：
 
-- 修并发丢更新（单临界区 `mutate()`）+ 回归测试覆盖 20 并发落盘
+第一轮（功能与安全）：
+
+- 修并发丢更新（单临界区 `mutate()`）+ 回归测试覆盖 20/30 并发落盘
 - 状态/优先级白名单（后端 422 + 前端收敛），修掉卡片内联事件拼串
 - 本地服务加 Host/Origin 校验、可选 `KANBAN_TOKEN`、导出路径限制系统目录
 - 密钥移出项目目录，示例数据脱敏，新增 `.gitignore` 与 `scripts/regression_test.py`
 - 调度器支持 weekly 真实语义 + `last_period` 防重
+- 修复 `build.bat` 因 `--specpath` 导致的打包失败
+
+第二轮（工程化）：
+
+- 全部 58 处内联事件收敛为 `data-act` + `ACTIONS` 统一委托（页面内联事件归零）
+- 建立 pytest 套件 `tests/`（41 项：接口 / 并发 / 安全 / 前端契约），`pytest -v` 一键跑
+- 加 CI（`.github/workflows/test.yml`）与 `requirements-dev.txt`
+- `git init` + 首次提交
 
 下一步候选：
 
-1. `git init` 并把首次提交打上（当前项目无版本控制）
-2. 把 `smoke_test` / `regression_test` 包成 pytest，接一次 CI
-3. 前端 62 处静态内联 `onclick` 收敛为事件委托（目前只改了动态部分）
-4. 多项目数据量变大后考虑分片存储或 SQLite（当前整份 JSON 读写）
+1. 把手工冒烟脚本 `scripts/*_test.py` 收敛进 `tests/`（目前两套并存）
+2. 多项目数据量变大后考虑分片存储或 SQLite（当前整份 JSON 读写）
+3. 前端拆文件（当前 2000+ 行单文件；如拆需引入轻量构建或改用 ES module + 本地静态服务）
+4. GUI 层面的自动化冒烟（当前只覆盖到 HTTP 与前端契约，窗口交互靠手测）
