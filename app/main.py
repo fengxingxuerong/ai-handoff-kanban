@@ -917,8 +917,14 @@ class AIConfigIn(BaseModel):
     schedule: dict | None = None
 
 
-def _merge_keys(old_keys: list[str], new_keys: list[str]) -> list[str]:
-    """合并 Key：掩码形式(含 ****)的提交项从旧配置找回真实 Key"""
+def _merge_keys(old_keys: list[str], new_keys: list[str], fallback_pool: list[str] | None = None) -> list[str]:
+    """合并 Key：掩码形式(含 ****)的提交项从旧配置找回真实 Key。
+
+    查找顺序：本端点的旧 Key → fallback_pool（全部端点的旧 Key）。
+    后者用于端点改名/换位置的场景 —— 否则掩码找不到匹配，会被当成真实 Key 写回配置。
+    仍然找不到就丢弃：宁可少一个 Key，也不能把 sk-abc****xyz 这种掩码写进配置。
+    """
+    pool = list(old_keys or []) + list(fallback_pool or [])
     out = []
     for k in new_keys or []:
         k = (k or "").strip()
@@ -926,13 +932,14 @@ def _merge_keys(old_keys: list[str], new_keys: list[str]) -> list[str]:
             continue
         if "****" in k:
             found = None
-            for ok in old_keys or []:
+            for ok in pool:
                 if len(ok) >= 10 and len(k) >= 10 and ok[:6] == k[:6] and ok[-4:] == k[-4:]:
                     found = ok
                     break
-            out.append(found or k)
-        else:
-            out.append(k)
+            if found:
+                out.append(found)
+            continue
+        out.append(k)
     return out
 
 
@@ -945,14 +952,17 @@ def get_ai_config():
 def put_ai_config(body: AIConfigIn):
     def apply(cfg: dict) -> None:
         if body.endpoints is not None:
-            old = {ep.get("name"): ep.get("api_keys", []) for ep in cfg.get("ai", {}).get("endpoints", [])}
+            old_eps = cfg.get("ai", {}).get("endpoints", [])
+            old = {ep.get("name"): ep.get("api_keys", []) for ep in old_eps}
+            # 全局 Key 池：端点改名后掩码仍能找回真实 Key
+            pool = [k for ep in old_eps for k in (ep.get("api_keys") or []) if k]
             new_eps = []
             for ep in body.endpoints:
                 name = (ep.get("name") or "").strip() or "未命名端点"
                 new_eps.append({
                     "name": name,
                     "base_url": (ep.get("base_url") or "").strip().rstrip("/"),
-                    "api_keys": _merge_keys(old.get(name, []), ep.get("api_keys", [])),
+                    "api_keys": _merge_keys(old.get(name, []), ep.get("api_keys", []), pool),
                     "models": [m for m in (ep.get("models") or []) if m.strip()],
                     "enabled": bool(ep.get("enabled", True)),
                 })

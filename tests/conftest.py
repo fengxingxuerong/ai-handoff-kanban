@@ -134,3 +134,28 @@ def fresh_server(tmp_path):
     """每个用例一个干净数据目录的实例，用于会大量写数据的用例"""
     with _server_ctx(tmp_path / "kanban-fresh", {}) as (api, _proc):
         yield api
+
+
+@pytest.fixture
+def seeded_server(tmp_path):
+    """预置 config.json（含假 Key）的实例，用于验证配置读写与掩码往返"""
+    data_dir = tmp_path / "kanban-seed"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    cfg = {
+        "ai": {
+            "endpoints": [
+                {"name": "端点甲", "base_url": "https://a.example.com/v1",
+                 "api_keys": ["sk-aaaaaa1111111111", "sk-bbbbbb2222222222"],
+                 "models": ["model-a", "model-b"], "enabled": True},
+                {"name": "端点乙", "base_url": "https://b.example.com/v1",
+                 "api_keys": ["sk-cccccc3333333333"],
+                 "models": ["model-c"], "enabled": False},
+            ],
+            "active_model": "model-a",
+            "schedule": {"enabled": False, "frequency": "daily", "time": "09:00", "last_run": ""},
+        }
+    }
+    (data_dir / "config.json").write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+    with _server_ctx(data_dir, {}) as (api, _proc):
+        api.data_dir = data_dir
+        yield api
