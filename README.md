@@ -25,6 +25,9 @@
 
 双击 `dist\AI交接看板.exe` 即可，无需安装 Python。首次启动自带示例项目，AI 端点已在本机配置好，开箱即用。
 
+> 如果双击后窗口空白或没反应，看 `%USERPROFILE%\.ai-kanban\startup.log`，里面记录了后端启动全过程；
+> 打包后没有控制台，这个日志是唯一的排查入口。
+
 ### 方式二：源码运行
 
 ```bat
@@ -55,6 +58,7 @@ build.bat
 ├── scripts/smoke_test.py   # 手工冒烟：基础 API
 ├── scripts/regression_test.py # 手工回归：并发/特殊字符/白名单/防护/鉴权
 ├── scripts/ai_smoke_test.py # 手工冒烟：AI 功能（真实调用 LLM）
+├── scripts/frozen_smoke.py # 冻结版自查：启动 dist 里的 exe 真打一遍接口
 ├── build.bat               # 一键打包 exe
 ├── pytest.ini              # pytest 配置
 ├── .github/workflows/test.yml # CI：push/PR 自动跑测试
@@ -86,6 +90,16 @@ set KANBAN_LIVE=1
 .venv\Scripts\python.exe scripts\regression_test.py http://127.0.0.1:18320
 .venv\Scripts\python.exe scripts\ai_smoke_test.py http://127.0.0.1:18320   rem 会真实消耗配额
 ```
+
+**每次打包后跑一次冻结版自查**（会短暂弹出应用窗口，脚本自己关掉它）：
+
+```bat
+.venv\Scripts\python.exe scripts\frozen_smoke.py
+```
+
+它验证的是"exe 真能服务"：后端 HTTP 就绪、首页与内嵌前端完整、项目增删读闭环、
+跨站请求被拒。打包后没有控制台，后端起不来是静默的，这一步能兜住。
+如果失败，脚本会自动打印应用的启动日志（`%USERPROFILE%\.ai-kanban\startup.log`）。
 
 ## 数据与配置说明
 

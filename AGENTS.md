@@ -17,8 +17,9 @@
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
 | `tests/` | pytest 套件：接口、并发、安全、前端契约（AI 用例需 `KANBAN_LIVE=1`） |
-| `scripts/desktop.py` | 桌面壳：探测端口 → 后台起 uvicorn → 开 Pywebview 窗口 |
+| `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log` |
 | `scripts/*_test.py` | 手工冒烟：smoke_test / regression_test / ai_smoke_test |
+| `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
 | `build.bat` | 建 venv、装依赖、PyInstaller 打包 |
 
 ## 精确命令
@@ -37,6 +38,9 @@ set KANBAN_LIVE=1 && .venv\Scripts\python.exe -m pytest tests\test_ai.py -v
 
 rem 打包（改完源码必须重打，否则 dist 里的 exe 是旧版本）
 build.bat
+
+rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自己关掉）
+.venv\Scripts\python.exe scripts\frozen_smoke.py
 ```
 
 打包等价命令（`build.bat` 内部就是这条；`--add-data` 与两个 `--hidden-import` 缺一不可，
@@ -69,7 +73,17 @@ build.bat
 
 ## 容易踩的坑
 
-- **改完源码忘了重打包**：`dist\AI交接看板.exe` 不会自动更新。判据是 exe 时间戳晚于 `app/` 与 `web/`。
+- **`-w` 打包后 `sys.stdout` / `sys.stderr` 是 `None`**（最坑的一个，2026-09-14 才挖出来）：
+  uvicorn 的 `configure_logging()` 会调 `sys.stdout.isatty()` → `AttributeError`
+  → `ValueError: Unable to configure formatter 'default'` → 后端线程直接死，
+  现象是"双击 exe 没反应/窗口空白"，而且**没有任何报错**（-w 模式没有控制台）。
+  `desktop.py` 里已有 `ensure_standard_streams()` 兜底 + `log_config=None` 降级重试，
+  改桌面壳时不要删。排查同类问题先进 `<数据目录>\startup.log`。
+- **Windows 路径探测别用 PowerShell 的 `Invoke-RestMethod`**：本机有代理时对 127.0.0.1
+  也可能超时，会误判成"服务挂了"。用 `scripts/frozen_smoke.py`（urllib + `ProxyHandler({})`）。
+- **`--specpath build` + 相对 `--add-data`**：会按 spec 目录解析，报
+  `Unable to find ...\build\web`。必须用 `%~dp0` 绝对路径。
+- **改完源码忘了重打包**：`dist\AI交接看板.exe` 不会自动更新。判据是 exe 时间戳晚于 `app/`、`web/`、`scripts/desktop.py`。
 - **数据目录**：默认 `%USERPROFILE%\.ai-kanban`（Windows 下优先 `USERPROFILE` 而不是 `HOME`，
   否则受 Git Bash 的 HOME 干扰）。测试请用 `KANBAN_DATA_DIR` 隔离。
 - **端口占用不等于自己活着**：`desktop.py` 只看端口通不通，18320 被别的程序占了会在窗口里
@@ -100,9 +114,16 @@ build.bat
 - 加 CI（`.github/workflows/test.yml`）与 `requirements-dev.txt`
 - `git init` + 首次提交
 
+第三轮（打包可用性，2026-09-14 晚）：
+
+- **修掉冻结版 exe 无法启动**：`-w` 下标准流为 None 导致 uvicorn 日志初始化崩溃，
+  后端从未起来过（旧 exe 也一样）。修法见「容易踩的坑」第一条
+- 桌面壳加启动日志 `startup.log` + 真实 HTTP 探活（不再只判断端口通不通）
+- 新增 `scripts/frozen_smoke.py`：每次打包后一条命令验证 exe 真能服务
+
 下一步候选：
 
 1. 把手工冒烟脚本 `scripts/*_test.py` 收敛进 `tests/`（目前两套并存）
-2. 多项目数据量变大后考虑分片存储或 SQLite（当前整份 JSON 读写）
-3. 前端拆文件（当前 2000+ 行单文件；如拆需引入轻量构建或改用 ES module + 本地静态服务）
-4. GUI 层面的自动化冒烟（当前只覆盖到 HTTP 与前端契约，窗口交互靠手测）
+2. 把 `frozen_smoke.py` 接进 CI（打包 job 后跑一次）
+3. 多项目数据量变大后考虑分片存储或 SQLite（当前整份 JSON 读写）
+4. 前端拆文件（当前 2000+ 行单文件；如拆需引入轻量构建或改用 ES module + 本地静态服务）
