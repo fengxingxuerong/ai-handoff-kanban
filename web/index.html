@@ -24,6 +24,28 @@
     --gray: #94a3b8;
     --radius: 14px;
     --shadow: 0 10px 30px rgba(0,0,0,.35);
+    --accent-soft: rgba(76,194,255,.08);
+    --accent2-soft: rgba(139,124,246,.08);
+  }
+  :root[data-theme="light"] {
+    --bg: #f2f5fb;
+    --bg-soft: #e9edf6;
+    --card: #ffffff;
+    --card-hover: #f1f4fb;
+    --border: #dde4f0;
+    --text: #1b2333;
+    --text-dim: #51617f;
+    --text-faint: #8a97b5;
+    --accent: #1f9de0;
+    --accent2: #7263e8;
+    --green: #0fa968;
+    --orange: #d97706;
+    --red: #dc2626;
+    --blue: #2563eb;
+    --gray: #64748b;
+    --shadow: 0 10px 30px rgba(30,40,80,.12);
+    --accent-soft: rgba(31,157,224,.10);
+    --accent2-soft: rgba(114,99,232,.10);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
@@ -577,6 +599,8 @@
   <div class="header-actions">
     <button class="btn" data-act="openAICmd">🤖 AI 指令</button>
     <button class="btn" data-act="openReport">📊 AI 监管</button>
+    <button class="btn" data-act="openGlobalSearch" title="全局任务搜索（Ctrl+K）">🔎</button>
+    <button class="btn" data-act="toggleTheme" title="切换深浅色主题" id="theme-btn">🌙</button>
     <button class="btn" data-act="openAISettings">⚙️</button>
     <button class="btn primary" data-act="openProjectModal">＋ 新建项目</button>
   </div>
@@ -910,6 +934,17 @@
   </div>
 </div>
 
+<!-- 全局任务搜索弹窗 -->
+<div class="modal-mask" id="global-search-modal">
+  <div class="modal" style="width:min(640px,100%)">
+    <div class="mhead"><h2>🔎 全局任务搜索 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">Ctrl+K 快速唤起</span></h2><button class="btn icon" data-act="closeModal" data-arg="global-search-modal">✕</button></div>
+    <div class="mbody">
+      <div class="field"><input id="gs-input" placeholder="搜任务标题 / 描述 / 负责人 / 代码位置…" autocomplete="off"></div>
+      <div id="gs-results" style="display:flex;flex-direction:column;gap:6px;max-height:380px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
 <!-- AGENTS.md 生成弹窗 -->
 <div class="modal-mask" id="agentsmd-modal">
   <div class="modal" style="width:min(760px,100%)">
@@ -1163,6 +1198,8 @@ const ACTIONS = {
   backupNow: () => backupNow(),
   exportData: () => exportData(),
   importData: () => importData(),
+  openGlobalSearch: () => openGlobalSearch(),
+  toggleTheme: () => toggleTheme(),
   showRecoverable: () => showRecoverable(),
   restoreData: (arg) => restoreData(arg),
   sendCommand: () => sendCommand(),
@@ -1880,8 +1917,8 @@ function donutSVG(dist, colors, size = 112, r = 40) {
     offset += dash;
   });
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${segs}
-    <text x="50%" y="47%" text-anchor="middle" fill="#e6ecf7" font-size="21" font-weight="800">${total}</text>
-    <text x="50%" y="62%" text-anchor="middle" fill="#5f6f8f" font-size="9">项目</text></svg>`;
+    <text x="50%" y="47%" text-anchor="middle" fill="var(--text)" font-size="21" font-weight="800">${total}</text>
+    <text x="50%" y="62%" text-anchor="middle" fill="var(--text-faint)" font-size="9">项目</text></svg>`;
 }
 
 // ============ 截止日期与拖拽 ============
@@ -2054,14 +2091,14 @@ function renderTrends(series) {
   for (let g = 0; g <= 4; g++) {
     const gy = padT + ih * (g / 4);
     const val = Math.round(100 - 100 * (g / 4));
-    svg += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="#2a3650" stroke-width="1" stroke-dasharray="4 4"/>`;
-    svg += `<text x="${padL - 8}" y="${gy + 4}" text-anchor="end" fill="#5f6f8f" font-size="10">${val}</text>`;
+    svg += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 4"/>`;
+    svg += `<text x="${padL - 8}" y="${gy + 4}" text-anchor="end" fill="var(--text-faint)" font-size="10">${val}</text>`;
   }
   const step = times.length > 6 ? Math.ceil(times.length / 6) : 1;
   times.forEach((t, i) => {
     if (i % step !== 0 && i !== times.length - 1) return;
     const label = String(t || "").slice(5, 16);
-    svg += `<text x="${x(i)}" y="${H - 12}" text-anchor="middle" fill="#5f6f8f" font-size="9">${esc(label)}</text>`;
+    svg += `<text x="${x(i)}" y="${H - 12}" text-anchor="middle" fill="var(--text-faint)" font-size="9">${esc(label)}</text>`;
   });
   series.forEach((s, si) => {
     const col = TREND_COLORS[si % TREND_COLORS.length];
@@ -2396,6 +2433,78 @@ async function restoreData(source) {
     showRecoverable();
   } catch (e) { toast("恢复失败：" + e.message); }
 }
+
+// ============ 全局任务搜索 ============
+let gsTimer = null;
+
+async function openGlobalSearch() {
+  document.getElementById("gs-input").value = "";
+  document.getElementById("gs-results").innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:8px">输入关键词搜索所有项目的任务…</div>';
+  openModal("global-search-modal");
+  setTimeout(() => document.getElementById("gs-input").focus(), 50);
+}
+
+async function runGlobalSearch(q) {
+  const box = document.getElementById("gs-results");
+  if (!q) { box.innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:8px">输入关键词搜索所有项目的任务…</div>'; return; }
+  try {
+    const r = await api("/api/search/tasks?q=" + encodeURIComponent(q));
+    const list = r.results || [];
+    if (!list.length) { box.innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:8px">没有匹配的任务</div>'; return; }
+    box.innerHTML = list.map(t => `
+      <div class="gs-item" data-pid="${esc(t.project_id)}" style="cursor:pointer;background:var(--bg-soft);border:1px solid var(--border);border-radius:9px;padding:9px 12px;display:flex;align-items:center;gap:8px">
+        <span class="badge st-${esc(t.status)}">${esc(t.status)}</span>
+        <span style="flex:1">${esc(t.title)}</span>
+        <span class="tag2 pri-${esc(t.priority)}">${esc(t.priority)}</span>
+        ${t.due_date ? `<span class="due-badge due-ok">📅 ${esc(t.due_date.slice(5))}</span>` : ""}
+        <span style="font-size:11px;color:var(--text-faint);flex-shrink:0">${esc(t.project_name)}</span>
+      </div>`).join("");
+    box.querySelectorAll(".gs-item").forEach(el => {
+      el.addEventListener("click", () => {
+        closeModal("global-search-modal");
+        openDetail(el.dataset.pid);
+      });
+    });
+  } catch (e) {
+    box.innerHTML = '<div style="color:var(--red);font-size:12px">搜索失败：' + esc(e.message) + "</div>";
+  }
+}
+
+(function bindGlobalSearch() {
+  const input = document.getElementById("gs-input");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    clearTimeout(gsTimer);
+    gsTimer = setTimeout(() => runGlobalSearch(input.value.trim()), 250);
+  });
+  document.addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      openGlobalSearch();
+    }
+  });
+})();
+
+// ============ 深浅色主题 ============
+function applyTheme(t) {
+  const root = document.documentElement;
+  if (t === "light") root.setAttribute("data-theme", "light");
+  else root.removeAttribute("data-theme");
+  const btn = document.getElementById("theme-btn");
+  if (btn) btn.textContent = t === "light" ? "☀️" : "🌙";
+  try { localStorage.setItem("kanban-theme", t); } catch (e) {}
+}
+
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  applyTheme(cur === "light" ? "dark" : "light");
+}
+
+(function initTheme() {
+  let t = "dark";
+  try { t = localStorage.getItem("kanban-theme") || "dark"; } catch (e) {}
+  applyTheme(t);
+})();
 
 // ============ 启动 ============
 async function loadVersion() {

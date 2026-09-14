@@ -599,6 +599,39 @@ def health():
 
 # ---- 项目 CRUD ----
 
+@app.get("/api/search/tasks")
+def search_tasks(q: str = "", limit: int = 30):
+    """全局任务搜索：跨项目按标题/描述/负责人匹配"""
+    q = (q or "").strip()
+    if not q:
+        return {"results": []}
+    limit = max(1, min(50, int(limit)))
+    data = get_projects_data()
+    ql = q.lower()
+    out = []
+    for p in data.get("projects", []):
+        for t in (p.get("tasks") or []):
+            if not isinstance(t, dict):
+                continue
+            hay = " ".join([
+                t.get("title", ""), t.get("desc", ""), t.get("agent", ""),
+                t.get("refs", "") if isinstance(t.get("refs"), str) else " ".join(t.get("refs", []) or []),
+            ]).lower()
+            if ql in hay:
+                out.append({
+                    "task_id": t.get("id"),
+                    "title": t.get("title", ""),
+                    "status": t.get("status", ""),
+                    "priority": t.get("priority", ""),
+                    "due_date": t.get("due_date", ""),
+                    "agent": t.get("agent", ""),
+                    "project_id": p.get("id"),
+                    "project_name": p.get("name", ""),
+                })
+                if len(out) >= limit:
+                    return {"results": out}
+    return {"results": out}
+
 @app.get("/api/projects")
 def list_projects():
     """总览：不含任务明细，带任务统计"""

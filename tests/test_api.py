@@ -148,3 +148,25 @@ def test_data_import_rejects_garbage(server):
     assert server.post("/api/data/import", {"content": "不是json"})[0] == 400
     assert server.post("/api/data/import", {"content": "[1,2,3]"})[0] == 400
     assert server.post("/api/data/import", {"content": '{"projects": "不是列表"}'})[0] == 400
+
+
+# ---------------- 全局任务搜索 ----------------
+
+def test_global_task_search(server):
+    status, proj = server.create_project("搜索项目")
+    pid = proj["id"]
+    server.post(f"/api/projects/{pid}/tasks", {"title": "登录模块联调", "desc": "修复 token 过期问题"})
+    server.post(f"/api/projects/{pid}/tasks", {"title": "报表导出", "agent": "cline"})
+    # 按负责人搜
+    status, r = server.get("/api/search/tasks?q=cline")
+    assert status == 200 and len(r["results"]) == 1
+    assert r["results"][0]["title"] == "报表导出"
+    assert r["results"][0]["project_name"] == "搜索项目"
+    # 中文描述（percent-encoded：联调）
+    status, r2 = server.get("/api/search/tasks?q=%E8%81%94%E8%B0%83")
+    assert status == 200 and len(r2["results"]) == 1 and r2["results"][0]["title"] == "登录模块联调"
+    # 无匹配 / 空查询
+    status, r3 = server.get("/api/search/tasks?q=zzzzz_not_exist")
+    assert status == 200 and r3["results"] == []
+    status, r4 = server.get("/api/search/tasks")
+    assert status == 200 and r4["results"] == []

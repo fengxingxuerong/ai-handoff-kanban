@@ -96,3 +96,21 @@ def test_data_import_export_ui():
     assert "exportData" in ACTIONS_KEYS
     assert "importData" in ACTIONS_KEYS
     assert 'id="import-file"' in HTML, "缺导入文件选择器"
+
+
+def test_global_search_ui():
+    """全局任务搜索：顶栏入口 + 弹窗 + 防抖 + Ctrl+K"""
+    assert 'data-act="openGlobalSearch"' in HTML
+    assert "openGlobalSearch" in ACTIONS_KEYS
+    assert 'id="gs-input"' in HTML
+    assert "runGlobalSearch" in HTML
+    assert 'addEventListener("input"' in HTML
+    assert "ctrlKey" in HTML, "应有 Ctrl+K 唤起"
+
+
+def test_theme_toggle_ui():
+    """深浅色主题：按钮 + light 变量集 + localStorage 记忆"""
+    assert 'data-act="toggleTheme"' in HTML
+    assert "toggleTheme" in ACTIONS_KEYS
+    assert 'data-theme="light"' in HTML, "应定义 light 主题变量"
+    assert "kanban-theme" in HTML, "主题偏好应存 localStorage"

@@ -36,6 +36,7 @@ rem 导致找不到 web 目录（报 "Unable to find ...\build\web"）。所以�
   --hidden-import uvicorn ^
   --add-data "%~dp0web;web" ^
   --paths "%~dp0" ^
+  --icon "%~dp0app.ico" ^
   --distpath "%~dp0dist" ^
   --workpath "%~dp0build" ^
   --specpath "%~dp0build" ^
