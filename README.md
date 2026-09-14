@@ -29,6 +29,47 @@
 > 如果双击后窗口空白或没反应，看 `%USERPROFILE%\.ai-kanban\startup.log`，里面记录了后端启动全过程；
 > 打包后没有控制台，这个日志是唯一的排查入口。
 
+### 让 AI 代理直接读写看板（MCP）
+
+`scripts/mcp_server.py` 是一个零依赖的 MCP 服务（stdio 传输、JSON-RPC 2.0），
+Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读交接包、加任务、改进度，
+不用再靠人把交接包粘来粘去。
+
+注册方式：在各工具的 `mcpServers` 配置里加上这一段（路径换成你的实际位置）：
+
+```json
+{
+  "mcpServers": {
+    "ai-kanban": {
+      "command": "D:\\lo\\项目任务看板\\.venv\\Scripts\\python.exe",
+      "args": ["D:\\lo\\项目任务看板\\scripts\\mcp_server.py"]
+    }
+  }
+}
+```
+
+提供的工具（11 个）：
+
+| 工具 | 用途 |
+| --- | --- |
+| `kanban_list_projects` | 所有项目概览（状态/进度/优先级/任务统计/交接就绪度/下一步） |
+| `kanban_get_project` | 单个项目的完整上下文（背景、交接说明、下一步、全部任务） |
+| `kanban_find_project` | 按名称模糊找项目 id |
+| `kanban_create_project` / `kanban_update_project` | 建项目 / 改进度·下一步·交接说明 |
+| `kanban_add_task` / `kanban_update_task` / `kanban_delete_task` | 任务增改删 |
+| `kanban_stats` | 全局统计与就绪度偏低的项目 |
+| `kanban_handoff` | 导出完整交接包（Markdown） |
+| `kanban_agents_md` | 生成 AGENTS.md 正文 |
+
+手动自测（不需要任何客户端）：
+
+```bat
+echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe scripts\mcp_server.py
+```
+
+服务与桌面应用共用同一份数据文件，并带**跨进程文件锁**，两边同时写不会互相覆盖。
+工具的字段白名单与应用一致（状态/优先级只能取固定值），非法值会被拒绝而不是写进看板。
+
 ### 方式二：源码运行
 
 ```bat
@@ -79,6 +120,7 @@ build.bat
 ├── scripts/regression_test.py # 手工回归：并发/特殊字符/白名单/防护/鉴权
 ├── scripts/ai_smoke_test.py # 手工冒烟：AI 功能（真实调用 LLM）
 ├── scripts/frozen_smoke.py # 冻结版自查：启动 dist 里的 exe 真打一遍接口
+├── scripts/mcp_server.py   # MCP 服务（stdio）：让 AI 代理直接读写看板
 ├── scripts/bench.py        # 读写性能基准（先量再改）
 ├── build.bat               # 一键打包 exe
 ├── pytest.ini              # pytest 配置

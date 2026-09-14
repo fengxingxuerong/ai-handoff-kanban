@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -196,6 +197,49 @@ def now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
+# ---------------- 跨进程写锁 ----------------
+# 线程锁只挡得住同一进程内的并发。桌面应用与 MCP 服务（scripts/mcp_server.py）
+# 会同时写同一份 projects.json，必须再加一层跨进程文件锁，否则又是丢更新。
+
+@contextmanager
+def _cross_process_lock(timeout: float = 15.0):
+    path = data_dir() / "projects.lock"
+    fh = open(path, "a+b")
+    try:
+        deadline = time.time() + timeout
+        while True:
+            try:
+                fh.seek(0)
+                if os.name == "nt":
+                    import msvcrt
+
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.time() >= deadline:
+                    raise TimeoutError(f"等待数据文件锁超时（{timeout}s）：{path}")
+                time.sleep(0.05)
+        yield
+    finally:
+        try:
+            fh.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            pass
+        fh.close()
+
+
 def get_projects_data() -> dict:
     """只读快照（统计/列表/导出用）"""
     with _LOCK:
@@ -204,7 +248,7 @@ def get_projects_data() -> dict:
 
 def write_projects_data(data: dict) -> None:
     """整份覆盖写入。仅用于已自行持锁的内部流程，业务接口请改用 mutate()"""
-    with _LOCK:
+    with _LOCK, _cross_process_lock():
         _save_data(data)
 
 
@@ -216,7 +260,7 @@ def mutate(fn) -> tuple[bool, object]:
     所有写接口必须走这里 —— 拆成 get_projects_data() + write_projects_data()
     两次取锁会让并发请求互相覆盖，实测 20 并发只落盘 3 条。
     """
-    with _LOCK:
+    with _LOCK, _cross_process_lock():
         data = _load_data()
         changed, result = fn(data)
         if changed:
@@ -1317,9 +1361,12 @@ _SCHEDULER_STARTED = False
 
 
 def start_scheduler() -> None:
-    """幂等启动调度线程（import 即拉起一次）"""
+    """幂等启动调度线程（import 即拉起一次）
+
+    KANBAN_NO_SCHEDULER=1 时不启动 —— MCP 服务这类短命进程不该起后台线程。
+    """
     global _SCHEDULER_STARTED
-    if _SCHEDULER_STARTED:
+    if _SCHEDULER_STARTED or os.environ.get("KANBAN_NO_SCHEDULER") == "1":
         return
     _SCHEDULER_STARTED = True
     threading.Thread(target=_scheduler_loop, daemon=True, name="kanban-scheduler").start()

@@ -20,6 +20,7 @@
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log` |
 | `scripts/*_test.py` | 手工冒烟：smoke_test / regression_test / ai_smoke_test |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
+| `scripts/mcp_server.py` | MCP 服务（stdio）：代理可列项目/读交接包/加任务/改进度 |
 | `build.bat` | 建 venv、装依赖、PyInstaller 打包 |
 
 ## 精确命令
@@ -73,6 +74,27 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 5. **密钥绝不进项目目录**。Key 只存在于 `%USERPROFILE%\.ai-kanban\config.json` 或
    `keys.local.json`，初始化脚本从环境变量读（`KANBAN_KEY_<端点名>`）。
 6. **示例数据（`_SAMPLE_DATA`）必须保持脱敏**，不能出现真实项目名与本机路径 —— 它会随 exe 分发。
+
+## MCP 服务（让代理直接读写看板）
+
+`scripts/mcp_server.py`：stdio 传输、手写 JSON-RPC 2.0、零第三方依赖。
+
+- **实现方式**：直接 import `app.main` 复用业务函数（含字段白名单与 `mutate()` 单临界区），
+  **不要再写一套读写逻辑**，否则两套校验会漂移。新增工具 = 加 `TOOLS` 条目 + `HANDLERS` 注册，
+  `test_mcp_server.py` 会校验 schema 完整性。
+- **协议兼容**：2026-07-28 起 MCP 改为无状态（无 initialize 握手、结果带 `resultType`），
+  旧版（2025-xx）仍走握手。本服务两者都支持，`server/discover` 也实现了。
+- **stdout 只能有 JSON-RPC**：日志一律 `print(..., file=sys.stderr)`。往 stdout 写一个字都会污染协议。
+- **跨进程写安全**：`mutate()` 里除线程锁外还有 `_cross_process_lock()`（Windows 用 `msvcrt.locking`，
+  其他平台 `fcntl.flock`）。桌面应用与 MCP 服务是两个进程、同一份 JSON，**少了这把锁就是丢更新**。
+- 短命进程不要后台线程：MCP 服务启动前设 `KANBAN_NO_SCHEDULER=1`。
+
+自测（不需要客户端）：
+
+```bat
+echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe scripts\mcp_server.py
+.venv\Scripts\python.exe -m pytest tests\test_mcp_server.py -q --no-cov
+```
 
 ## 多智能体入口文件（别退化成 N 份副本）
 
