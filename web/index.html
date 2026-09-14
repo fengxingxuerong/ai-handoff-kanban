@@ -798,9 +798,11 @@
       <div class="field"><label>数据备份（本地快照，保留最近 10 份）</label>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn" id="backup-btn" data-act="backupNow">💾 立即备份</button>
+          <button class="btn" data-act="showRecoverable">↩ 数据恢复</button>
           <span style="font-size:11px;color:var(--text-faint)" id="backup-tip"></span>
         </div>
         <div class="backup-list" id="backup-list"></div>
+        <div id="recover-list" style="display:none;margin-top:10px;font-size:12px;line-height:1.9"></div>
       </div>
     </div>
     <div class="mfoot">
@@ -1006,7 +1008,9 @@ async function loadOverview() {
     projects = pData.projects;
     stats = sData;
     if (pData.data_recovered) {
-      toast("检测到数据文件损坏：已备份为 projects.json.bak 并重置为空看板");
+      toast(pData.recovered_from === "last-good"
+        ? "数据文件损坏：已自动从最近一次正常保存的数据恢复（损坏文件留档为 .bak）"
+        : "检测到数据文件损坏：已备份为 .bak 并重置为空看板");
     }
     renderDash();
     renderOverview();
@@ -1131,6 +1135,8 @@ const ACTIONS = {
   // —— AI 能力 ——
   testAI: () => testAI(),
   backupNow: () => backupNow(),
+  showRecoverable: () => showRecoverable(),
+  restoreData: (arg) => restoreData(arg),
   sendCommand: () => sendCommand(),
   executeActions: () => executeActions(),
   generateHandoff: () => generateHandoff(),
@@ -2165,8 +2171,7 @@ async function applySummarize() {
   btn.classList.remove("ai-loading-btn");
 }
 
-// ============ 数据备份 ============
-async function backupNow() {
+// ============ 数据备份 ============async function backupNow() {
   const btn = document.getElementById("backup-btn");
   btn.classList.add("ai-loading-btn");
   try {
@@ -2187,6 +2192,52 @@ async function loadBackups() {
       ? r.backups.map(b => `<div class="bk"><span>📦 ${esc(b.time)}</span><span>${b.files.join("、")}</span></div>`).join("")
       : '<div style="padding:6px 2px">暂无备份</div>';
   } catch (e) { list.innerHTML = '<div style="padding:6px 2px">加载失败</div>'; }
+}
+
+// ============ 数据恢复 ============
+async function showRecoverable() {
+  const box = document.getElementById("recover-list");
+  if (!box) return;
+  box.style.display = "block";
+  box.innerHTML = "加载中…";
+  try {
+    const r = await api("/api/recoverable");
+    const cur = r.current || {};
+    const items = r.recoverable || [];
+    const head = `<div style="color:var(--text-faint)">当前：${cur.project_count || 0} 个项目、`
+      + `${cur.task_count || 0} 个任务</div>`;
+    if (!items.length) {
+      box.innerHTML = head + '<div style="margin-top:4px">没有可恢复的来源（还没有 .bak 或手动快照）</div>';
+      return;
+    }
+    const rows = items.map(it => {
+      const usable = it.usable;
+      const desc = usable
+        ? `${it.project_count} 个项目 / ${it.task_count} 个任务 · ${esc(it.mtime || "")} · ${(it.names || []).map(esc).join("、")}`
+        : `<span style="color:#e08080">${esc(it.reason || "不可用")}</span>`;
+      const btn = usable
+        ? `<button class="btn" data-act="restoreData" data-arg="${esc(it.source)}">恢复</button>`
+        : "";
+      return `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--line)">`
+        + `<div><div>${esc(it.label)}</div><div style="color:var(--text-faint);font-size:11px">${desc}</div></div>`
+        + `<div>${btn}</div></div>`;
+    }).join("");
+    box.innerHTML = head + rows
+      + '<div style="margin-top:6px;color:var(--text-faint);font-size:11px">恢复会覆盖当前数据；覆盖前会自动把当前数据另存为 projects.json.before-restore.bak</div>';
+  } catch (e) {
+    box.innerHTML = "加载失败：" + esc(e.message);
+  }
+}
+
+async function restoreData(source) {
+  if (!source) return;
+  if (!confirm(`确定用「${source}」覆盖当前看板数据吗？\n当前数据会先另存为 before-restore.bak。`)) return;
+  try {
+    const r = await api("/api/restore", { method: "POST", body: JSON.stringify({ source }) });
+    toast(`已恢复 ${r.project_count} 个项目、${r.task_count} 个任务 ✓`);
+    await loadOverview();
+    showRecoverable();
+  } catch (e) { toast("恢复失败：" + e.message); }
 }
 
 // ============ 启动 ============

@@ -170,10 +170,21 @@ def _sanitize(data: dict) -> dict:
 
 
 _DATA_RECOVERED = False          # 数据文件损坏并重建过；上报一次后清掉
+_DATA_RECOVERED_FROM = ""        # 空的表示重置为空看板，否则是恢复来源
+LAST_GOOD_SUFFIX = ".json.last-good"
+
+
+def last_good_file() -> Path:
+    """最近一次正常保存的数据副本。
+
+    损坏时把当前文件复制成 .bak 是没用的 —— 那时的文件**本身就是坏的**。
+    真正能救命的是一份"上次写成功时的样子"。
+    """
+    return data_file().with_suffix(LAST_GOOD_SUFFIX)
 
 
 def _load_data() -> dict:
-    global _DATA_RECOVERED
+    global _DATA_RECOVERED, _DATA_RECOVERED_FROM
     f = data_file()
     if not f.exists():
         return json.loads(json.dumps(_SAMPLE_DATA))
@@ -181,27 +192,41 @@ def _load_data() -> dict:
         with open(f, "r", encoding="utf-8") as fp:
             return _sanitize(json.load(fp))
     except Exception:
-        # 数据损坏时保留原文件备份，重建
+        # 1) 先把损坏文件留一份，便于事后取证
         try:
             shutil.copy2(f, f.with_suffix(".json.bak"))
         except Exception:
             pass
-        # 必须把损坏文件就地修好：否则每次请求都要重新解析失败一次 ——
-        # 界面每次启动都会重复提示「数据被重置」，.bak 也被反复覆盖。
-        try:
-            _save_data({"projects": []})
-        except Exception:
-            pass
+        # 2) 尝试从"最近一次正常保存"救回来
+        healed = None
+        lf = last_good_file()
+        if lf.exists():
+            try:
+                candidate = _sanitize(json.loads(lf.read_text(encoding="utf-8")))
+                if isinstance(candidate.get("projects"), list):
+                    healed = candidate
+            except Exception:
+                healed = None
+        # 3) 落盘（救回来了就写回数据，否则写空结构）。
+        #    注意不能更新 last-good：这次写的可能是空看板，别把救命副本覆盖掉。
+        _save_data(healed if healed is not None else {"projects": []}, update_last_good=False)
         _DATA_RECOVERED = True
-        return {"projects": []}
+        _DATA_RECOVERED_FROM = "last-good" if healed is not None else ""
+        return healed if healed is not None else {"projects": []}
 
 
-def _save_data(data: dict) -> None:
+def _save_data(data: dict, update_last_good: bool = True) -> None:
     f = data_file()
     tmp = f.with_suffix(".json.tmp")
     with open(tmp, "w", encoding="utf-8") as fp:
         json.dump(data, fp, ensure_ascii=False, indent=2)
     os.replace(tmp, f)
+    if update_last_good:
+        # 每次成功保存都刷一份"上次正常状态"，供损坏时自动恢复
+        try:
+            shutil.copy2(f, last_good_file())
+        except Exception:
+            pass
 
 
 def now_str() -> str:
@@ -438,9 +463,10 @@ def list_projects():
             "task_counts": counts, "total_tasks": len(tasks),
         })
     # 数据文件损坏并重建过：必须让用户知道，否则会以为项目凭空消失
-    global _DATA_RECOVERED
+    global _DATA_RECOVERED, _DATA_RECOVERED_FROM
     recovered, _DATA_RECOVERED = _DATA_RECOVERED, False
-    return {"projects": out, "data_recovered": recovered}
+    recovered_from, _DATA_RECOVERED_FROM = _DATA_RECOVERED_FROM, ""
+    return {"projects": out, "data_recovered": recovered, "recovered_from": recovered_from}
 
 
 @app.post("/api/projects", status_code=201)
@@ -982,6 +1008,101 @@ def list_backups():
             files = []
         out.append({"name": b.name, "time": b.name.replace("backup_", "").replace("_", " "), "files": files})
     return {"backups": out}
+
+
+# ---- 数据恢复：从 .bak 或历史快照还原（损坏自愈之后还能回去） ----
+
+class RestoreBody(BaseModel):
+    source: str = "bak"
+
+
+def _peek_projects(path: Path) -> dict:
+    """安全地评估一个候选来源：坏了也要给出原因，而不是抛异常"""
+    try:
+        stat = path.stat()
+    except Exception:
+        return {"usable": False, "reason": "文件不存在", "project_count": 0, "task_count": 0, "names": []}
+    try:
+        data = _sanitize(json.loads(path.read_text(encoding="utf-8")))
+        projects = data.get("projects")
+        if not isinstance(projects, list):
+            raise ValueError("不是看板数据结构")
+        return {
+            "usable": True, "reason": "", "project_count": len(projects),
+            "task_count": sum(len(p.get("tasks") or []) for p in projects),
+            "names": [p.get("name", "") for p in projects[:3]],
+            "size": stat.st_size,
+            "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+        }
+    except Exception as e:
+        return {"usable": False, "reason": f"无法解析：{str(e)[:100]}",
+                "project_count": 0, "task_count": 0, "names": [],
+                "size": stat.st_size,
+                "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")}
+
+
+def _resolve_recoverable(source: str) -> Path | None:
+    """只允许白名单来源，避免变成任意路径读取"""
+    if source in ("", "bak"):
+        p = data_file().with_suffix(".json.bak")
+        return p if p.exists() else None
+    if source == "last-good":
+        p = last_good_file()
+        return p if p.exists() else None
+    if source.startswith("backup_") and "/" not in source and "\\" not in source:
+        p = data_dir() / "backups" / source / "projects.json"
+        return p if p.exists() else None
+    return None
+
+
+@app.get("/api/recoverable")
+def list_recoverable():
+    """列出可恢复的数据来源，并给出各自的规模预览"""
+    out = []
+    lf = last_good_file()
+    if lf.exists():
+        out.append({"source": "last-good", "label": "最近一次正常保存（损坏时自动用它恢复）",
+                    **_peek_projects(lf)})
+    bak = data_file().with_suffix(".json.bak")
+    if bak.exists():
+        out.append({"source": "bak", "label": "损坏文件留存（仅供取证，通常无法解析）",
+                    **_peek_projects(bak)})
+    for b in sorted((data_dir() / "backups").glob("backup_*"), reverse=True):
+        f = b / "projects.json"
+        if f.exists():
+            out.append({"source": b.name, "label": "手动快照 " + b.name.replace("backup_", ""),
+                        **_peek_projects(f)})
+    current = _peek_projects(data_file())
+    return {"recoverable": out, "current": current}
+
+
+@app.post("/api/restore")
+def restore_data(body: RestoreBody):
+    """用某个来源覆盖当前数据；覆盖前先把当前的另存一份，恢复错了还能回去"""
+    src = _resolve_recoverable(body.source)
+    if src is None:
+        raise HTTPException(404, "找不到该恢复来源")
+    try:
+        restored = _sanitize(json.loads(src.read_text(encoding="utf-8")))
+    except Exception:
+        raise HTTPException(400, "该来源无法解析为数据文件，已放弃恢复")
+    if not isinstance(restored.get("projects"), list):
+        raise HTTPException(400, "该来源内容不是看板数据，已放弃恢复")
+
+    def worker(data: dict):
+        try:
+            if data_file().exists():
+                shutil.copy2(data_file(), data_dir() / "projects.json.before-restore.bak")
+        except Exception:
+            pass
+        data.clear()
+        data.update(restored)
+        return True, restored
+
+    mutate(worker)
+    return {"ok": True, "source": body.source,
+            "project_count": len(restored["projects"]),
+            "task_count": sum(len(p.get("tasks") or []) for p in restored["projects"])}
 
 
 # ---- 会话粘贴 AI 提炼 ----

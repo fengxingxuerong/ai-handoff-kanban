@@ -45,10 +45,17 @@ FIXED: list[dict] = [
      "before": "数据文件不存在时返回 4 个示例项目；用户建第一条自己的数据时，示例数据跟着一起落盘并永久留在列表里",
      "after": "首次落盘（磁盘上还没有数据文件）时丢弃示例数据，只写用户自己的项目",
      "case": "A11"},
-    {"title": "数据文件损坏后界面无任何提示",
-     "before": "损坏时静默备份为 .bak 并重置为空看板，用户会以为项目全丢了",
-     "after": "GET /api/projects 返回 data_recovered 标记（上报一次即清），前端加载时弹出提示",
+    {"title": "数据文件损坏后会静默重置为空看板，且损坏文件从没被修好",
+     "before": "损坏时静默备份 .bak 并重置为空，用户以为项目全丢了；损坏文件一直留着，每次请求都重复备份+重复提示",
+     "after": "改为维护一份「最近一次正常保存」副本（last-good），损坏时自动从它恢复；"
+              "真的没得救才重置为空；两种情况都会明确告知，且损坏文件就地修好、提示只上报一次",
      "case": "B14"},
+    {"title": "没有任何恢复入口，出事只能手动改文件名",
+     "before": "只有备份没有恢复；.bak 其实是损坏文件的副本，根本救不回数据",
+     "after": "新增 GET /api/recoverable（列出 last-good / .bak / 手动快照并预览规模）"
+              "与 POST /api/restore（白名单来源、覆盖语义、恢复前自动另存 before-restore.bak）；"
+              "界面在 AI 设置里加了「数据恢复」入口",
+     "case": "B19"},
 ]
 
 
@@ -818,22 +825,47 @@ def run_all(api: Http, mcp: Mcp, data_dir: Path, repo_dir: Path, stub: StubLLM, 
         # 真实事故复现：数据文件被同步盘/杀软/断电弄坏
         bad_file = data_dir / "projects.json"
         good = bad_file.read_text(encoding="utf-8")
+        before_count = len(api.get("/api/projects")[1]["projects"])
         bad_file.write_text(good[: len(good) // 2], encoding="utf-8")   # 截断
         st, data = api.get("/api/projects")
         bak = (data_dir / "projects.json.bak").exists()
-        flagged = data.get("data_recovered") is True if isinstance(data, dict) else False
+        kept = len(data.get("projects", [])) if isinstance(data, dict) else 0
+        flagged = data.get("data_recovered") is True
+        from_lg = data.get("recovered_from") == "last-good"
         st2, again = api.get("/api/projects")
         cleared = isinstance(again, dict) and again.get("data_recovered") is False
-        recovered = st == 200 and data.get("projects") == []
-        bad_file.write_text(good, encoding="utf-8")                     # 还原，后续用例继续跑
-        return expect(f"损坏后请求 {st}，返回 {len(data.get('projects', []))} 个项目；"
-                      f"生成 .bak={bak}；上报 data_recovered={flagged}（第二次请求已清除={cleared}）",
-                      recovered and bak and flagged and cleared,
-                      "界面据此外弹提示，用户不会以为项目凭空消失")
+        return expect(f"损坏前 {before_count} 个项目；损坏后请求 {st} 仍读到 {kept} 个，"
+                      f"恢复来源={data.get('recovered_from') or '（重置为空）'}；"
+                      f"损坏文件留档 .bak={bak}；提示上报={flagged}（第二次已清除={cleared}）",
+                      st == 200 and kept == before_count and from_lg and bak and flagged and cleared,
+                      "自动从「最近一次正常保存」救回，用户几乎无感；损坏文件另存 .bak 便于取证")
 
     check("B14", "数据文件损坏（同步盘/杀软/断电截断后的真实形态）",
           "把 projects.json 截断成一半后请求列表",
-          "不崩溃、留 .bak 备份、且明确告知用户数据被重置", b14)
+          "不崩溃、自动恢复到损坏前的项目数、损坏文件留档、并告知用户发生过什么", b14)
+
+    def b19():
+        # 手动快照 + 一键回滚：改坏了想退回去
+        st1, snap = api.post("/api/backup")
+        _, listing = api.get("/api/backups")
+        folder = listing["backups"][0]["name"]
+        before = {(p["name"], p["progress"]) for p in api.get("/api/projects")[1]["projects"]}
+
+        risky = api.post("/api/projects", {"name": "临时加的实验项目", "status": "进行中"})[1]
+        st2, rec = api.get("/api/recoverable")
+        entry = next((r for r in rec["recoverable"] if r["source"] == folder), None)
+        st3, rolled = api.post("/api/restore", {"source": folder})
+        after = {(p["name"], p["progress"]) for p in api.get("/api/projects")[1]["projects"]}
+        safety = (data_dir / "projects.json.before-restore.bak").exists()
+        return expect(f"快照 {folder} 预览 {entry['project_count'] if entry else '?'} 个项目；"
+                      f"加了实验项目后回滚 {st3} → {len(rolled.get('projects', [])) if isinstance(rolled, dict) else '?'}"
+                      f" 个项目；回到快照状态={after == before}；恢复前自动留副本={safety}",
+                      st1 == 200 and entry is not None and st3 == 200 and after == before and safety,
+                      "回滚是覆盖语义，且恢复前先把当前数据另存为 before-restore.bak")
+
+    check("B19", "改坏了想退回去：手动快照 + 一键恢复",
+          "POST /api/backup → 加一个实验项目 → GET /api/recoverable → POST /api/restore",
+          "可恢复列表能预览规模；恢复后完全回到快照状态；恢复前自动留安全副本", b19)
 
     def b15():
         pid = ids["番茄小说《规则怪谈·午夜日志》"]

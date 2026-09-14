@@ -102,10 +102,17 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
    磁盘上还没有数据文件时说明看板从未被真正使用过，内置示例只用于引导界面，不能跟着用户的第一条数据落盘
    （否则用户一建项目就多出 4 个删不掉的示例）。
    用户**编辑**过示例项目就不再丢弃 —— 他显然拿它当模板用了。
-2. **损坏文件必须就地修好**：`_load_data` 解析失败时先 `copy2` 成 `.bak`，再立刻 `_save_data({"projects": []})`。
-   少了最后这一步，损坏文件会一直留着，**每次请求都重复备份 + 重复上报 `data_recovered`**，
-   界面每次启动都弹「数据被重置」。上报一次即清（`list_projects` 里读后置 False）。
-3. **写盘默认不覆盖已有文件**：`/api/export/agent-files` 遇到已存在的 `AGENTS.md`/`CLAUDE.md`
+2. **数据文件损坏时自动从「最近一次正常保存」救回来**：
+   `_save_data()` 每次成功保存都会刷一份 `projects.json.last-good`；`_load_data()` 解析失败时，
+   先把损坏文件另存为 `.bak`（取证用），再从 `last-good` 恢复并写回，只有真的没得救才重置为空。
+   两个坑都别踩：
+   - 损坏时复制出来的 `.bak` **本身就是坏的**，救不了数据 —— 救命的是 last-good；
+   - 自愈那次写入必须 `_save_data(..., update_last_good=False)`，否则会把 last-good 覆盖成空看板。
+   上报用 `data_recovered` + `recovered_from`（读一次即清），前端据此提示。
+3. **恢复入口**：`GET /api/recoverable` 列出来源与规模预览，`POST /api/restore`
+   按白名单来源（`last-good` / `bak` / `backup_*`）覆盖恢复，**恢复前先把当前数据另存为
+   `projects.json.before-restore.bak`**。恢复是覆盖语义，不是合并。
+4. **写盘默认不覆盖已有文件**：`/api/export/agent-files` 遇到已存在的 `AGENTS.md`/`CLAUDE.md`
    默认跳过并回报 `skipped_existing`，要覆盖必须显式 `overwrite=true`。
    仓库里的入口文件很可能是用户手写的，静默覆盖等于内容丢失。
 
