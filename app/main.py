@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -599,6 +600,94 @@ def health():
 
 # ---- 项目 CRUD ----
 
+@app.get("/api/context/{pid}")
+def project_context(pid: str):
+    """机器可读项目上下文：给 AI 智能体直接拉取的「接手包」。
+
+    对标 bd prime / Xanther——其他工具无需人工粘贴，
+    通过本接口（或 MCP 工具）一次拿到接手所需的全部结构化上下文。
+    """
+    found = find_project(pid)
+    if not found:
+        raise HTTPException(404, "项目不存在")
+    p = found[1]
+    tasks = p.get("tasks") or []
+    ready = executable_tasks(tasks)
+    by_id = {t.get("id"): t for t in tasks}
+    snap = git_snapshot(p.get("repo_path", ""), limit=3) if p.get("repo_path") else {"ok": False}
+
+    def slim(t: dict) -> dict:
+        d = {
+            "id": t.get("id"), "title": t.get("title"), "status": t.get("status"),
+            "priority": t.get("priority"),
+        }
+        if t.get("due_date"):
+            d["due_date"] = t["due_date"]
+        if t.get("agent"):
+            d["agent"] = t["agent"]
+        if t.get("refs"):
+            d["refs"] = t["refs"]
+        if t.get("desc"):
+            d["desc"] = (t.get("desc") or "")[:200]
+        waiting = [by_id[x].get("title", x) for x in (t.get("depends_on") or [])
+                   if x in by_id and by_id[x].get("status") != "已完成"]
+        if waiting:
+            d["waiting_for"] = waiting
+        return d
+
+    missing = [it["label"] for it in _readiness_items(p) if not it["ok"]]
+    return {
+        "app": "ai-kanban",
+        "generated_at": now_str(),
+        "usage_hint": "把本 JSON 作为项目上下文直接喂给 AI 智能体即可接手；配合看板 MCP 工具可读写任务",
+        "project": {
+            "id": p["id"], "name": p["name"], "status": p.get("status", ""),
+            "progress": p.get("progress", 0), "priority": p.get("priority", ""),
+            "tags": p.get("tags", []), "repo_path": p.get("repo_path", ""),
+            "background": p.get("background", ""),
+            "handoff_note": p.get("handoff_note", ""),
+            "next_action": p.get("next_action", ""),
+        },
+        "code_reality": ({
+            "branch": snap.get("branch", ""),
+            "last_commit_at": (snap.get("head") or {}).get("date", ""),
+            "last_commit_subject": (snap.get("head") or {}).get("subject", ""),
+            "days_since_commit": snap.get("days_since_commit"),
+            "uncommitted_files": snap.get("dirty_count", 0),
+        } if snap.get("ok") else None),
+        "start_here": [  # 现在就能动手的（依赖已满足）
+            {"id": t["id"], "title": t.get("title"), "priority": t.get("priority"),
+             "refs": t.get("refs") or []} for t in ready
+        ],
+        "tasks": {
+            "todo": [slim(t) for t in tasks if t.get("status") == "待办"],
+            "in_progress": [slim(t) for t in tasks if t.get("status") == "进行中"],
+            "blocked": [slim(t) for t in tasks if t.get("status") == "阻塞"],
+            "done_count": sum(1 for t in tasks if t.get("status") == "已完成"),
+        },
+        "readiness": {"score": _readiness_score(p), "missing": missing},
+    }
+
+
+# ---- 交接内容脱敏（对标 handoff skill 的 redact） ----
+
+_REDACT_PATTERNS = [
+    (r"(?i)\b(sk|rc|nvapi|ghp|gho|github_pat|AKIA|xoxb|xoxp)[-_][A-Za-z0-9_-]{6,}", r"\1-********"),
+    (r"(?i)(api[_-]?key|token|secret|password|passwd|pwd|授权码)\s*[:=]\s*([\"']?)[^\s\"']{4,}", r"\1\2= ********"),
+    (r"(?i)\bBearer\s+[A-Za-z0-9._-]{8,}", "Bearer ********"),
+    (r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "****@****"),
+]
+
+
+def redact_text(text: str) -> str:
+    """把交接内容里的敏感信息替换为掩码（API Key / 令牌 / 密码 / 邮箱）"""
+    if not text:
+        return text
+    for pat, rep in _REDACT_PATTERNS:
+        text = re.sub(pat, rep, text)
+    return text
+
+
 @app.get("/api/search/tasks")
 def search_tasks(q: str = "", limit: int = 30):
     """全局任务搜索：跨项目按标题/描述/负责人匹配"""
@@ -875,11 +964,13 @@ def _build_handoff_markdown(p: dict) -> str:
 
 
 @app.get("/api/export/{pid}")
-def export_handoff(pid: str):
+def export_handoff(pid: str, redact: int = 0):
     found = find_project(pid)
     if not found:
         raise HTTPException(404, "项目不存在")
     md = _build_handoff_markdown(found[1])
+    if redact:
+        md = redact_text(md)
     return PlainTextResponse(md, media_type="text/markdown; charset=utf-8")
 
 
@@ -1029,13 +1120,14 @@ def save_export(body: SaveExportBody):
 
 
 @app.get("/api/export-all")
-def export_all():
+def export_all(redact: int = 0):
     data = get_projects_data()
     projects = data.get("projects", [])
     head = f"# AI 交接看板 · 全项目交接包\n\n> 共 {len(projects)} 个项目 · 导出时间 {now_str()}\n"
     parts = [head]
     for p in projects:
-        parts.append("\n\n---\n\n" + _build_handoff_markdown(p))
+        md = _build_handoff_markdown(p)
+        parts.append("\n\n---\n\n" + (redact_text(md) if redact else md))
     return PlainTextResponse("".join(parts), media_type="text/markdown; charset=utf-8")
 
 
@@ -1101,12 +1193,14 @@ def _build_agents_md_local(p: dict) -> str:
 
 
 @app.post("/api/export/agentsmd/{pid}")
-def export_agentsmd(pid: str):
+def export_agentsmd(pid: str, redact: int = 0):
     found = find_project(pid)
     if not found:
         raise HTTPException(404, "项目不存在")
     p = found[1]
     text, src, ep = _generate_agents_md(p)
+    if redact:
+        text = redact_text(text)
     return {"text": text, "endpoint": ep, "source": src}
 
 
@@ -1794,6 +1888,38 @@ def _save_report(report: dict) -> dict:
     return report
 
 
+def _latest_report_before(rid: str) -> dict | None:
+    """取时间上早于指定报告 id 的最近一份报告（报告 id 即时间戳，可直接比较）"""
+    best = None
+    for f in reports_dir().glob("*.json"):
+        try:
+            r = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if r.get("id") and r["id"] < rid and (best is None or r["id"] > best["id"]):
+            best = r
+    return best
+
+
+def _attach_trends(report: dict) -> dict:
+    """对比上一份报告，给每个项目洞察标注健康分趋势（down=恶化≥10 / up=好转≥10 / flat）"""
+    prev = _latest_report_before(report["id"])
+    if not prev:
+        for it in report.get("insights", []):
+            it["trend"] = {"delta": None, "level": "new"}
+        return report
+    prev_map = {it.get("id"): it for it in prev.get("insights", []) if isinstance(it, dict)}
+    for it in report.get("insights", []):
+        old = prev_map.get(it.get("id"))
+        if not old or old.get("health") is None or it.get("health") is None:
+            it["trend"] = {"delta": None, "level": "new"}
+            continue
+        delta = int(it["health"]) - int(old["health"])
+        level = "down" if delta <= -10 else "up" if delta >= 10 else "flat"
+        it["trend"] = {"prev": int(old["health"]), "delta": delta, "level": level}
+    return report
+
+
 def _run_analyze(trigger: str = "manual") -> dict:
     data = get_projects_data()
     projects = data.get("projects", [])
@@ -1812,6 +1938,7 @@ def _run_analyze(trigger: str = "manual") -> dict:
         "insights": parsed.get("insights", []) or [],
         "global_suggestions": parsed.get("global_suggestions", []) or [],
     }
+    report = _attach_trends(report)
     return _save_report(report)
 
 

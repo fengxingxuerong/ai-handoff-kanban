@@ -650,6 +650,7 @@
             <button class="btn small" data-act="openHandoffPackage">📦 完整交接包</button>
             <button class="btn small" data-act="openAgentsMD">🤖 生成 AGENTS.md</button>
             <button class="btn small" data-act="openSummarize">📥 会话提炼</button>
+            <button class="btn small" data-act="copyContextJson" title="机器可读 JSON，供智能体/MCP 直接拉取接手">🧩 上下文 JSON</button>
             <button class="btn small" data-act="loadGitInfo">🌿 代码现状</button>
           </div>
         </div>
@@ -921,6 +922,10 @@
   <div class="modal" style="width:min(760px,100%)">
     <div class="mhead"><h2 id="package-title">📦 完整交接包</h2><button class="btn icon" data-act="closeModal" data-arg="package-modal">✕</button></div>
     <div class="mbody">
+      <div class="field" style="flex-direction:row;align-items:center;gap:10px">
+        <label class="switch" style="flex-shrink:0"><input type="checkbox" id="package-redact"><span class="slider"></span></label>
+        <span style="font-size:12.5px;color:var(--text-dim)">🔒 脱敏导出（自动隐藏 API Key / 令牌 / 密码 / 邮箱后再生成）</span>
+      </div>
       <div class="field"><label>交接包内容（Markdown，可直接编辑后再导出）</label>
         <textarea class="tall" id="package-content" style="min-height:320px;font-family:Consolas,monospace;font-size:12px" readonly></textarea>
       </div>
@@ -1200,6 +1205,7 @@ const ACTIONS = {
   importData: () => importData(),
   openGlobalSearch: () => openGlobalSearch(),
   toggleTheme: () => toggleTheme(),
+  copyContextJson: () => copyContextJson(),
   showRecoverable: () => showRecoverable(),
   restoreData: (arg) => restoreData(arg),
   sendCommand: () => sendCommand(),
@@ -1671,12 +1677,23 @@ function healthClass(h) {
 
 function renderReport(r) {
   const body = document.getElementById("report-body");
-  const insights = (r.insights || []).map(it => `
+  const TREND_MARK = { down: ['▼', 'var(--red)'], up: ['▲', 'var(--green)'], flat: ['◆', 'var(--text-faint)'], new: ['✦', 'var(--accent2)'] };
+  const insights = (r.insights || []).map(it => {
+    const tr = it.trend || {};
+    const mk = TREND_MARK[tr.level] || TREND_MARK.new;
+    const trendHtml = tr.level === "down"
+      ? `<span class="due-badge due-overdue">${mk[0]} 较上次 ${tr.delta > 0 ? "+" : ""}${tr.delta}</span>`
+      : tr.level === "up"
+        ? `<span class="due-badge" style="color:var(--green);background:rgba(52,211,153,.12)">${mk[0]} 较上次 +${tr.delta}</span>`
+        : tr.level === "flat"
+          ? `<span class="due-badge due-ok">${mk[0]} 持平</span>`
+          : `<span class="due-badge due-ok">${mk[0]} 首次评估</span>`;
+    return `
     <div class="insight">
       <div class="i-top">
         <div class="health ${healthClass(it.health)}">${Number(it.health) || "—"}</div>
         <div>
-          <div class="i-name">${esc(it.name || "")}</div>
+          <div class="i-name">${esc(it.name || "")} ${trendHtml}</div>
           <div class="i-reason">${esc(it.reason || "")}</div>
         </div>
       </div>
@@ -1684,7 +1701,8 @@ function renderReport(r) {
       ${(it.suggestions || []).length ? `<div class="i-sec">💡 建议</div><div class="sug-list">${it.suggestions.map((s, i) => `
         <div class="sug-item"><div class="sug-text">${esc(s.text || "")}</div>
         <button class="apply-btn" data-pid="${esc(it.id || "")}" data-txt="${esc(s.text || "")}" data-act="applySuggestion">应用</button></div>`).join("")}</div>` : ""}
-    </div>`).join("");
+    </div>`;
+  }).join("");
   const global = (r.global_suggestions || []).length ? `
     <div class="r-global">
       <div class="lab">🌐 全局建议</div>
@@ -2120,7 +2138,8 @@ async function openHandoffPackage() {
   packageMode = "single";
   document.getElementById("package-title").textContent = "📦 完整交接包 · " + (current ? current.name : "");
   try {
-    const md = await api("/api/export/" + currentPid);
+    const redact = document.getElementById("package-redact").checked ? 1 : 0;
+    const md = await api("/api/export/" + currentPid + (redact ? "?redact=1" : ""));
     document.getElementById("package-content").value = md;
     openModal("package-modal");
   } catch (e) { toast("生成失败：" + e.message); }
@@ -2130,7 +2149,8 @@ async function openAllPackage() {
   packageMode = "all";
   document.getElementById("package-title").textContent = "📦 全项目交接包";
   try {
-    const md = await api("/api/export-all");
+    const redact = document.getElementById("package-redact").checked ? 1 : 0;
+    const md = await api("/api/export-all" + (redact ? "?redact=1" : ""));
     document.getElementById("package-content").value = md;
     openModal("package-modal");
   } catch (e) { toast("生成失败：" + e.message); }
@@ -2505,6 +2525,17 @@ function toggleTheme() {
   try { t = localStorage.getItem("kanban-theme") || "dark"; } catch (e) {}
   applyTheme(t);
 })();
+
+// ============ 机器可读上下文 ============
+async function copyContextJson() {
+  if (!currentPid) return;
+  try {
+    const ctx = await api("/api/context/" + currentPid);
+    const text = JSON.stringify(ctx, null, 2);
+    try { await navigator.clipboard.writeText(text); toast("机器可读上下文已复制 ✓ 直接粘给智能体即可接手"); }
+    catch (e) { fallbackCopy(text); }
+  } catch (e) { toast("获取失败：" + e.message); }
+}
 
 // ============ 启动 ============
 async function loadVersion() {

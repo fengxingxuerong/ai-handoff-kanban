@@ -170,3 +170,49 @@ def test_global_task_search(server):
     assert status == 200 and r3["results"] == []
     status, r4 = server.get("/api/search/tasks")
     assert status == 200 and r4["results"] == []
+
+
+# ---------------- 机器可读上下文 ----------------
+
+def test_project_context_endpoint(server):
+    status, proj = server.create_project("上下文项目")
+    pid = proj["id"]
+    server.post(f"/api/projects/{pid}/tasks", {"title": "先做这个", "status": "待办", "priority": "高"})
+    server.post(f"/api/projects/{pid}/tasks", {"title": "被阻塞的", "status": "待办",
+                                               "depends_on": []})
+    status, ctx = server.get(f"/api/context/{pid}")
+    assert status == 200
+    assert ctx["app"] == "ai-kanban"
+    assert ctx["project"]["name"] == "上下文项目"
+    assert "handoff_note" in ctx["project"] and "next_action" in ctx["project"]
+    assert isinstance(ctx["start_here"], list) and len(ctx["start_here"]) >= 1
+    assert ctx["readiness"]["score"] >= 0
+    assert ctx["usage_hint"]
+
+
+def test_project_context_404(server):
+    assert server.get("/api/context/not_exist_pid")[0] == 404
+
+
+# ---------------- 交接内容脱敏 ----------------
+
+def test_export_redact_hides_secrets(server):
+    status, proj = server.create_project("脱敏项目")
+    pid = proj["id"]
+    secret_note = "配置如下：API_KEY=sk-abcd1234efgh5678，联系 admin@company.com，密码 password: P@ssw0rd9"
+    status, updated = server.put(f"/api/projects/{pid}", {
+        "name": "脱敏项目", "status": "进行中", "progress": 10, "priority": "高",
+        "handoff_note": secret_note,
+    })
+    assert status == 200
+    # 不脱敏：原文在
+    _, raw = server.get(f"/api/export/{pid}")
+    assert "sk-abcd1234efgh5678" in raw and "admin@company.com" in raw
+    # 脱敏：敏感内容被掩码
+    _, safe = server.get(f"/api/export/{pid}?redact=1")
+    assert "sk-abcd1234efgh5678" not in safe, "API Key 应被脱敏"
+    assert "admin@company.com" not in safe, "邮箱应被脱敏"
+    assert "********" in safe
+    # 全项目导出同样支持
+    _, safe_all = server.get("/api/export-all?redact=1")
+    assert "sk-abcd1234efgh5678" not in safe_all
