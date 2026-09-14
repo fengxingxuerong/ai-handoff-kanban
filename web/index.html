@@ -745,6 +745,7 @@
     <div class="mbody">
       <div class="field"><label>任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调"></div>
       <div class="field"><label>任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、验收标准……"></textarea></div>
+      <div class="field"><label>相关代码位置（可选，逗号分隔）</label><input id="t-refs" placeholder="如 app/main.py:120, tests/test_api.py —— 接手的人不用再翻一遍找在哪改"></div>
       <div class="row3">
         <div class="field"><label>状态</label><select id="t-status">
           <option>待办</option><option>进行中</option><option>已完成</option><option>阻塞</option>
@@ -1242,9 +1243,13 @@ function renderDetail() {
     const el = document.createElement("div");
     el.className = "tcard";
     el.onclick = () => openTaskModal(t.id);
+    const refHtml = (t.refs && t.refs.length)
+      ? `<div class="td" style="font-family:Consolas,monospace;font-size:11px">📍 ${t.refs.map(r => esc(r)).join("、")}</div>`
+      : "";
     el.innerHTML = `
       <div class="tt">${esc(t.title)}</div>
       ${t.desc ? `<div class="td">${esc(t.desc)}</div>` : ""}
+      ${refHtml}
       <div class="tfoot">
         <span class="tag2 pri-${tpri}">${esc(tpri)}</span>
         ${t.agent ? `<span class="agent">🤖 ${esc(t.agent)}</span>` : ""}
@@ -1270,7 +1275,10 @@ async function copyHandoffText() {
   const tasks = p.tasks || [];
   if (tasks.length) {
     lines.push("【任务清单】");
-    tasks.forEach(t => lines.push(`- [${t.status}] ${t.title}（${t.priority}）${t.agent ? `由 ${t.agent} 负责` : ""}${t.desc ? `：${t.desc}` : ""}`));
+    tasks.forEach(t => {
+      const refs = (t.refs && t.refs.length) ? `（涉及 ${t.refs.join("、")}）` : "";
+      lines.push(`- [${t.status}] ${t.title}（${t.priority}）${t.agent ? `由 ${t.agent} 负责` : ""}${t.desc ? `：${t.desc}` : ""}${refs}`);
+    });
     lines.push("");
   }
   lines.push("—— 来自 AI 交接看板");
@@ -1419,6 +1427,7 @@ function openTaskModal(taskId) {
   document.getElementById("t-status").value = "待办";
   document.getElementById("t-priority").value = "中";
   document.getElementById("t-agent").value = "";
+  document.getElementById("t-refs").value = "";
   if (taskId) {
     const t = (current.tasks || []).find(x => x.id === taskId);
     if (t) {
@@ -1427,6 +1436,7 @@ function openTaskModal(taskId) {
       document.getElementById("t-status").value = t.status;
       document.getElementById("t-priority").value = t.priority;
       document.getElementById("t-agent").value = t.agent || "";
+      document.getElementById("t-refs").value = (t.refs || []).join(", ");
     }
   }
   openModal("task-modal");
@@ -1441,6 +1451,7 @@ async function saveTask() {
     status: document.getElementById("t-status").value,
     priority: document.getElementById("t-priority").value,
     agent: document.getElementById("t-agent").value.trim(),
+    refs: document.getElementById("t-refs").value.split(",").map(s => s.trim()).filter(Boolean),
   };
   try {
     if (editTaskId) {

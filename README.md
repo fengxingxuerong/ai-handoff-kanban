@@ -23,6 +23,8 @@
 - **多智能体入口文件**：一次生成 AGENTS.md / CLAUDE.md / Cursor / Copilot / Gemini / Cline / Aider / Windsurf 八个入口
 - **git 集成**：详情页「🌿 代码现状」看分支、最近提交、未提交改动；交接包自动带上这一节；
   AI 监管能看出"看板写着进行中、代码一周没动"
+- **任务关联代码位置**：任务可填 `app/main.py:120` 这类落点，交接包与 AGENTS.md 会带上，
+  换人/换工具接手不用再翻一遍找在哪改
 
 ## 代码现状（git）
 
@@ -150,9 +152,8 @@ build.bat
 ├── scripts/desktop.py      # PyWebview 桌面壳（端口检测 + 后台自启服务）
 ├── scripts/start_desktop.bat  # 源码双击启动
 ├── scripts/init_ai_config.py  # 本机 AI 端点初始化（Key 从环境变量/私有文件读，脚本内不含 Key）
-├── scripts/smoke_test.py   # 手工冒烟：基础 API
-├── scripts/regression_test.py # 手工回归：并发/特殊字符/白名单/防护/鉴权
-├── scripts/ai_smoke_test.py # 手工冒烟：AI 功能（真实调用 LLM）
+├── scripts/live_check.py   # 对着已跑起来的实例做只读体检（不写数据）
+├── scripts/scenario_test.py # 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据）
 ├── scripts/frozen_smoke.py # 冻结版自查：启动 dist 里的 exe 真打一遍接口
 ├── scripts/mcp_server.py   # MCP 服务（stdio）：让 AI 代理直接读写看板
 ├── scripts/bench.py        # 读写性能基准（先量再改）
@@ -199,12 +200,10 @@ rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 30 条用�
 AI 用例默认打本地假端点（`tests/llm_stub.py`，OpenAI 兼容），**不消耗任何模型配额**；
 只有 `KANBAN_LIVE=1` 的 `test_ai.py` 会走真实模型。
 
-需要对着已跑起来的实例做手工冒烟时，用 `scripts/` 下三个独立脚本：
+**应用正带着你的真实数据跑着、只想确认它现在是健康的**（只读，不写任何数据）：
 
 ```bat
-.venv\Scripts\python.exe scripts\smoke_test.py http://127.0.0.1:18320
-.venv\Scripts\python.exe scripts\regression_test.py http://127.0.0.1:18320
-.venv\Scripts\python.exe scripts\ai_smoke_test.py http://127.0.0.1:18320   rem 会真实消耗配额
+.venv\Scripts\python.exe scripts\live_check.py http://127.0.0.1:18320 --mcp
 ```
 
 **每次打包后跑一次冻结版自查**（会短暂弹出应用窗口，脚本自己关掉它）：

@@ -136,6 +136,36 @@ _SAMPLE_DATA = {
 }
 
 
+# ---- 任务关联的代码位置（交接时说清"改哪里"） ----
+
+MAX_REFS = 20
+MAX_REF_LEN = 200
+
+
+def clean_refs(raw) -> list[str]:
+    """规范化代码位置引用：去空白、去重、限长限量。
+
+    只当字符串存，**不做任何路径解析或存在性校验** —— 它可能指向别的机器，
+    也可能是个还没创建的文件；意义在于"给接头的人一个准确落点"。
+    """
+    if isinstance(raw, str):
+        raw = [p for p in raw.replace("\n", ",").split(",")]
+    if not isinstance(raw, (list, tuple)):
+        return []
+    seen, out = set(), []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        ref = item.strip().strip("`").strip()
+        if not ref or len(ref) > MAX_REF_LEN or ref in seen:
+            continue
+        seen.add(ref)
+        out.append(ref)
+        if len(out) >= MAX_REFS:
+            break
+    return out
+
+
 def _sanitize(data: dict) -> dict:
     """规范化读入的数据：修正非法状态/优先级，保证前端不拿到越界值"""
     if not isinstance(data, dict):
@@ -167,6 +197,7 @@ def _sanitize(data: dict) -> dict:
                 t["status"] = "待办"
             if t.get("priority") not in DEFAULT_PRIORITY:
                 t["priority"] = "中"
+            t["refs"] = clean_refs(t.get("refs"))      # 老数据没有这个字段，顺带补齐
     return data
 
 
@@ -399,6 +430,12 @@ class TaskIn(BaseModel):
     status: Literal["待办", "进行中", "已完成", "阻塞"] = "待办"
     priority: Literal["高", "中", "低"] = "中"
     agent: str = ""
+    refs: list[str] = []          # 相关代码位置，如 app/main.py:120；交接时用来说明"改哪里"
+
+    @field_validator("refs", mode="before")
+    @classmethod
+    def _clean_refs(cls, v):
+        return clean_refs(v)
 
 
 # ---------------- 应用 ----------------
@@ -545,6 +582,7 @@ def create_task(pid: str, body: TaskIn):
         "title": body.title.strip(), "desc": body.desc,
         "status": body.status, "priority": body.priority,
         "agent": body.agent.strip(), "created_at": now, "updated_at": now,
+        "refs": clean_refs(body.refs),
     }
 
     def apply(p: dict, _data: dict) -> None:
@@ -564,6 +602,7 @@ def update_task(tid: str, body: TaskIn):
             "title": body.title.strip(), "desc": body.desc,
             "status": body.status, "priority": body.priority,
             "agent": body.agent.strip(), "updated_at": now,
+            "refs": clean_refs(body.refs),
         })
         p["updated_at"] = now
 
@@ -638,6 +677,14 @@ def _build_handoff_markdown(p: dict) -> str:
             desc = (t.get("desc") or "").replace("|", "\\|").replace("\n", " ")
             lines.append(f"| {title} | {t['status']} | {t['priority']} | {t.get('agent','') or '—'} | {desc} |")
         lines.append("")
+        with_refs = [t for t in tasks if t.get("refs")]
+        if with_refs:
+            lines.append("### 涉及代码位置")
+            lines.append("")
+            for t in with_refs:
+                marks = "、".join(f"`{r}`" for r in t["refs"])
+                lines.append(f"- {t.get('title', '')} → {marks}")
+            lines.append("")
     lines.append("---")
     lines.append("由 AI 交接看板自动生成")
     return "\n".join(lines)
@@ -833,7 +880,9 @@ def _build_agents_md_local(p: dict) -> str:
         lines.append("## 任务清单")
         lines.append("")
         for t in tasks:
-            lines.append(f"- [{t.get('status', '待办')}] {t['title']}（优先级 {t.get('priority', '中')}）")
+            refs = "、".join(t.get("refs") or [])
+            lines.append(f"- [{t.get('status', '待办')}] {t['title']}（优先级 {t.get('priority', '中')}）"
+                         + (f" — 涉及：{refs}" if refs else ""))
         lines.append("")
     return "\n".join(lines)
 
@@ -1342,7 +1391,8 @@ def _projects_brief(projects: list[dict]) -> list[dict]:
             "tags": p.get("tags", []),
             "next_action": (p.get("next_action") or "")[:300],
             "background": (p.get("background") or "")[:300],
-            "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", "")}
+            "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", ""),
+                       **({"refs": t["refs"]} if t.get("refs") else {})}
                       for t in (p.get("tasks") or [])[:40]],
         }
         snap = git_snapshot(p.get("repo_path", ""), limit=1)

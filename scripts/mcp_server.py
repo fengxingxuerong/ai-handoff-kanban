@@ -135,8 +135,11 @@ def t_get_project(args: dict) -> str:
     if tasks:
         lines.append("## 任务清单")
         for t in tasks:
-            lines.append(f"- [{t.get('id')}] ({t.get('status')}/{t.get('priority')}) {t.get('title')}"
-                         + (f" —— {t.get('desc')}" if t.get("desc") else ""))
+            row = (f"- [{t.get('id')}] ({t.get('status')}/{t.get('priority')}) {t.get('title')}"
+                   + (f" —— {t.get('desc')}" if t.get("desc") else ""))
+            if t.get("refs"):
+                row += "  ↳ 涉及：" + "、".join(t["refs"])
+            lines.append(row)
     return "\n".join(lines)
 
 
@@ -197,9 +200,11 @@ def t_add_task(args: dict) -> str:
         status=args.get("status") or "待办",
         priority=args.get("priority") or "中",
         agent=args.get("agent") or "",
+        refs=args.get("refs") or [],
     )
     task = kanban.create_task(pid, body)
-    return f"已在项目 [{pid}] 新增任务 [{task['id']}] {task['title']}（{task['status']}/{task['priority']}）"
+    refs = ("；涉及 " + "、".join(task["refs"])) if task.get("refs") else ""
+    return f"已在项目 [{pid}] 新增任务 [{task['id']}] {task['title']}（{task['status']}/{task['priority']}）{refs}"
 
 
 def t_update_task(args: dict) -> str:
@@ -218,6 +223,7 @@ def t_update_task(args: dict) -> str:
         status=pick("status", task.get("status")),
         priority=pick("priority", task.get("priority")),
         agent=pick("agent", task.get("agent") or ""),
+        refs=pick("refs", task.get("refs") or []),
     )
     updated = kanban.update_task(tid, body)
     return f"任务 [{tid}] 已更新为 {updated['status']}/{updated['priority']}（所属项目 {project.get('name')}）"
@@ -329,7 +335,7 @@ TOOLS: list[dict] = [
     },
     {
         "name": "kanban_add_task",
-        "description": "给项目加一个任务。desc 建议写清验收标准，否则接手的人不知道做到什么程度算完。",
+        "description": "给项目加一个任务。refs 填相关代码位置（如 src/app.py:120），接手的人不用再翻一遍找在哪改。",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -339,6 +345,8 @@ TOOLS: list[dict] = [
                 "status": {"type": "string", "enum": ["待办", "进行中", "已完成", "阻塞"]},
                 "priority": {"type": "string", "enum": ["高", "中", "低"]},
                 "agent": {"type": "string", "description": "负责的 AI 或人"},
+                "refs": {"type": "array", "items": {"type": "string"},
+                         "description": "相关代码位置，如 [\"app/main.py:120\", \"tests/test_api.py\"]"},
             },
             "required": ["project_id", "title"], "additionalProperties": False,
         },
@@ -355,6 +363,8 @@ TOOLS: list[dict] = [
                 "status": {"type": "string", "enum": ["待办", "进行中", "已完成", "阻塞"]},
                 "priority": {"type": "string", "enum": ["高", "中", "低"]},
                 "agent": {"type": "string"},
+                "refs": {"type": "array", "items": {"type": "string"},
+                         "description": "相关代码位置；不改就省略"},
             },
             "required": ["task_id"], "additionalProperties": False,
         },

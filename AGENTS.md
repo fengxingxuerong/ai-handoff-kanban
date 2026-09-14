@@ -18,7 +18,8 @@
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
 | `tests/` | pytest 套件 116 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90% |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log` |
-| `scripts/*_test.py` | 手工冒烟：smoke_test / regression_test / ai_smoke_test |
+| `scripts/live_check.py` | 对着**已在跑**的实例做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
+| `scripts/scenario_test.py` | 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据，可导出报告） |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
 | `scripts/mcp_server.py` | MCP 服务（stdio）：代理可列项目/读交接包/加任务/改进度 |
 | `build.bat` | 建 venv、装依赖、PyInstaller 打包 |
@@ -39,6 +40,12 @@ set KANBAN_LIVE=1 && .venv\Scripts\python.exe -m pytest tests\test_ai.py -v
 
 rem 性能基准（改数据层前先量）
 .venv\Scripts\python.exe scripts\bench.py 1000
+
+rem 对着已在跑的实例做只读体检（不写数据）
+.venv\Scripts\python.exe scripts\live_check.py http://127.0.0.1:18320 --mcp
+
+rem 真实场景测试（真服务 + 真 MCP + 真实业务数据）
+.venv\Scripts\python.exe scripts\scenario_test.py
 
 rem 打包（改完源码必须重打，否则 dist 里的 exe 是旧版本）
 build.bat

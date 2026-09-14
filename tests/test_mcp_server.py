@@ -257,6 +257,24 @@ def test_delete_task(mcp):
 
 # ---------------- 错误处理 ----------------
 
+def test_add_task_schema_has_refs(mcp):
+    """任务要能带上相关代码位置，否则接手的人还得自己翻一遍"""
+    tools = {t["name"]: t for t in mcp.call("tools/list")["result"]["tools"]}
+    props = tools["kanban_add_task"]["inputSchema"]["properties"]
+    assert "refs" in props and props["refs"]["type"] == "array"
+    assert "refs" in tools["kanban_update_task"]["inputSchema"]["properties"]
+
+
+def test_add_task_with_refs_roundtrip(mcp):
+    pid = mcp.tool("kanban_create_project", {"name": "带位置的活"})[0].split("[")[-1].split("]")[0]
+    text, is_err = mcp.tool("kanban_add_task",
+                            {"project_id": pid, "title": "改判定逻辑", "refs": ["app/main.py:120"]})
+    assert not is_err and "app/main.py:120" in text, text
+
+    detail, _ = mcp.tool("kanban_get_project", {"project_id": pid})
+    assert "涉及：app/main.py:120" in detail
+
+
 def test_unknown_tool_is_tool_error_not_crash(mcp):
     text, is_err = mcp.tool("kanban_not_exist")
     assert is_err and "未知工具" in text
