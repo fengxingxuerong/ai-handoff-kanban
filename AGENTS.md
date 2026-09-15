@@ -18,7 +18,8 @@
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
 | `tests/` | pytest 套件 248 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测 93%）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
-| `scripts/live_check.py` | 对着**已在跑**的实例做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
+| `scripts/live_check.py` | 对着**已在跑**的实例打接口做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
+| `scripts/live_ui_check.py` | 对着**已在跑**的实例开真浏览器做只读校验（Playwright + 系统 Edge/Chrome）：证明界面真的渲染出来了，不是白屏。全程只点导航类操作，不写一个字节 |
 | `scripts/scenario_test.py` | 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据，可导出报告） |
 | `scripts/delivery_drill.py` | 交付演练：模拟换智能体接手，端到端 19 项（接手→执行→交接物→脱敏→迁移） |
 | `scripts/real_ai_test.py` | 真实模型 AI 功能测试：5 大功能 × 6 模型通道（消耗真实配额） |
@@ -50,6 +51,9 @@ rem 性能基准（改数据层前先量）
 
 rem 对着已在跑的实例做只读体检（不写数据）
 .venv\Scripts\python.exe scripts\live_check.py http://127.0.0.1:18320 --mcp
+
+rem 对着已在跑的实例开真浏览器校验界面（只读；证明不是白屏）
+.venv\Scripts\python.exe scripts\live_ui_check.py http://127.0.0.1:18320
 
 rem 真实场景测试（真服务 + 真 MCP + 真实业务数据）
 .venv\Scripts\python.exe scripts\scenario_test.py
@@ -202,6 +206,11 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    剩下的未覆盖行基本是 `_is_forbidden_target` 的异常分支、`Path.resolve()` 失败、
    `_scheduler_loop` 的常驻循环等难以稳定触发的路径 —— **别为了数字构造畸形环境硬凑**。
    `test_coverage_gaps.py` 里记着"哪些逻辑真但一直没测到"，新增这类补测往那放。
+5. **用例不能依赖墙钟**：涉及时间的断言（调度时间、周期键、截止日期）必须用相对时间构造。
+   别写 `at="00:01"` 这种常量 —— 跑到那一分钟就会意外命中，用例变成看运气
+   （2026-09-16 凌晨实际踩到：一条调度用例在 00:01 那天红了）。
+6. **隐藏元素取文本要用 `text_content()`**：`inner_text()` 只返回"渲染出来"的文本，
+   弹窗/折叠区里的文字（如设置面板里的版本号）拿不到，会误判成"没渲染"。
 
 ## 容易踩的坑
 

@@ -132,9 +132,20 @@ def test_scheduler_fires_at_configured_time(app_client, monkeypatch):
     assert cfg_after["ai"]["schedule"]["last_period"], "没写周期键，重启后会重复触发"
 
 
+def _other_minute() -> str:
+    """一个**保证不等于当前分钟**的时间（+1 小时）。
+
+    别写 `at="00:01"` 这种常量：跑到 00:01 那一分钟就会意外命中，
+    用例变成"看运气红不红"（2026-09-16 凌晨实际踩到过一次）。
+    """
+    from datetime import timedelta
+
+    return (datetime.now() + timedelta(hours=1)).strftime("%H:%M")
+
+
 def test_scheduler_skips_when_disabled_or_wrong_minute(app_client, monkeypatch):
     assert _run_loop(monkeypatch, _sched_cfg(enabled=False))[0] == []
-    assert _run_loop(monkeypatch, _sched_cfg(at="00:01"))[0] == [], "时间没到不该触发"
+    assert _run_loop(monkeypatch, _sched_cfg(at=_other_minute()))[0] == [], "时间没到不该触发"
     assert _run_loop(monkeypatch, _sched_cfg(freq="hourly"))[0] == [], "只支持 daily/weekly"
 
 

@@ -158,7 +158,8 @@ build.bat
 ├── scripts/desktop.py      # PyWebview 桌面壳（端口检测 + 后台自启服务）
 ├── scripts/start_desktop.bat  # 源码双击启动
 ├── scripts/init_ai_config.py  # 本机 AI 端点初始化（Key 从环境变量/私有文件读，脚本内不含 Key）
-├── scripts/live_check.py   # 对着已跑起来的实例做只读体检（不写数据）
+├── scripts/live_check.py   # 对着已跑起来的实例做只读体检（打接口，不写数据）
+├── scripts/live_ui_check.py # 对着已跑起来的实例开真浏览器只读校验（证明界面没白屏）
 ├── scripts/scenario_test.py # 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据）
 ├── scripts/frozen_smoke.py # 冻结版自查：启动 dist 里的 exe 真打一遍接口
 ├── scripts/mcp_server.py   # MCP 服务（stdio）：让 AI 代理直接读写看板
@@ -216,6 +217,7 @@ AI 用例默认打本地假端点（`tests/llm_stub.py`，OpenAI 兼容），**�
 
 ```bat
 .venv\Scripts\python.exe scripts\live_check.py http://127.0.0.1:18320 --mcp
+.venv\Scripts\python.exe scripts\live_ui_check.py http://127.0.0.1:18320
 ```
 
 **每次打包后跑一次冻结版自查**（会短暂弹出应用窗口，脚本自己关掉它）：
