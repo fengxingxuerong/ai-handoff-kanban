@@ -16,7 +16,7 @@
 | `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程 |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
-| `tests/` | pytest 套件 248 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测 93%）。含真实浏览器点击测试 `test_frontend_e2e.py` |
+| `tests/` | pytest 套件 284 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测 93%）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
 | `scripts/live_check.py` | 对着**已在跑**的实例打接口做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
 | `scripts/live_ui_check.py` | 对着**已在跑**的实例开真浏览器做只读校验（Playwright + 系统 Edge/Chrome）：证明界面真的渲染出来了，不是白屏。全程只点导航类操作，不写一个字节 |
@@ -261,7 +261,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-16）**：`pytest` 278 通过 / 6 跳过 / 覆盖率 93%（门槛 90，余量 3 个点），约 75 秒。
+**验证基线（2026-09-16）**：`pytest` 284 收集（278 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+覆盖率 93%（门槛 90，余量 3 个点），约 135 秒。
+
+> 用例数**只在这一处写死**，README 与本文档其他位置引用时写「见验证基线」。
+> 数字以命令输出为准：`python -m pytest -o addopts="" --collect-only | tail -1`。
+> 每次加测试同步改这一行 —— 散落在多处填数字必然漂（2026-09-16 就同时存在 248/269/278 三个版本）。
 
 **下一步（按价值排序）**：
 

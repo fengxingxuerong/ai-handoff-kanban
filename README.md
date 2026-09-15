@@ -154,7 +154,7 @@ build.bat
 ├── app/main.py             # FastAPI 后端：项目/任务 CRUD + AI 监管/指令/交接/定时 API
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
 ├── web/index.html          # 前端看板（单页，深色主题，含 AI 界面；事件统一走 data-act 委托）
-├── tests/                  # pytest 套件 269 项，覆盖率 93%（含假 LLM 端点与真实浏览器点击测试，均不消耗配额）
+├── tests/                  # pytest 套件：接口/并发/安全/数据/AI/前端契约/真实浏览器点击（含假 LLM 端点与系统浏览器，均不消耗配额）
 ├── scripts/desktop.py      # PyWebview 桌面壳（端口检测 + 后台自启服务）
 ├── scripts/start_desktop.bat  # 源码双击启动
 ├── scripts/init_ai_config.py  # 本机 AI 端点初始化（Key 从环境变量/私有文件读，脚本内不含 Key）
@@ -191,11 +191,13 @@ rem 只跑前端真实点击测试（复用系统 Edge/Chrome 打开真页面点
 rem 读写性能基准（先量再改）
 .venv\Scripts\python.exe scripts\bench.py 1000
 
-rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 30 条用例，逐条打印目标/输入/预期/实际
+rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 33 条用例，逐条打印目标/输入/预期/实际
+rem （CI 里也有这一步：.github/workflows/test.yml 的 scenario job，改坏了会红）
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 ```
 
-`tests/` 共 116 项，覆盖：
+`tests/` 共 284 项（其中 6 项默认跳过，需 `KANBAN_LIVE=1` 才跑真实模型），覆盖率门槛 90%，
+实测 93%。数字以 `python -m pytest -o addopts="" --collect-only` 输出为准 —— 别手填，会漂。
 
 | 文件 | 覆盖内容 |
 | --- | --- |

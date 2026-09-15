@@ -27,11 +27,31 @@ jobs:
         # 前端点击测试复用 runner 自带的 Edge（channel=msedge），不需要下载 Chromium。
         run: python -m pytest -v
 
+  scenario:
+    # 场景测试用真 uvicorn 子进程 + 真 MCP stdio，一直游离在 pytest 之外，
+    # 于是"改坏了没人知道"。这里把它钉进 CI，失败即红。
+    runs-on: windows-latest
+    needs: pytest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 场景测试（真服务 + 真 MCP）
+        run: python scripts/scenario_test.py
+
   package:
     # 打包才能暴露的问题（例如 -w 模式下标准流为 None 导致 uvicorn 崩溃）在 pytest 里永远是盲区，
     # 所以每次 push 都真打一次包 + 真启动 exe 打接口。
     runs-on: windows-latest
-    needs: pytest
+    needs: [pytest, scenario]
     steps:
       - uses: actions/checkout@v4
 
