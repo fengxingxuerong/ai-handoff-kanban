@@ -16,12 +16,16 @@
 | `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程 |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
-| `tests/` | pytest 套件 116 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90% |
+| `tests/` | pytest 套件 226 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90% |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log` |
 | `scripts/live_check.py` | 对着**已在跑**的实例做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
 | `scripts/scenario_test.py` | 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据，可导出报告） |
+| `scripts/delivery_drill.py` | 交付演练：模拟换智能体接手，端到端 19 项（接手→执行→交接物→脱敏→迁移） |
+| `scripts/real_ai_test.py` | 真实模型 AI 功能测试：5 大功能 × 6 模型通道（消耗真实配额） |
+| `scripts/test_all_llm.py` | LLM 端点全量实测：端点×Key×模型 健康矩阵 |
+| `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
-| `scripts/mcp_server.py` | MCP 服务（stdio）：代理可列项目/读交接包/加任务/改进度 |
+| `scripts/mcp_server.py` | MCP 服务（stdio）：13 个工具，代理可列项目/拉接手包(context)/读写任务/生成交接物 |
 | `build.bat` | 建 venv、装依赖、PyInstaller 打包 |
 
 ## 精确命令
@@ -60,6 +64,7 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 ```bat
 .venv\Scripts\python.exe -m PyInstaller -F -w -n "AI交接看板" scripts\desktop.py ^
   --hidden-import app.main --hidden-import uvicorn --add-data "%~dp0web;web" --paths "%~dp0" ^
+  --icon "%~dp0app.ico" ^
   --distpath dist --workpath build --specpath build --noconfirm
 ```
 
@@ -75,12 +80,17 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
    由 `runAction()` 统一分发（`tests/test_frontend.py` 会强制这条）。
    历史事故：`onclick="confirmDeleteProject('id','${esc(name)}')"` 里 `&#39;` 会被 HTML 解码回单引号，
    项目名带撇号时按钮直接报 JS 语法错误。动态列表另用 `data-pid` + 局部委托（见 `bindCardEvents`）。
-4. **状态与优先级只能取固定值**：项目 `规划中/进行中/已暂停/已完成`，任务 `待办/进行中/已完成/阻塞`，
+4. **kimi 系模型只允许 temperature=1**。`app/llm.py` 的 `chat()` 已按模型名自动适配，
+   并对 400 Temperature 错误自动用 1 重试兜底。新增模型时若报该错，优先在 `_model_temp` 加适配，不要绕过网关直调。
+5. **杀 exe 进程树必须 `taskkill /F /T /PID`**。PyInstaller -F 单文件会拉起子进程跑实际服务，
+   `terminate()` 只杀父进程，子进程残留会占用端口与 exe 文件（历史事故：打包时 PermissionError 拒绝访问）。
+   `frozen_smoke.py` 已内置进程树清理 + 端口兜底检查。
+6. **状态与优先级只能取固定值**：项目 `规划中/进行中/已暂停/已完成`，任务 `待办/进行中/已完成/阻塞`，
    优先级 `高/中/低`。前后端各有一层白名单：后端 `ProjectIn/TaskIn` 用 `Literal` 返回 422，
    前端用 `STATUS_SET/PRIORITY_SET` 兜底（这两个值会被拼进 class 名与文本）。
-5. **密钥绝不进项目目录**。Key 只存在于 `%USERPROFILE%\.ai-kanban\config.json` 或
+7. **密钥绝不进项目目录**。Key 只存在于 `%USERPROFILE%\.ai-kanban\config.json` 或
    `keys.local.json`，初始化脚本从环境变量读（`KANBAN_KEY_<端点名>`）。
-6. **示例数据（`_SAMPLE_DATA`）必须保持脱敏**，不能出现真实项目名与本机路径 —— 它会随 exe 分发。
+8. **示例数据（`_SAMPLE_DATA`）必须保持脱敏**，不能出现真实项目名与本机路径 —— 它会随 exe 分发。
 
 ## MCP 服务（让代理直接读写看板）
 

@@ -302,6 +302,45 @@ def t_agents_md(args: dict) -> str:
     return f"<!-- 来源：{source} -->\n\n{text}"
 
 
+def t_context(args: dict) -> str:
+    """机器可读接手包：一次拿到背景/交接说明/可执行任务/代码现实/就绪度"""
+    pid = args.get("project_id") or ""
+    p = _find(pid)
+    if not p:
+        raise ValueError(f"找不到项目：{pid}")
+    ctx = kanban.project_context(pid)
+    parts = [
+        f"【{ctx['project']['name']}】接手上下文（{ctx['generated_at']}）",
+        f"状态：{ctx['project']['status']}（进度 {ctx['project']['progress']}%）| 优先级：{ctx['project']['priority']} | 标签：{'、'.join(ctx['project'].get('tags') or []) or '无'}",
+    ]
+    if ctx.get("code_reality"):
+        cr = ctx["code_reality"]
+        parts.append(f"代码现实：分支 {cr.get('branch') or '—'}，最近提交 {cr.get('last_commit_at') or '—'}（{cr.get('days_since_commit')} 天前），未提交文件 {cr.get('uncommitted_files')} 个")
+    if ctx["project"].get("background"):
+        parts.append("项目背景：" + ctx["project"]["background"])
+    if ctx["project"].get("handoff_note"):
+        parts.append("交接说明（务必先读）：" + ctx["project"]["handoff_note"])
+    if ctx["project"].get("next_action"):
+        parts.append("下一步行动：" + ctx["project"]["next_action"])
+    if ctx["start_here"]:
+        parts.append("现在就能动手的任务：")
+        parts += [f"  - {t['title']}（{t.get('priority','中')}）{' @' + '、'.join(t['refs']) if t.get('refs') else ''}"
+                  for t in ctx["start_here"]]
+    todo = ctx["tasks"]["todo"]
+    doing = ctx["tasks"]["in_progress"]
+    blocked = ctx["tasks"]["blocked"]
+    if doing:
+        parts.append("进行中：" + "；".join(t["title"] for t in doing))
+    if todo:
+        parts.append("待办：" + "；".join(t["title"] for t in todo))
+    if blocked:
+        parts.append("阻塞：" + "；".join(t["title"] for t in blocked))
+    rd = ctx["readiness"]
+    parts.append(f"交接就绪度：{rd['score']}/100" + (f"（缺口：{'、'.join(rd['missing'])}）" if rd["missing"] else "（齐备）"))
+    parts.append("—— 来自 AI 交接看板 MCP（可继续用 kanban_* 工具读写任务）")
+    return "\n".join(parts)
+
+
 TOOLS: list[dict] = [
     {
         "name": "kanban_list_projects",
@@ -447,6 +486,15 @@ TOOLS: list[dict] = [
             "required": ["project_id"], "additionalProperties": False,
         },
     },
+    {
+        "name": "kanban_context",
+        "description": "获取项目的机器可读接手包：背景、交接说明、现在就能动手的任务（依赖已满足）、代码现实、交接就绪度。换人/换工具接手时先调这个，一次拿到全部上下文。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"project_id": {"type": "string"}},
+            "required": ["project_id"], "additionalProperties": False,
+        },
+    },
 ]
 
 HANDLERS = {
@@ -462,6 +510,7 @@ HANDLERS = {
     "kanban_stats": t_stats,
     "kanban_handoff": t_handoff,
     "kanban_agents_md": t_agents_md,
+    "kanban_context": t_context,
 }
 
 

@@ -109,12 +109,37 @@ def main() -> int:
 
         return report(data_dir)
     finally:
-        proc.terminate()
+        # PyInstaller -F 单文件模式：主进程会拉起子进程跑实际服务，
+        # terminate 只能杀父进程，子进程会残留（占用端口与 exe 文件）。
+        # 必须用 taskkill /T 杀整棵进程树；杀完 socket 释放有延迟，需等待后复查。
+        import socket
+        import time as _time
+
+        def port_listening(port: int) -> bool:
+            s = socket.socket()
+            s.settimeout(0.5)
+            r = s.connect_ex(("127.0.0.1", port)) == 0
+            s.close()
+            return r
+
         try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-        print("已关闭应用")
+            port = int(BASE.rsplit(":", 1)[1])
+        except Exception:
+            port = 18395
+        for _ in range(3):
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           capture_output=True)
+            try:
+                proc.wait(timeout=10)
+            except Exception:
+                pass
+            _time.sleep(1.2)  # 等 socket 释放
+            if not port_listening(port):
+                break
+        if port_listening(port):
+            print("警告：端口仍在监听，进程树未清理干净")
+        else:
+            print("已关闭应用")
 
 
 def report(data_dir: Path) -> int:

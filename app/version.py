@@ -8,10 +8,10 @@
 from __future__ import annotations
 
 # 语义化版本：主版本.次版本.修订
-__version__ = "0.9.0"
+__version__ = "1.0.0"
 
 # 源码最后变更时间（每次发版时手填，用于发现"exe 比源码旧"）
-BUILD_TIME = "2026-09-15 01:00"
+BUILD_TIME = "2026-09-15 12:00"
 
 APP_VERSION = __version__
 APP_NAME_VERSION = f"AI 交接看板 v{__version__}"
