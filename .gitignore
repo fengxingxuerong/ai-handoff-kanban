@@ -14,6 +14,7 @@ __pycache__/
 *.pyc
 *.spec
 .pytest_cache/
+.pytest_probe/
 .coverage
 .coverage.*
 htmlcov/

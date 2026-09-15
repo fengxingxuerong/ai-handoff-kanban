@@ -59,6 +59,9 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(200, {"choices": [{"message": {"content": value}}]})
             elif kind == "json":
                 self._send(200, {"choices": [{"message": {"content": json.dumps(value, ensure_ascii=False)}}]})
+            elif kind == "status_body":
+                code, message = value
+                self._send(code, {"error": {"message": message}})
             else:
                 self._send(500, {"error": {"message": "unknown stub item"}})
             return
@@ -102,6 +105,13 @@ class StubLLM:
 
     def push_status(self, code: int) -> None:
         self.queue.append(code)
+
+    def push_status_body(self, code: int, message: str) -> None:
+        """带自定义错误正文的状态码：测「按正文分支」的逻辑（如 400 里的 temperature 提示）"""
+        self.queue.append(("status_body", (code, message)))
+
+    def set_default_status_body(self, code: int, message: str) -> None:
+        self.default = ("status_body", (code, message))
 
     def set_default_json(self, obj) -> None:
         self.default = ("json", obj)
