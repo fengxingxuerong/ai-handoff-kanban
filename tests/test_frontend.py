@@ -98,6 +98,28 @@ def test_data_import_export_ui():
     assert 'id="import-file"' in HTML, "缺导入文件选择器"
 
 
+GLOBALS = {
+    "parseInt", "parseFloat", "Number", "String", "Boolean", "Array", "Object", "JSON", "Date",
+    "Math", "Set", "Map", "Promise", "fetch", "confirm", "alert", "prompt", "isNaN", "setTimeout",
+    "clearTimeout", "setInterval", "clearInterval", "encodeURIComponent", "decodeURIComponent",
+    "if", "for", "while", "switch", "catch", "return", "typeof", "await", "new", "function",
+}
+
+
+def test_every_action_target_is_actually_defined():
+    """**注册了 ≠ 存在**：ACTIONS 里调用的函数必须在页面里真的有定义。
+
+    历史事故：`exportData` / `importData` 两个按钮注册进了 ACTIONS，
+    但这两个函数在 index.html 里从未定义过 —— 点下去只有一条 ReferenceError，
+    用户看到的是"按钮点了没反应"。而原来的契约测试只查注册、不查存在，全程绿灯。
+    """
+    calls = set(re.findall(r"(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(", ACTIONS_BLOCK.group(1)))
+    defined = set(re.findall(r"(?:async\s+)?function\s+([A-Za-z_$][\w$]*)", HTML))
+    defined |= set(re.findall(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", HTML))
+    missing = sorted(c for c in calls if c not in defined and c not in GLOBALS)
+    assert not missing, f"ACTIONS 里调用了不存在的函数（点了只有 JS 报错）：{missing}"
+
+
 def test_global_search_ui():
     """全局任务搜索：顶栏入口 + 弹窗 + 防抖 + Ctrl+K"""
     assert 'data-act="openGlobalSearch"' in HTML

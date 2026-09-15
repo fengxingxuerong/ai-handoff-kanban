@@ -154,7 +154,7 @@ build.bat
 ├── app/main.py             # FastAPI 后端：项目/任务 CRUD + AI 监管/指令/交接/定时 API
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
 ├── web/index.html          # 前端看板（单页，深色主题，含 AI 界面；事件统一走 data-act 委托）
-├── tests/                  # pytest 套件 248 项，覆盖率 93%（含假 LLM 端点与真实浏览器点击测试，均不消耗配额）
+├── tests/                  # pytest 套件 265 项，覆盖率 93%（含假 LLM 端点与真实浏览器点击测试，均不消耗配额）
 ├── scripts/desktop.py      # PyWebview 桌面壳（端口检测 + 后台自启服务）
 ├── scripts/start_desktop.bat  # 源码双击启动
 ├── scripts/init_ai_config.py  # 本机 AI 端点初始化（Key 从环境变量/私有文件读，脚本内不含 Key）
@@ -207,6 +207,7 @@ rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 30 条用�
 | `test_frontend.py` | 前端契约：内联事件必须为零、每个 `data-act` 必须有实现、搜索防抖 |
 | `test_frontend_e2e.py` | **真实浏览器点击**（Playwright + 系统 Edge/Chrome）：渲染、建项目、加任务、搜索跳转、删除确认、主题、空看板、特殊字符；任何 JS 报错直接判失败 |
 | `test_coverage_gaps.py` | 补齐"逻辑真但一直没测到"的分支：健康趋势对比（down/up/flat/new）、调度触发与防重、LLM 网关错误分类与 temperature 重试、导出路径放行 |
+| `test_data_io.py` | 全量数据导出/导入：导出不含密钥、导入是覆盖语义且先做快照、脏数据规范化、坏文件拒绝、往返一致性 |
 
 AI 用例默认打本地假端点（`tests/llm_stub.py`，OpenAI 兼容），**不消耗任何模型配额**；
 只有 `KANBAN_LIVE=1` 的 `test_ai.py` 会走真实模型。

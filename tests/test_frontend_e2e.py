@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -194,6 +195,72 @@ def test_settings_and_recover_panel_open(ui):
     page.click("[data-act='showRecoverable']")
     page.wait_for_selector("#recover-list", timeout=10000)
     assert re.search(r"当前：\d+ 个项目", page.locator("#recover-list").inner_text())
+
+
+# ---------------- 导出 / 导入（此前是死按钮） ----------------
+
+def test_export_button_really_downloads(ui, tmp_path):
+    """历史事故：导出按钮注册了 ACTIONS，但 exportData() 从未定义 —— 点了只有 ReferenceError。
+    这条用例点真按钮、等真下载、再验文件内容（含"不能带密钥"）。"""
+    page, api, _ = ui
+    make_project(api, "要导出的项目")
+    page.reload(wait_until="domcontentloaded")
+    page.click("[data-act='openAISettings']")
+    page.wait_for_selector("[data-act='exportData']", timeout=10000)
+
+    with page.expect_download(timeout=15000) as dl:
+        page.click("[data-act='exportData']")
+    download = dl.value
+    assert download.suggested_filename.startswith("kanban-data_")
+    assert download.suggested_filename.endswith(".json")
+
+    path = tmp_path / "downloaded.json"
+    download.save_as(str(path))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert [p["name"] for p in data["projects"]] == ["要导出的项目"]
+    assert "api_keys" not in path.read_text(encoding="utf-8"), "导出文件里带了密钥字段"
+
+
+def test_import_button_really_replaces_data(ui, tmp_path):
+    """导入同样是死按钮：这个用例走完"选文件 → 确认 → 数据真的被替换"全流程"""
+    page, api, _ = ui
+    make_project(api, "导入前的项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+
+    payload = {"app": "ai-kanban", "version": "1.0.0", "exported_at": "2026-09-15 10:00",
+               "projects": [{"id": "imp1", "name": "导入进来的项目", "status": "进行中",
+                             "priority": "高", "progress": 20, "tasks": []}]}
+    file = tmp_path / "kanban-data.json"
+    file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    page.on("dialog", lambda d: d.accept())          # 覆盖前会弹确认
+    page.click("[data-act='openAISettings']")
+    page.wait_for_selector("[data-act='importData']", timeout=10000)
+    page.click("[data-act='importData']")             # 触发隐藏的文件选择框
+    page.set_input_files("#import-file", str(file))
+
+    page.wait_for_selector(".pcard:has-text('导入进来的项目')", timeout=15000)
+    assert api.get("/api/projects")[1]["projects"][0]["name"] == "导入进来的项目"
+
+
+# ---------------- 拖拽改状态 ----------------
+
+def test_drag_task_between_columns(ui):
+    """四列看板拖拽：把任务从「待办」拖到「进行中」，状态要真的落到服务端"""
+    page, api, _ = ui
+    pid = make_project(api, "拖拽项目")["id"]
+    api.post(f"/api/projects/{pid}/tasks", {"title": "拖我一把", "status": "待办"})
+    page.reload(wait_until="domcontentloaded")
+    page.locator(".pcard").first.click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.wait_for_selector(".kcol.k-todo .tcard", timeout=10000)
+
+    # 列是 class 不是 id：k-todo / k-doing 挂在 .kcol 上
+    page.drag_and_drop(".kcol.k-todo .tcard", ".kcol.k-doing")
+    page.wait_for_selector(".kcol.k-doing:has-text('拖我一把')", timeout=15000)
+    tasks = api.get(f"/api/projects/{pid}")[1]["tasks"]
+    assert tasks[0]["status"] == "进行中", f"拖拽没落库：{tasks[0]['status']}"
 
 
 def test_pages_handle_empty_board(ui):

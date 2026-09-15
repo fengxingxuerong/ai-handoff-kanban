@@ -2384,6 +2384,56 @@ async function applySummarize() {
   btn.classList.remove("ai-loading-btn");
 }
 
+// ============ 全量数据导出 / 导入 ============
+async function exportData() {
+  // 用 fetch 拿原始响应体：api() 会把结果解析成 JSON，拿不到下载用的 blob
+  try {
+    const res = await fetch("/api/data/export");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "").slice(0, 12);
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `kanban-data_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast("已导出全部数据 ✓");
+  } catch (e) { toast("导出失败：" + e.message); }
+}
+
+function importData() {
+  const input = document.getElementById("import-file");
+  input.value = "";                       // 清空才能连续导入同一个文件
+  input.click();
+}
+
+async function onImportFilePicked(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  try {
+    JSON.parse(text);
+  } catch (e) {
+    toast("这个文件不是合法 JSON：" + e.message);
+    return;
+  }
+  // 后端是覆盖语义（这正是"换机恢复"该有的行为），必须说清楚，别让用户以为在合并
+  if (!confirm(`导入会【覆盖】现有全部项目（导入前会自动做一份备份）。\n\n文件：${file.name}\n确定继续？`)) return;
+  try {
+    const r = await api("/api/data/import", { method: "POST", body: JSON.stringify({ content: text }) });
+    toast(`已导入 ${(r.projects || []).length} 个项目 ✓`);
+    await loadOverview();
+  } catch (e) { toast("导入失败：" + e.message); }
+}
+
+// 文件选择框不会触发 click 动作，事件委托覆盖不到，单独绑定
+(function bindImportInput() {
+  const input = document.getElementById("import-file");
+  if (input) input.addEventListener("change", onImportFilePicked);
+})();
+
 // ============ 数据备份 ============
 async function backupNow() {
   const btn = document.getElementById("backup-btn");
