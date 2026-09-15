@@ -652,6 +652,7 @@
             <button class="btn small" data-act="openSummarize">📥 会话提炼</button>
             <button class="btn small" data-act="copyContextJson" title="机器可读 JSON，供智能体/MCP 直接拉取接手">🧩 上下文 JSON</button>
             <button class="btn small" data-act="loadGitInfo">🌿 代码现状</button>
+            <button class="btn small" data-act="downloadHandoffPage" title="单文件网页，含依赖图与一键复制，离线可用">🖧 接手页 HTML</button>
           </div>
         </div>
 
@@ -1187,6 +1188,7 @@ const ACTIONS = {
   openAgentsMD: () => openAgentsMD(),
   openSummarize: () => openSummarize(),
   loadGitInfo: () => loadGitInfo(),
+  downloadHandoffPage: () => downloadHandoffPage(),
   openAIHandoff: () => openAIHandoff(),
   applySuggestion: (arg, ev, el) => applySuggestion(el),
   // —— 弹窗通用 ——
@@ -2585,6 +2587,25 @@ async function copyContextJson() {
     try { await navigator.clipboard.writeText(text); toast("机器可读上下文已复制 ✓ 直接粘给智能体即可接手"); }
     catch (e) { fallbackCopy(text); }
   } catch (e) { toast("获取失败：" + e.message); }
+}
+
+async function downloadHandoffPage() {
+  if (!currentPid) return;
+  try {
+    const res = await fetch(`/api/export/page/${currentPid}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const html = await res.text();
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (current && current.name ? current.name : "项目") + "_接手页_"
+      + new Date().toISOString().slice(0, 10) + ".html";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+    toast("接手页已下载 ✓ 双击即可打开（离线可用）");
+  } catch (e) { toast("接手页生成失败：" + e.message); }
 }
 
 // ============ 启动 ============

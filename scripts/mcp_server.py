@@ -38,6 +38,13 @@ from app import main as kanban  # noqa: E402
 SERVER_NAME = "ai-kanban"
 SERVER_VERSION = "1.0.0"
 
+# 桌面应用服务的端口（与 app/main.py 的 SERVICE_PORT 同一口径），用于给出"活数据"直链
+SERVICE_PORT = os.environ.get("KANBAN_PORT", "18320")
+
+
+def local_url(path: str) -> str:
+    return f"http://127.0.0.1:{SERVICE_PORT}{path}"
+
 # 支持协商的协议版本（新→旧）；客户端报别的版本时回落到最新
 SUPPORTED_VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 DEFAULT_VERSION = SUPPORTED_VERSIONS[0]
@@ -337,6 +344,7 @@ def t_context(args: dict) -> str:
         parts.append("阻塞：" + "；".join(t["title"] for t in blocked))
     rd = ctx["readiness"]
     parts.append(f"交接就绪度：{rd['score']}/100" + (f"（缺口：{'、'.join(rd['missing'])}）" if rd["missing"] else "（齐备）"))
+    parts.append(f"实时上下文（本机服务，活数据）：{local_url('/api/context/' + pid)}")
     parts.append("—— 来自 AI 交接看板 MCP（可继续用 kanban_* 工具读写任务）")
     return "\n".join(parts)
 
@@ -546,7 +554,9 @@ def handle(msg: dict) -> dict | None:
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
             "instructions": ("这是「AI 交接看板」：管理多个项目的状态与交接上下文。"
                              "开工前先 kanban_list_projects，再用 kanban_get_project 或 kanban_handoff 读上下文；"
-                             "干完一段活请用 kanban_update_project 更新 progress 与 next_action。"),
+                             "干完一段活请用 kanban_update_project 更新 progress 与 next_action。"
+                             f"需要最新数据时也可以直接 GET {local_url('/api/context/<项目id>')}"
+                             "（本机服务，取到的是活的，不是快照）。"),
         })
 
     if method in ("notifications/initialized", "initialized"):

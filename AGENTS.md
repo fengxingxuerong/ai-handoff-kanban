@@ -15,8 +15,9 @@
 | --- | --- |
 | `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程 |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
+| `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
-| `tests/` | pytest 套件 284 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测 93%）。含真实浏览器点击测试 `test_frontend_e2e.py` |
+| `tests/` | pytest 套件 295 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测 93%）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
 | `scripts/live_check.py` | 对着**已在跑**的实例打接口做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
 | `scripts/live_ui_check.py` | 对着**已在跑**的实例开真浏览器做只读校验（Playwright + 系统 Edge/Chrome）：证明界面真的渲染出来了，不是白屏。全程只点导航类操作，不写一个字节 |
@@ -103,6 +104,12 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 7. **密钥绝不进项目目录**。Key 只存在于 `%USERPROFILE%\.ai-kanban\config.json` 或
    `keys.local.json`，初始化脚本从环境变量读（`KANBAN_KEY_<端点名>`）。
 8. **示例数据（`_SAMPLE_DATA`）必须保持脱敏**，不能出现真实项目名与本机路径 —— 它会随 exe 分发。
+9. **交接物默认不出本机**：导出的直链只允许 `127.0.0.1`（`app/main.py:_local_url`、
+   `scripts/mcp_server.py:local_url`）。想给远端智能体就必须走 `redact=1` 脱敏 + 手工确认，
+   **不要加"公网可访问的分享链接"这种能力** —— 那等于把看板数据推出 `%USERPROFILE%\.ai-kanban`。
+10. **接手页（`app/handoff_page.py`）必须自包含**：不引任何 CDN、不联网、单文件双击可用；
+   依赖图用内联 SVG，不要引 mermaid 之类的在线渲染（任务标题会发给第三方）。
+   `tests/test_handoff_page.py` 会强制这两条（无外链、字段转义）。
 
 ## MCP 服务（让代理直接读写看板）
 
@@ -261,7 +268,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-16）**：`pytest` 284 收集（278 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+**验证基线（2026-09-16）**：`pytest` 295 收集（289 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
 覆盖率 93%（门槛 90，余量 3 个点），约 135 秒。
 
 > 用例数**只在这一处写死**，README 与本文档其他位置引用时写「见验证基线」。

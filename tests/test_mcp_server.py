@@ -378,3 +378,45 @@ def test_cross_process_lock_blocks_a_second_writer(tmp_path):
     assert elapsed >= 0.8, f"没有等到锁就写了（耗时 {elapsed:.2f}s）"
     data = json.loads((data_dir / "projects.json").read_text(encoding="utf-8"))
     assert any(p["name"] == "等待后写入" for p in data["projects"])
+
+
+# ---------------- 实时直链（本机取活数据，而不是吃快照） ----------------
+
+def test_initialize_instructions_advertise_local_url(mcp):
+    resp = mcp.call("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}})
+    text = resp["result"]["instructions"]
+    assert "/api/context/" in text
+    assert "127.0.0.1" in text, "直链只能指向本机，不能引导智能体去公网取数据"
+
+
+def test_context_tool_returns_live_link(mcp):
+    _, err = mcp.tool("kanban_create_project", {"name": "直链测试项目", "status": "进行中"})
+    assert not err
+    text, err = mcp.tool("kanban_find_project", {"query": "直链测试项目"})
+    assert not err
+    pid = text.split("[")[-1].split("]")[0]
+
+    text, err = mcp.tool("kanban_context", {"project_id": pid})
+    assert not err
+    assert f"127.0.0.1:18320/api/context/{pid}" in text
+
+
+# ---------------- 实时直链（本机取活数据，而不是吃快照） ----------------
+
+def test_initialize_instructions_advertise_local_url(mcp):
+    resp = mcp.call("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}})
+    text = resp["result"]["instructions"]
+    assert "/api/context/" in text
+    assert "127.0.0.1" in text, "直链只能指向本机，不能引导智能体去公网取数据"
+
+
+def test_context_tool_returns_live_link(mcp):
+    _, err = mcp.tool("kanban_create_project", {"name": "直链测试项目", "status": "进行中"})
+    assert not err
+    text, err = mcp.tool("kanban_find_project", {"query": "直链测试项目"})
+    assert not err
+    pid = text.split("[")[-1].split("]")[0]
+
+    text, err = mcp.tool("kanban_context", {"project_id": pid})
+    assert not err
+    assert f"127.0.0.1:18320/api/context/{pid}" in text

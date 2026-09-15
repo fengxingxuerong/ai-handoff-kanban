@@ -22,13 +22,17 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator
 
 from . import llm
+from .handoff_page import build_handoff_page
 from .version import APP_VERSION, BUILD_TIME
 
 APP_NAME = "ai-kanban"
+# 交接包里打印的直链端口。桌面壳用同一个环境变量起服务，两边口径一致；
+# 用户没设时两边都落回 18320。服务没开时链接取不到，交接包正文仍可用（它是快照）。
+SERVICE_PORT = os.environ.get("KANBAN_PORT", "18320")
 DEFAULT_STATUS = ["规划中", "进行中", "已暂停", "已完成"]
 DEFAULT_TASK_STATUS = ["待办", "进行中", "已完成", "阻塞"]
 DEFAULT_PRIORITY = ["高", "中", "低"]
@@ -903,6 +907,11 @@ def delete_task(tid: str):
 
 # ---- 交接摘要导出 ----
 
+def _local_url(path: str) -> str:
+    """本机服务的直链（只给 127.0.0.1，不给局域网地址——不出本机是硬边界）"""
+    return f"http://127.0.0.1:{SERVICE_PORT}{path}"
+
+
 def _build_handoff_markdown(p: dict) -> str:
     lines = []
     lines.append(f"# {p['name']} · 项目交接摘要")
@@ -958,6 +967,17 @@ def _build_handoff_markdown(p: dict) -> str:
                 marks = "、".join(f"`{r}`" for r in t["refs"])
                 lines.append(f"- {t.get('title', '')} → {marks}")
             lines.append("")
+    lines.append("## 实时上下文（比上面这份快照更新）")
+    lines.append("")
+    lines.append("本看板是本机服务，上面内容是导出那一刻的快照。同一台机器上的智能体可以直接取最新的：")
+    lines.append("")
+    pid = p.get("id") or ""
+    lines.append(f"- 结构化接手包（喂给智能体）：`{_local_url('/api/context/' + pid)}`")
+    lines.append(f"- Markdown 交接包：`{_local_url('/api/export/' + pid)}`")
+    lines.append(f"- 自包含接手页（人看的单文件网页）：`{_local_url('/api/export/page/' + pid)}`")
+    lines.append("")
+    lines.append("服务没开时这三个链接取不到，用上面的快照即可。")
+    lines.append("")
     lines.append("---")
     lines.append("由 AI 交接看板自动生成")
     return "\n".join(lines)
@@ -1129,6 +1149,30 @@ def export_all(redact: int = 0):
         md = _build_handoff_markdown(p)
         parts.append("\n\n---\n\n" + (redact_text(md) if redact else md))
     return PlainTextResponse("".join(parts), media_type="text/markdown; charset=utf-8")
+
+
+@app.get("/api/export/page/{pid}")
+def export_handoff_page(pid: str, redact: int = 0):
+    """自包含接手页：单文件 HTML，离线可用，人和智能体都能读。
+
+    为什么是文件不是链接：链接要出本机（数据离开 %USERPROFILE%\\.ai-kanban 就突破安全边界），
+    还会过期。文件 100% 可达，且同样能被智能体读。
+    """
+    found = find_project(pid)
+    if not found:
+        raise HTTPException(404, "项目不存在")
+    p = found[1]
+    md = _build_handoff_markdown(p)
+    page = build_handoff_page(
+        p, md,
+        git_block=_git_line_for_handoff(p),
+        port=SERVICE_PORT,
+        generated_at=now_str(),
+    )
+    if redact:
+        page = redact_text(page)
+    return HTMLResponse(page, headers={"Content-Disposition":
+                                       f'attachment; filename="handoff-{pid}.html"'})
 
 
 @app.get("/api/ai/trends")
