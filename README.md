@@ -165,7 +165,7 @@ build.bat
 ├── scripts/bench.py        # 读写性能基准（先量再改）
 ├── build.bat               # 一键打包 exe
 ├── pytest.ini              # pytest 配置
-├── .github/workflows/test.yml # CI：push/PR 自动跑测试
+├── .github/workflows/test.yml # CI：push/PR 自动跑测试 + 真打包一次并启动 exe 自查
 ├── .gitignore              # 排除运行期数据、密钥与构建产物
 └── requirements.txt / requirements-dev.txt
 ```

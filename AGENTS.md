@@ -17,7 +17,7 @@
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
 | `tests/` | pytest 套件 226 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90% |
-| `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log` |
+| `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
 | `scripts/live_check.py` | 对着**已在跑**的实例做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
 | `scripts/scenario_test.py` | 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据，可导出报告） |
 | `scripts/delivery_drill.py` | 交付演练：模拟换智能体接手，端到端 19 项（接手→执行→交接物→脱敏→迁移） |
@@ -194,6 +194,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   改桌面壳时不要删。排查同类问题先进 `<数据目录>\startup.log`。
 - **Windows 路径探测别用 PowerShell 的 `Invoke-RestMethod`**：本机有代理时对 127.0.0.1
   也可能超时，会误判成"服务挂了"。用 `scripts/frozen_smoke.py`（urllib + `ProxyHandler({})`）。
+- **无桌面会话时不要开窗**：CI（`windows-latest`）与服务器上没有桌面，pywebview 起窗会失败并带走整个进程。
+  凡是"真启动 exe"的自动化，一律带 `KANBAN_NO_WINDOW=1`（只服务不开窗），
+  `frozen_smoke.py` 在 CI 里就是这么跑的（数据目录由它自己指定为 `%TEMP%\kanban_frozen_smoke`）。
 - **`--specpath build` + 相对 `--add-data`**：会按 spec 目录解析，报
   `Unable to find ...\build\web`。必须用 `%~dp0` 绝对路径。
 - **改完源码忘了重打包**：`dist\AI交接看板.exe` 不会自动更新。判据是 exe 时间戳晚于 `app/`、`web/`、`scripts/desktop.py`。
@@ -209,34 +212,32 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 当前进度与下一步
 
-状态：可用（进度 95%）。2026-09-14 完成两轮加固：
+**状态：v1.0.0 转正、可用。** 演进过程（按提交顺序，细节见各 commit）：
 
-第一轮（功能与安全）：
+| 轮次 | 主题 | 关键产出 |
+| --- | --- | --- |
+| 一 | 功能与安全 | 并发丢更新（`mutate()` 单临界区）、状态白名单、Host/Origin 校验、密钥移出项目、示例数据脱敏、调度器防重 |
+| 二 | 工程化 | 58 处内联事件收敛为 `data-act`、pytest 套件起步、CI、`git init` |
+| 三 | 打包可用性 | 修掉冻结版 exe 起不来（见「容易踩的坑」第一条）、启动日志、HTTP 真探活、`frozen_smoke.py` |
+| 四 | 交接三件套 + 自愈 | 8 个工具入口文件、MCP 服务（stdio，13 工具）、跨进程写锁、last-good 自愈 + 恢复入口 |
+| 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
+| 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-- 修并发丢更新（单临界区 `mutate()`）+ 回归测试覆盖 20/30 并发落盘
-- 状态/优先级白名单（后端 422 + 前端收敛），修掉卡片内联事件拼串
-- 本地服务加 Host/Origin 校验、可选 `KANBAN_TOKEN`、导出路径限制系统目录
-- 密钥移出项目目录，示例数据脱敏，新增 `.gitignore` 与 `scripts/regression_test.py`
-- 调度器支持 weekly 真实语义 + `last_period` 防重
-- 修复 `build.bat` 因 `--specpath` 导致的打包失败
+**验证基线（2026-09-15）**：`pytest` 226 通过 / 6 跳过 / 覆盖率 90%（门槛 90，**贴线**）。
 
-第二轮（工程化）：
+**下一步（按价值排序）**：
 
-- 全部 58 处内联事件收敛为 `data-act` + `ACTIONS` 统一委托（页面内联事件归零）
-- 建立 pytest 套件 `tests/`（41 项：接口 / 并发 / 安全 / 前端契约），`pytest -v` 一键跑
-- 加 CI（`.github/workflows/test.yml`）与 `requirements-dev.txt`
-- `git init` + 首次提交
+1. **前端真实点击冒烟** —— 现在 UI 只有静态契约（内联事件归零、`data-act` 已注册），
+   没有真实点击与渲染断言，是唯一没护栏的层。它是当前最大的回归风险。
+2. **覆盖率余量** —— 90% 正好压在门槛上，再加几行无测试代码就红。别用降门槛来"修"。
+3. **`app/main.py` 拆分** —— 1784 行单模块（接口/数据层/AI/git/入口文件生成全在一起）。
+   拆的时候守住「写操作必须走 `mutate()`」这条，别顺手把临界区拆散。
+4. **存储层**：仍是整份 JSON 读改写。触发条件是「列表接口日常 > 300ms」，
+   那时直接换分片或 SQLite，**不要加缓存糊**（理由见「性能基线」）。
 
-第三轮（打包可用性，2026-09-14 晚）：
+**不要再做的事**（已经想清楚、别回头做）：
 
-- **修掉冻结版 exe 无法启动**：`-w` 下标准流为 None 导致 uvicorn 日志初始化崩溃，
-  后端从未起来过（旧 exe 也一样）。修法见「容易踩的坑」第一条
-- 桌面壳加启动日志 `startup.log` + 真实 HTTP 探活（不再只判断端口通不通）
-- 新增 `scripts/frozen_smoke.py`：每次打包后一条命令验证 exe 真能服务
+- 加更多功能 —— 功能面已经很宽，边际收益在下降，重心应转向验证与稳定性。
+- worktree 并行隔离、团队协作与权限 —— 不是这个项目的赛道（见 README「和同类工具比」）。
+- 给 `CLAUDE.md` 复制正文、给每个工具各存一份约定 —— 必然漂移，见「多智能体入口文件」。
 
-下一步候选：
-
-1. 把手工冒烟脚本 `scripts/*_test.py` 收敛进 `tests/`（目前两套并存）
-2. 把 `frozen_smoke.py` 接进 CI（打包 job 后跑一次）
-3. 多项目数据量变大后考虑分片存储或 SQLite（当前整份 JSON 读写）
-4. 前端拆文件（当前 2000+ 行单文件；如拆需引入轻量构建或改用 ES module + 本地静态服务）

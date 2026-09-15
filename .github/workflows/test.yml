@@ -24,7 +24,45 @@ jobs:
 
       - name: 运行测试
         # AI 用例默认跳过（需要真实模型配额）；这里只跑确定性用例
+        # 前端契约（内联事件清零 / data-act 必须注册）已包含在完整套件里，不再单独跑一遍
         run: python -m pytest -v
 
-      - name: 前端契约（内联事件是否清零）
-        run: python -m pytest tests/test_frontend.py -v
+  package:
+    # 打包才能暴露的问题（例如 -w 模式下标准流为 None 导致 uvicorn 崩溃）在 pytest 里永远是盲区，
+    # 所以每次 push 都真打一次包 + 真启动 exe 打接口。
+    runs-on: windows-latest
+    needs: pytest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 打包
+        run: |
+          python -m PyInstaller -F -w -n "AI交接看板" scripts\desktop.py `
+            --hidden-import app.main --hidden-import uvicorn `
+            --add-data "$($PWD.Path)\web;web" --paths "$($PWD.Path)" `
+            --icon "$($PWD.Path)\app.ico" `
+            --distpath dist --workpath build --specpath build --noconfirm
+        shell: pwsh
+
+      - name: 冻结版自查（真启动 exe 并打接口）
+        # KANBAN_NO_WINDOW=1：CI 没有桌面会话，只服务不开窗
+        # 数据目录由 frozen_smoke.py 自己指定（%TEMP%\kanban_frozen_smoke），这里不用传
+        env:
+          KANBAN_NO_WINDOW: "1"
+        run: python scripts/frozen_smoke.py
+
+      - name: 启动日志（失败时定位用）
+        if: failure()
+        run: |
+          Get-Content "$env:TEMP\kanban_frozen_smoke\startup.log" -ErrorAction SilentlyContinue
+          Get-ChildItem dist
+        shell: pwsh

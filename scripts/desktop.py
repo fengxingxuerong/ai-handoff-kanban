@@ -126,6 +126,17 @@ def main() -> None:
         log("端口已监听但 HTTP 无响应：服务线程可能已崩溃")
         raise SystemExit("后端无响应，详情见 " + str(LOG_FILE))
 
+    # 无窗口模式：只服务不开窗。给 CI 与服务器场景用 ——
+    # （-w 打包的 exe 在无桌面会话的机器上开窗会失败，连带把整个进程带走）
+    if os.environ.get("KANBAN_NO_WINDOW") == "1":
+        log("KANBAN_NO_WINDOW=1：无窗口模式，仅提供 HTTP 服务（Ctrl+C 退出）")
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            log("收到中断，退出")
+        return
+
     log("后端就绪，打开窗口")
     import webview
 
