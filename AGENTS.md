@@ -16,7 +16,7 @@
 | `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程 |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
-| `tests/` | pytest 套件 226 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90% |
+| `tests/` | pytest 套件 235 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
 | `scripts/live_check.py` | 对着**已在跑**的实例做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
 | `scripts/scenario_test.py` | 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据，可导出报告） |
@@ -41,6 +41,9 @@ rem 测试（pytest 自动起隔离环境并回收；带覆盖率，门檻 90%�
 .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .venv\Scripts\python.exe -m pytest -v
 set KANBAN_LIVE=1 && .venv\Scripts\python.exe -m pytest tests\test_ai.py -v
+
+rem 只跑前端真实点击测试（复用系统 Edge/Chrome，无需下载 Chromium）
+.venv\Scripts\python.exe -m pytest tests\test_frontend_e2e.py -v
 
 rem 性能基准（改数据层前先量）
 .venv\Scripts\python.exe scripts\bench.py 1000
@@ -179,10 +182,19 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 2. **AI 用例一律打本地假端点** `tests/llm_stub.py`（OpenAI 兼容，可注入文本/JSON/状态码/
    指定 Key 固定失败），不要在常规测试里消耗真实配额。需要真模型的用例放 `test_ai.py`，
    用 `KANBAN_LIVE=1` 显式启用。
-3. **前端契约测试是硬约束**：页面里出现任何内联事件属性、或 `data-act` 没有在 `ACTIONS` 注册，
-   `test_frontend.py` 直接红。新增按钮必须"加 `data-act` + 注册实现"。
-4. 覆盖率门槛写在 `pytest.ini`（`fail_under = 90`）。剩下的未覆盖行基本是
+3. **前端分两层测，别只写一层**：
+   - `test_frontend.py`：**静态契约** —— 页面里 `on*=` 必须为 0、每个 `data-act` 都已在 `ACTIONS` 注册。改前端时最先红的就是它。
+   - `test_frontend_e2e.py`：**真实浏览器点击**（Playwright 驱动系统 Edge/Chrome，`channel="msedge"`，
+     不下载 Chromium）。点真页面、断言真 DOM，任何 `console.error` / `pageerror` 直接判失败。
+     没装 playwright 或机器上没浏览器会自动 skip，不影响常规套件的确定性。
+   写 E2E 时容易踩的三点：
+   - 详情视图的判据是 `#view-detail.active`（不是某个 `#detail-panel`，它不存在）；
+   - 卡片按**更新时间倒序**，别用 `.first` 猜是哪张 —— 用 `.pcard:has-text('名字')` 定位；
+   - 卡片模板自带 `<b>` 加粗标签，所以"没被注入"的判据是
+     `.pcard b:has-text('项目')` 为 0，而不是"卡片里没有 b 元素"。
+4. **覆盖率门槛写在 `pytest.ini`**（`fail_under = 90`）。剩下的未覆盖行基本是
    `_is_forbidden_target` 的异常分支、`_scheduler_loop` 的常驻循环等难以稳定触发的路径。
+   **注意当前是贴线的**（实测 90%），加无测试代码前先补测试，别去降门槛。
 
 ## 容易踩的坑
 
@@ -223,17 +235,17 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-15）**：`pytest` 226 通过 / 6 跳过 / 覆盖率 90%（门槛 90，**贴线**）。
+**验证基线（2026-09-15）**：`pytest` 235 通过 / 6 跳过 / 覆盖率 90%（门槛 90，**贴线**），约 62 秒。
 
 **下一步（按价值排序）**：
 
-1. **前端真实点击冒烟** —— 现在 UI 只有静态契约（内联事件归零、`data-act` 已注册），
-   没有真实点击与渲染断言，是唯一没护栏的层。它是当前最大的回归风险。
-2. **覆盖率余量** —— 90% 正好压在门槛上，再加几行无测试代码就红。别用降门槛来"修"。
-3. **`app/main.py` 拆分** —— 1784 行单模块（接口/数据层/AI/git/入口文件生成全在一起）。
+1. **覆盖率余量** —— 90% 正好压在门槛上，再加几行无测试代码就红。别用降门槛来"修"。
+2. **`app/main.py` 拆分** —— 1784 行单模块（接口/数据层/AI/git/入口文件生成全在一起）。
    拆的时候守住「写操作必须走 `mutate()`」这条，别顺手把临界区拆散。
-4. **存储层**：仍是整份 JSON 读改写。触发条件是「列表接口日常 > 300ms」，
+3. **存储层**：仍是整份 JSON 读改写。触发条件是「列表接口日常 > 300ms」，
    那时直接换分片或 SQLite，**不要加缓存糊**（理由见「性能基线」）。
+4. E2E 扩容：目前 9 项只覆盖主流程（列表/建项目/加任务/搜索/删除/主题/设置面板/空看板/特殊字符），
+   拖拽排序、导入导出、监管报告等重交互还没进浏览器层。
 
 **不要再做的事**（已经想清楚、别回头做）：
 

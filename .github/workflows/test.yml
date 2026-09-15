@@ -23,8 +23,8 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: 运行测试
-        # AI 用例默认跳过（需要真实模型配额）；这里只跑确定性用例
-        # 前端契约（内联事件清零 / data-act 必须注册）已包含在完整套件里，不再单独跑一遍
+        # AI 用例默认跳过（需要真实模型配额）；这里只跑确定性用例。
+        # 前端点击测试复用 runner 自带的 Edge（channel=msedge），不需要下载 Chromium。
         run: python -m pytest -v
 
   package:
