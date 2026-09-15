@@ -161,6 +161,13 @@ def _post(base_url: str, api_key: str, model: str, messages: list, temperature: 
     return data["choices"][0]["message"]["content"]
 
 
+def _model_temp(model: str, temperature: float) -> float:
+    """部分模型（如 kimi 系列）只允许 temperature=1，直接适配避免一次必败请求"""
+    if "kimi" in (model or "").lower():
+        return 1
+    return temperature
+
+
 def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = DEFAULT_TIMEOUT) -> tuple[str, str]:
     """统一 LLM 调用入口：返回 (内容, 使用的端点名)。失败时抛出 LLMError。"""
     endpoints = [ep for ep in cfg.get("ai", {}).get("endpoints", []) if ep.get("enabled")]
@@ -181,15 +188,33 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
             continue
         # 选定模型：优先 active，否则端点第一个
         model = active if active in models else models[0]
+        temp = _model_temp(model, temperature)
         for key in keys:
             try:
-                return _post(ep["base_url"], key, model, messages, temperature, timeout), ep["name"]
+                return _post(ep["base_url"], key, model, messages, temp, timeout), ep["name"]
             except urllib.error.HTTPError as e:
                 code = e.code
+                body = ""
+                try:
+                    body = e.read().decode("utf-8", "replace")[:300]
+                except Exception:
+                    pass
+                # 模型不支持低 temperature（如 kimi 只允许 1）：用 1 重试一次
+                if code == 400 and "emperature" in body and temp != 1:
+                    try:
+                        return _post(ep["base_url"], key, model, messages, 1, timeout), ep["name"]
+                    except Exception as e2:
+                        errors.append(f"{ep['name']}/{model}: temp=1 重试仍失败 {type(e2).__name__}")
+                        time.sleep(0.4)
+                        continue
                 if code == 429:
                     errors.append(f"{ep['name']}/{model}: 限流(429)")
                 elif code in (401, 403):
                     errors.append(f"{ep['name']}/{model}: Key 无效({code})")
+                elif code == 402:
+                    errors.append(f"{ep['name']}/{model}: 余额不足(402)")
+                elif code in (404, 410):
+                    errors.append(f"{ep['name']}/{model}: 模型已下线({code})")
                 elif code >= 500:
                     errors.append(f"{ep['name']}/{model}: 服务错误({code})")
                 else:
