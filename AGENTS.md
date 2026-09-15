@@ -187,14 +187,17 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
      **且 ACTIONS 里调用的函数必须真的有定义**（这条是补的：`exportData`/`importData` 注册进表里
      但函数从未实现，按钮点了只有 ReferenceError，而旧契约测试只查注册，全程绿灯）。
    - `test_frontend_e2e.py`：**真实浏览器点击**（Playwright 驱动系统 Edge/Chrome，`channel="msedge"`，
-     不下载 Chromium）。点真页面、断言真 DOM，任何 `console.error` / `pageerror` 直接判失败。
+     不下载 Chromium）。点真页面、断言真 DOM，任何 `console.error` / `pageerror` / 非 favicon 的 4xx-5xx 直接判失败。
+     两个夹具：`ui`（普通实例）、`ai_ui`（**配了假 LLM 端点的实例** —— 报告/指令/提炼/测连接靠它才点得动）。
      没装 playwright 或机器上没浏览器会自动 skip，不影响常规套件的确定性。
-   写 E2E 时容易踩的四点：
+   写 E2E 时容易踩的五点：
    - 详情视图的判据是 `#view-detail.active`（不是某个 `#detail-panel`，它不存在）；
    - 看板四列是 **class**（`.kcol.k-todo` / `.kcol.k-doing` …），不是 id；
-   - 卡片按**更新时间倒序**，别用 `.first` 猜是哪张 —— 用 `.pcard:has-text('名字')` 定位；
-   - 卡片模板自带 `<b>` 加粗标签，所以"没被注入"的判据是
-     `.pcard b:has-text('项目')` 为 0，而不是"卡片里没有 b 元素"。
+   - **Playwright 默认自动取消 `confirm()`** —— 凡是有二次确认的流程（删除、提炼落地、导入覆盖）
+     都必须先 `page.on("dialog", lambda d: d.accept())`，否则点了等于没点；
+   - **favicon 的 404 是浏览器自发的**，监听器里要过滤掉，否则每条用例都会因为它变红；
+   - 夹具已经把页面打开了，用 API 造完数据要 `page.reload()` 才看得见；
+     卡片按**更新时间倒序**，别用 `.first` 猜是哪张 —— 用 `.pcard:has-text('名字')` 定位。
 4. **覆盖率门槛写在 `pytest.ini`**（`fail_under = 90`，实测 93%，余量 3 个点）。
    剩下的未覆盖行基本是 `_is_forbidden_target` 的异常分支、`Path.resolve()` 失败、
    `_scheduler_loop` 的常驻循环等难以稳定触发的路径 —— **别为了数字构造畸形环境硬凑**。
@@ -239,7 +242,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-15）**：`pytest` 265 通过 / 6 跳过 / 覆盖率 93%（门槛 90，余量 3 个点），约 70 秒。
+**验证基线（2026-09-15）**：`pytest` 269 通过 / 6 跳过 / 覆盖率 93%（门槛 90，余量 3 个点），约 78 秒。
 
 **下一步（按价值排序）**：
 
@@ -247,9 +250,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    拆的时候守住「写操作必须走 `mutate()`」这条，别顺手把临界区拆散。
 2. **存储层**：仍是整份 JSON 读改写。触发条件是「列表接口日常 > 300ms」，
    那时直接换分片或 SQLite，**不要加缓存糊**（理由见「性能基线」）。
-3. E2E 扩容：目前 12 项覆盖主流程（列表/建项目/加任务/搜索/删除/主题/设置面板/空看板/特殊字符/
-   导出下载/导入覆盖/拖拽改状态），监管报告、会话提炼、AGENTS.md 写入等 AI 相关交互还没进浏览器层
-   （需要给 E2E 起一个带假端点的服务实例）。
+3. E2E 已覆盖到 AI 交互（报告渲染、指令的人工闸门、提炼落地、测连接）。
+   还没进浏览器层的：AGENTS.md / 多工具入口文件的预览与写盘、备份与恢复面板的实际恢复动作、
+   监管趋势图。需要哪个就把对应的 `data-act` 点一遍 —— 夹具 `ai_ui` 已经把假端点配好了。
 4. 剩余未覆盖的 98 行基本是异常分支（`Path.resolve()` 失败、系统目录判定异常、各类 500 兜底）。
    要补就得构造畸形环境，收益递减 —— 别为了数字硬凑。
 

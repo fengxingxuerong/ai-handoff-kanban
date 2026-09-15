@@ -197,6 +197,141 @@ def test_settings_and_recover_panel_open(ui):
     assert re.search(r"当前：\d+ 个项目", page.locator("#recover-list").inner_text())
 
 
+# ---------------- AI 交互（起一个配了假端点的真服务） ----------------
+
+@pytest.fixture(scope="module")
+def ai_stub():
+    from llm_stub import StubLLM
+
+    stub = StubLLM().start()
+    yield stub
+    stub.stop()
+
+
+@pytest.fixture
+def ai_ui(tmp_path_factory, browser, ai_stub):
+    """带假 LLM 端点的服务：AI 相关的交互（报告/指令/提炼/测连接）才能进浏览器层。
+
+    桩跑在 pytest 进程里，服务在子进程里通过 127.0.0.1 调它 —— 走的是真 HTTP，
+    既不消耗配额，也不改被测代码。
+    """
+    from conftest import _server_ctx
+
+    ai_stub.reset()
+    data_dir = tmp_path_factory.mktemp("kanban-e2e-ai")
+    (data_dir / "config.json").write_text(json.dumps({"ai": {
+        "endpoints": [ai_stub.endpoint("桩端点")],
+        "active_model": "stub-model",
+        "schedule": {"enabled": False, "frequency": "daily", "time": "09:00", "last_run": ""},
+    }}, ensure_ascii=False), encoding="utf-8")
+
+    with _server_ctx(data_dir, {"KANBAN_NO_SCHEDULER": "1"}) as (api, _proc):
+        ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+        page = ctx.new_page()
+        errors: list[str] = []
+
+        def on_console(m):
+            # favicon 的 404 是浏览器自发的，与应用无关，别当失败
+            if m.type == "error" and "favicon" not in m.text:
+                errors.append(f"console.error: {m.text}")
+
+        def on_response(r):
+            if r.status >= 400 and "favicon" not in r.url:
+                errors.append(f"HTTP {r.status}: {r.url}")
+
+        page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
+        page.on("console", on_console)
+        page.on("response", on_response)
+        page.goto(api.base + "/", wait_until="domcontentloaded")
+        page.wait_for_selector("[data-act='openProjectModal']", timeout=20000)
+        try:
+            yield page, api, ai_stub, errors
+        finally:
+            ctx.close()
+        assert not errors, "前端出现 JS 报错或请求失败：\n" + "\n".join(errors)
+
+
+def test_ai_report_renders_into_panel(ai_ui):
+    page, api, stub, _ = ai_ui
+    pid = make_project(api, "报告里的项目")["id"]
+    stub.push_json({
+        "summary": "整体节奏正常，注意补文档",
+        "insights": [{"id": pid, "name": "报告里的项目", "health": 88, "reason": "推进稳定",
+                      "risks": ["文档滞后"], "suggestions": [{"text": "补交接文档", "apply_to": "next_action"}]}],
+        "global_suggestions": ["统一收口"],
+    })
+    page.click("[data-act='openReport']")
+    page.wait_for_selector("#report-panel.show", timeout=15000)
+
+    body = page.locator("#report-body")
+    body.locator("text=整体节奏正常，注意补文档").first.wait_for(timeout=15000)
+    assert "88" in body.inner_text(), "健康分没渲染出来"
+    assert "文档滞后" in body.inner_text(), "风险项没渲染出来"
+
+
+def test_ai_command_needs_confirmation_before_writing(ai_ui):
+    """人工闸门：AI 解析出操作后**不能自动落库**，必须等用户点确认"""
+    page, api, stub, _ = ai_ui
+    pid = make_project(api, "指令目标项目")["id"]
+    stub.push_json({"actions": [{"type": "create_task", "project_id": pid,
+                                 "title": "指令加的任务", "desc": "来自自然语言"}],
+                    "reply": "好的"})
+
+    page.click("[data-act='openAICmd']")
+    page.wait_for_selector("#cmd-input", timeout=10000)
+    page.fill("#cmd-input", "给指令目标项目加个任务：指令加的任务")
+    page.click("#cmd-send-btn")
+    page.wait_for_selector("#cmd-exec-row:visible", timeout=15000)
+
+    tasks = api.get(f"/api/projects/{pid}")[1]["tasks"]
+    assert tasks == [], "还没确认就把任务写进去了 —— 人工闸门失效"
+
+    page.click("[data-act='executeActions']")
+    page.wait_for_selector("#cmd-chat:has-text('指令加的任务')", timeout=15000)
+    tasks = api.get(f"/api/projects/{pid}")[1]["tasks"]
+    assert [t["title"] for t in tasks] == ["指令加的任务"], "确认后应该真的落库"
+
+
+def test_ai_summarize_then_apply(ai_ui):
+    """会话粘贴提炼：提炼结果要能一键落到项目上"""
+    page, api, stub, _ = ai_ui
+    pid = make_project(api, "提炼目标项目")["id"]
+    page.reload(wait_until="domcontentloaded")            # fixture 先开了页面，新数据要刷新才可见
+    page.wait_for_selector(".pcard", timeout=15000)
+    stub.push_json({
+        "summary": "聊了部署与回滚",
+        "new_tasks": [{"title": "写部署文档", "desc": "含回滚步骤", "priority": "高", "status": "待办"}],
+        "next_action": "先补部署文档",
+        "handoff_note_updates": "部署走 CI",
+    })
+
+    page.locator(".pcard").first.click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.click("[data-act='openSummarize']")
+    page.wait_for_selector("#summarize-text", timeout=10000)
+    page.fill("#summarize-text", "我们决定用 CI 部署，回滚步骤要写进文档，下周一交付。" * 2)
+    page.click("#summarize-btn")
+    page.wait_for_selector("#summarize-result:visible", timeout=20000)
+    assert "写部署文档" in page.locator("#summarize-result").inner_text()
+
+    # 落地前有 confirm（人工闸门）；Playwright 默认会自动取消对话框，必须显式接受
+    page.on("dialog", lambda d: d.accept())
+    page.click("#summarize-apply-btn")
+    page.wait_for_selector("#col-todo:has-text('写部署文档')", timeout=15000)
+    detail = api.get(f"/api/projects/{pid}")[1]
+    assert [t["title"] for t in detail["tasks"]] == ["写部署文档"]
+    assert detail["next_action"] == "先补部署文档"
+
+
+def test_ai_test_connection_button(ai_ui):
+    """设置面板的「测试连接」要走通（端点挂了很常见，这个按钮是排查入口）"""
+    page, _, _, _ = ai_ui
+    page.click("[data-act='openAISettings']")
+    page.wait_for_selector("#ai-test-btn", timeout=10000)
+    page.click("#ai-test-btn")
+    page.wait_for_selector("#toast:has-text('连接成功')", timeout=15000)
+
+
 # ---------------- 导出 / 导入（此前是死按钮） ----------------
 
 def test_export_button_really_downloads(ui, tmp_path):
