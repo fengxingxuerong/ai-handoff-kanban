@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from . import llm
 from .handoff_page import build_handoff_page
+from .readiness import readiness_items, readiness_score
 from .version import APP_VERSION, BUILD_TIME
 
 APP_NAME = "ai-kanban"
@@ -471,26 +472,14 @@ def find_task(tid: str) -> tuple[dict, dict] | None:
     return None
 
 
-# ---------------- 交接就绪度（本地规则） ----------------
+# ---------------- 交接就绪度（本地规则，实现收口在 app/readiness.py） ----------------
 
 def _readiness_items(p: dict) -> list[dict]:
-
-
-
-    next_action = (p.get("next_action") or "").strip()
-    done_placeholder = next_action in ("已完结", "暂停中，暂无下一步", "无")
-    tasks = p.get("tasks", [])
-    return [
-        {"key": "handoff", "label": "交接说明已填写（给智能体）", "ok": bool((p.get("handoff_note") or "").strip()), "score": 35},
-        {"key": "next", "label": "下一步行动已明确", "ok": bool(next_action) and not done_placeholder, "score": 25},
-        {"key": "bg", "label": "项目背景已填写", "ok": bool((p.get("background") or "").strip()), "score": 15},
-        {"key": "tasks", "label": "已有任务清单", "ok": len(tasks) > 0, "score": 15},
-        {"key": "active", "label": "任务有推进（进行中/已完成）", "ok": any(t.get("status") in ("进行中", "已完成") for t in tasks), "score": 10},
-    ]
+    return readiness_items(p)
 
 
 def _readiness_score(p: dict) -> int:
-    return sum(it["score"] for it in _readiness_items(p) if it["ok"])
+    return readiness_score(p)
 
 
 # ---------------- 请求模型 ----------------

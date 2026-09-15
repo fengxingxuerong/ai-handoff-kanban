@@ -8,10 +8,14 @@
 
 本模块刻意不 import app.main：main 会 import 本模块，反过来会成环。
 需要的拓扑信息在这里就地算，只依赖传入的 dict。
+**就绪度例外**：它收口在 `app/readiness.py`（与本模块无依赖关系，不会成环）——
+原先这里抄了一份，结果和主界面口径不一致（同一项目 75 vs 100）。
 """
 from __future__ import annotations
 
 import html
+
+from .readiness import readiness_line
 
 # 依赖图布局
 COL_W, ROW_H, PAD = 230, 58, 16
@@ -207,7 +211,7 @@ def build_handoff_page(p: dict, md: str = "", *, git_block: str = "",
 <div><span>代码路径</span>{esc(p.get('repo_path') or '未指定')}</div>
 <div><span>标签</span>{esc('、'.join(p.get('tags') or []) or '无')}</div>
 <div><span>生成时间</span>{esc(generated_at or '—')}</div>
-<div><span>交接就绪度</span>{_readiness_line(p)}</div>
+<div><span>交接就绪度</span>{esc(readiness_line(p))}</div>
 </div>
 <nav>
 <a href="#handoff">交接说明</a><a href="#next">下一步</a><a href="#tasks">任务清单</a>
@@ -242,18 +246,3 @@ function cp() {{
 }}
 </script>
 </body></html>"""
-
-
-def _readiness_line(p: dict) -> str:
-    """就绪度不 import main（会成环），这里按同一套五项口径就地算"""
-    items = [
-        ("交接说明", bool((p.get("handoff_note") or "").strip()), 35),
-        ("下一步行动", bool((p.get("next_action") or "").strip()), 25),
-        ("项目背景", bool((p.get("background") or "").strip()), 15),
-        ("任务清单", bool(p.get("tasks")), 15),
-        ("任务有推进", any(t.get("status") in ("进行中", "已完成") for t in (p.get("tasks") or [])), 10),
-    ]
-    score = sum(w for _, ok, w in items if ok)
-    missing = [n for n, ok, _ in items if not ok]
-    tail = "（缺：" + "、".join(missing) + "）" if missing else "（齐备）"
-    return f"{score}/100 {tail}"
