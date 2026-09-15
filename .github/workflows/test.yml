@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# 同一分支连续 push 时，旧的那次已经没意义了，直接取消，别白烧 runner
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pytest:
     runs-on: windows-latest
@@ -15,6 +20,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
+      - name: 缓存 pip 依赖
+        uses: actions/cache@v4
+        with:
+          path: "~\\AppData\\Local\\pip\\Cache"
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
 
       - name: 安装依赖
         run: |
@@ -39,6 +51,13 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: 缓存 pip 依赖
+        uses: actions/cache@v4
+        with:
+          path: "~\\AppData\\Local\\pip\\Cache"
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
       - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
@@ -58,6 +77,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
+      - name: 缓存 pip 依赖
+        uses: actions/cache@v4
+        with:
+          path: "~\\AppData\\Local\\pip\\Cache"
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
 
       - name: 安装依赖
         run: |
