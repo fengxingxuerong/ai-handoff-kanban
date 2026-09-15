@@ -17,7 +17,7 @@
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
-| `tests/` | pytest 套件 295 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测 93%）。含真实浏览器点击测试 `test_frontend_e2e.py` |
+| `tests/` | pytest 套件 302 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测 94%）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
 | `scripts/live_check.py` | 对着**已在跑**的实例打接口做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
 | `scripts/live_ui_check.py` | 对着**已在跑**的实例开真浏览器做只读校验（Playwright + 系统 Edge/Chrome）：证明界面真的渲染出来了，不是白屏。全程只点导航类操作，不写一个字节 |
@@ -223,6 +223,20 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    （2026-09-16 凌晨实际踩到：一条调度用例在 00:01 那天红了）。
 6. **隐藏元素取文本要用 `text_content()`**：`inner_text()` 只返回"渲染出来"的文本，
    弹窗/折叠区里的文字（如设置面板里的版本号）拿不到，会误判成"没渲染"。
+7. **并行是默认行为**：`pytest.ini` 的 addopts 带 `-n auto`（实测 135s → 41s）。
+   慢用例都是真子进程（uvicorn / MCP stdio）与真浏览器，彼此独立，叠起来就是净赚。
+   定位单个问题用串行更易读：`pytest -o addopts="-q" tests/test_x.py`。
+8. **受管环境可能禁止批量删除**（杀软 / 沙箱 / 企业终端 —— 2026-09-16 在本机实际踩到）：
+   pytest 收尾清理 `%TEMP%\pytest-of-*`、以及 pytest-cov 重建 `.coverage`，都会一次删几百个条目，
+   被安全策略直接掐掉进程。现象是**跑到 100% 却没有 summary**、或某个用例报 `SystemExit: 1`，
+   **不是用例失败、也不是代码问题**。能用的姿势：
+   - 分批跑（按文件切，每批 30-60 个用例）
+   - `--basetemp .pytest_tmp`（落在项目内，已在 `.gitignore`；`tmp_path_retention_policy=none` 已设）
+   - 覆盖率数据换名：`COVERAGE_FILE=.cov_x`，且指向**不存在**的新文件
+   - 真要全量：交给 CI（没有这层限制）
+9. **分批跑覆盖率必须 combine**：分两批各带 `--cov=app` + 各自的 `COVERAGE_FILE`，
+   再 `coverage combine .c1 .c2 && coverage report`。
+   直接用 `coverage run -m pytest -n auto` 会丢掉 xdist worker 的数据，数字会假低。
 
 ## 容易踩的坑
 
@@ -268,8 +282,8 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-16）**：`pytest` 295 收集（289 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-覆盖率 93%（门槛 90，余量 3 个点），约 135 秒。
+**验证基线（2026-09-16）**：`pytest` 302 收集（296 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+覆盖率 94%（门槛 90，余量 4 个点）。并行（`-n auto`，已写进 `pytest.ini`）约 45 秒；串行 135 秒。
 
 > 用例数**只在这一处写死**，README 与本文档其他位置引用时写「见验证基线」。
 > 数字以命令输出为准：`python -m pytest -o addopts="" --collect-only | tail -1`。

@@ -18,7 +18,11 @@ __pycache__/
 .pytest_probe/
 .coverage
 .coverage.*
+# 覆盖率数据文件可以被环境变量改名（分批跑时常用），xdist 还会留下 .cov_x.pid* 分片
+.cov*
 htmlcov/
+# 测试用的固定 basetemp（本机受管环境里必须指定，见 AGENTS.md「容易踩的坑」）
+.pytest_tmp/
 
 # 本地备份目录
 _backup_*/

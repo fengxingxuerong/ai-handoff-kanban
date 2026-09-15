@@ -296,3 +296,171 @@ def test_export_save_allows_normal_user_directory(app_client):
         assert target.read_text(encoding="utf-8") == "# 内容"
     finally:
         shutil.rmtree(probe, ignore_errors=True)
+
+
+# ---------------- 6. 前端资源缺失时不该白屏（安装完整性） ----------------
+
+def test_index_reports_500_when_web_assets_missing(app_client, monkeypatch):
+    """打包漏了 web 目录时，首页要给出可读的 500，而不是静默空白"""
+    import app.main as kanban
+
+    monkeypatch.setattr(kanban, "WEB_DIR", Path(__file__).resolve().parent / "不存在的目录")
+    status, body = app_client.get("/")
+    assert status == 500
+    assert "前端资源缺失" in body
+
+
+# ---------------- 7. 脱敏开关对三种交接物都生效 ----------------
+
+def test_redact_flag_applies_to_page_and_agentsmd(app_client):
+    _, p = app_client.create_project("脱敏项目", status="进行中",
+                                     handoff_note="联系邮箱 someone@example.com")
+    status, page = app_client.get(f"/api/export/page/{p['id']}?redact=1")
+    assert status == 200 and "someone@example.com" not in page
+
+    status, body = app_client.post(f"/api/export/agentsmd/{p['id']}?redact=1")
+    assert status == 200 and "someone@example.com" not in json.dumps(body, ensure_ascii=False)
+
+
+# ---------------- 8. 保存交接包：所有候选位置都写不进去时报 500 ----------------
+
+def test_export_save_reports_500_when_every_candidate_fails(app_client, monkeypatch):
+    """目标是"说清为什么失败"，而不是吞掉异常让用户以为保存成功了"""
+    monkeypatch.setattr(Path, "write_text",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("磁盘不可写")))
+    status, body = app_client.post("/api/export/save",
+                                   {"filename": "x.md", "content": "# 内容"})
+    assert status == 500
+    assert "保存失败" in str(body)
+
+
+# ---------------- 9. git 调用的三条降级路径 ----------------
+
+def test_run_git_degrades_on_missing_git(monkeypatch):
+    import app.main as kanban
+
+    def boom(*a, **k):
+        raise FileNotFoundError()
+
+    monkeypatch.setattr(kanban.subprocess, "run", boom)
+    code, msg = kanban._run_git(["status"], Path("."))
+    assert code == 127 and "未找到 git" in msg
+
+
+def test_run_git_degrades_on_timeout(monkeypatch):
+    import subprocess
+
+    import app.main as kanban
+
+    def boom(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="git", timeout=6)
+
+    monkeypatch.setattr(kanban.subprocess, "run", boom)
+    code, msg = kanban._run_git(["log"], Path("."))
+    assert code == 124 and "超时" in msg
+
+
+def test_run_git_degrades_on_other_error(monkeypatch):
+    import app.main as kanban
+
+    def boom(*a, **k):
+        raise RuntimeError("权限被拒")
+
+    monkeypatch.setattr(kanban.subprocess, "run", boom)
+    code, msg = kanban._run_git(["log"], Path("."))
+    assert code == 1 and "权限被拒" in msg
+
+
+# ---------------- 10. 掩码 Key 回写：空值与空白要跳过 ----------------
+
+def test_merge_keys_skips_blank_entries():
+    """历史 bug 区：空串被当成有效 Key 写进配置，会把真 Key 挤掉"""
+    from app.main import _merge_keys
+
+    old = ["sk-aaaaaa1111111111"]
+    out = _merge_keys(old, ["  ", "", "sk-bbbbbb2222222222"], [])
+    assert out == ["sk-bbbbbb2222222222"], "空/空白条目必须丢掉，不能变成空 Key"
+
+
+# ---------------- 6. 前端资源缺失时不该白屏（安装完整性） ----------------
+
+def test_index_reports_500_when_web_assets_missing(app_client, monkeypatch):
+    """打包漏了 web 目录时，首页要给出可读的 500，而不是静默空白"""
+    import app.main as kanban
+
+    monkeypatch.setattr(kanban, "WEB_DIR", Path(__file__).resolve().parent / "不存在的目录")
+    status, body = app_client.get("/")
+    assert status == 500
+    assert "前端资源缺失" in body
+
+
+# ---------------- 7. 脱敏开关对三种交接物都生效 ----------------
+
+def test_redact_flag_applies_to_page_and_agentsmd(app_client):
+    _, p = app_client.create_project("脱敏项目", status="进行中",
+                                     handoff_note="联系邮箱 someone@example.com")
+    status, page = app_client.get(f"/api/export/page/{p['id']}?redact=1")
+    assert status == 200 and "someone@example.com" not in page
+
+    status, body = app_client.post(f"/api/export/agentsmd/{p['id']}?redact=1")
+    assert status == 200 and "someone@example.com" not in json.dumps(body, ensure_ascii=False)
+
+
+# ---------------- 8. 保存交接包：所有候选位置都写不进去时报 500 ----------------
+
+def test_export_save_reports_500_when_every_candidate_fails(app_client, monkeypatch):
+    """目标是"说清为什么失败"，而不是吞掉异常让用户以为保存成功了"""
+    monkeypatch.setattr(Path, "write_text",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("磁盘不可写")))
+    status, body = app_client.post("/api/export/save",
+                                   {"filename": "x.md", "content": "# 内容"})
+    assert status == 500
+    assert "保存失败" in str(body)
+
+
+# ---------------- 9. git 调用的三条降级路径 ----------------
+
+def test_run_git_degrades_on_missing_git(monkeypatch):
+    import app.main as kanban
+
+    def boom(*a, **k):
+        raise FileNotFoundError()
+
+    monkeypatch.setattr(kanban.subprocess, "run", boom)
+    code, msg = kanban._run_git(["status"], Path("."))
+    assert code == 127 and "未找到 git" in msg
+
+
+def test_run_git_degrades_on_timeout(monkeypatch):
+    import subprocess
+
+    import app.main as kanban
+
+    def boom(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="git", timeout=6)
+
+    monkeypatch.setattr(kanban.subprocess, "run", boom)
+    code, msg = kanban._run_git(["log"], Path("."))
+    assert code == 124 and "超时" in msg
+
+
+def test_run_git_degrades_on_other_error(monkeypatch):
+    import app.main as kanban
+
+    def boom(*a, **k):
+        raise RuntimeError("权限被拒")
+
+    monkeypatch.setattr(kanban.subprocess, "run", boom)
+    code, msg = kanban._run_git(["log"], Path("."))
+    assert code == 1 and "权限被拒" in msg
+
+
+# ---------------- 10. 掩码 Key 回写：空值与空白要跳过 ----------------
+
+def test_merge_keys_skips_blank_entries():
+    """历史 bug 区：空串被当成有效 Key 写进配置，会把真 Key 挤掉"""
+    from app.main import _merge_keys
+
+    old = ["sk-aaaaaa1111111111"]
+    out = _merge_keys(old, ["  ", "", "sk-bbbbbb2222222222"], [])
+    assert out == ["sk-bbbbbb2222222222"], "空/空白条目必须丢掉，不能变成空 Key"

@@ -185,6 +185,7 @@ rem 一次性装测试依赖
 .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 
 rem 全量测试（自动起隔离环境，跑完自动关；带覆盖率，低于 90% 直接失败）
+rem 并行是写进 pytest.ini 的（-n auto），不用手动加：135s → 41s
 .venv\Scripts\python.exe -m pytest -v
 
 rem 只在需要真实模型配额时跑 AI 用例（其余 AI 用例走内置假端点，不消耗配额）
@@ -202,8 +203,11 @@ rem （CI 里也有这一步：.github/workflows/test.yml 的 scenario job，改
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 ```
 
-`tests/` 共 284 项（其中 6 项默认跳过，需 `KANBAN_LIVE=1` 才跑真实模型），覆盖率门槛 90%，
-实测 93%。数字以 `python -m pytest -o addopts="" --collect-only` 输出为准 —— 别手填，会漂。
+`tests/` 共 302 项（其中 6 项默认跳过，需 `KANBAN_LIVE=1` 才跑真实模型），覆盖率门槛 90%，
+实测 94%。数字以 `python -m pytest -o addopts="" --collect-only` 输出为准 —— 别手填，会漂。
+
+慢的用例都是「真东西」：真 uvicorn 子进程、真 MCP stdio、真浏览器。它们彼此独立，
+所以用 `-n auto` 并行把这些墙钟时间叠起来（实测 135s → 41s）。串行跑只是为了定位问题。
 
 | 文件 | 覆盖内容 |
 | --- | --- |
