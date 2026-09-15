@@ -6,6 +6,7 @@ keys.local.json
 
 # 环境与构建产物
 .venv/
+app/_build_stamp.py
 build/
 build_*/
 dist/

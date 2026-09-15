@@ -160,6 +160,7 @@ build.bat
 ├── scripts/init_ai_config.py  # 本机 AI 端点初始化（Key 从环境变量/私有文件读，脚本内不含 Key）
 ├── scripts/live_check.py   # 对着已跑起来的实例做只读体检（打接口，不写数据）
 ├── scripts/live_ui_check.py # 对着已跑起来的实例开真浏览器只读校验（证明界面没白屏）
+├── scripts/make_stamp.py   # 打包前生成构建戳（版本条显示的"打包时间"）
 ├── scripts/scenario_test.py # 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据）
 ├── scripts/frozen_smoke.py # 冻结版自查：启动 dist 里的 exe 真打一遍接口
 ├── scripts/mcp_server.py   # MCP 服务（stdio）：让 AI 代理直接读写看板
@@ -208,6 +209,7 @@ rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 30 条用�
 | `test_frontend.py` | 前端契约：内联事件必须为零、每个 `data-act` 必须有实现、搜索防抖 |
 | `test_frontend_e2e.py` | **真实浏览器点击**（Playwright + 系统 Edge/Chrome），16 项：渲染、建项目、加任务、搜索跳转、删除确认、主题、空看板、特殊字符、导出下载、导入覆盖、拖拽改状态，以及 AI 交互（报告渲染、指令的人工闸门、会话提炼落地、测连接）；任何 JS 报错直接判失败 |
 | `test_coverage_gaps.py` | 补齐"逻辑真但一直没测到"的分支：健康趋势对比（down/up/flat/new）、调度触发与防重、LLM 网关错误分类与 temperature 重试、导出路径放行 |
+| `test_version.py` | 版本与构建时间：源码态取最新 mtime、打包态读构建戳、生成物不参与比较、缺戳如实报「未知」 |
 | `test_data_io.py` | 全量数据导出/导入：导出不含密钥、导入是覆盖语义且先做快照、脏数据规范化、坏文件拒绝、往返一致性 |
 
 AI 用例默认打本地假端点（`tests/llm_stub.py`，OpenAI 兼容），**不消耗任何模型配额**；

@@ -27,7 +27,9 @@
 | `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
 | `scripts/mcp_server.py` | MCP 服务（stdio）：13 个工具，代理可列项目/拉接手包(context)/读写任务/生成交接物 |
-| `build.bat` | 建 venv、装依赖、PyInstaller 打包 |
+| `scripts/bench.py` | 读写性能基准（先量再改） |
+| `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
+| `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
 
 ## 精确命令
 
@@ -74,6 +76,9 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
   --icon "%~dp0app.ico" ^
   --distpath dist --workpath build --specpath build --noconfirm
 ```
+
+打包**之前**还要跑一次 `.venv\Scripts\python.exe scripts\make_stamp.py`（写构建戳；
+`build.bat` 里是第 4 步，CI 里有独立一步）。漏了不会报错，只是版本条显示"未知"。
 
 ## 硬性约定
 
@@ -227,7 +232,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   `frozen_smoke.py` 在 CI 里就是这么跑的（数据目录由它自己指定为 `%TEMP%\kanban_frozen_smoke`）。
 - **`--specpath build` + 相对 `--add-data`**：会按 spec 目录解析，报
   `Unable to find ...\build\web`。必须用 `%~dp0` 绝对路径。
-- **改完源码忘了重打包**：`dist\AI交接看板.exe` 不会自动更新。判据是 exe 时间戳晚于 `app/`、`web/`、`scripts/desktop.py`。
+- **改完源码忘了重打包**：`dist\AI交接看板.exe` 不会自动更新。判据：看版本条（设置面板里）
+  或 `/api/health` 的 `build_time`，跟源码最新改动时间比 —— 源码态这个值由 `app/version.py`
+  实时算（取 `app/` + `web/` + `scripts/desktop.py` 里最新的 mtime），打包态读构建戳
+  `app/_build_stamp.py`（`scripts/make_stamp.py` 生成，`build.bat`/CI 自动跑）。
+  **不要手填时间**：历史上它是常量 `"2026-09-15 12:00"`，而 exe 实际是 23:46 打的，
+  于是"靠它判断是否落后"完全落空。
 - **数据目录**：默认 `%USERPROFILE%\.ai-kanban`（Windows 下优先 `USERPROFILE` 而不是 `HOME`，
   否则受 Git Bash 的 HOME 干扰）。测试请用 `KANBAN_DATA_DIR` 隔离。
 - **端口占用不等于自己活着**：`desktop.py` 只看端口通不通，18320 被别的程序占了会在窗口里
@@ -251,7 +261,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-15）**：`pytest` 269 通过 / 6 跳过 / 覆盖率 93%（门槛 90，余量 3 个点），约 78 秒。
+**验证基线（2026-09-16）**：`pytest` 278 通过 / 6 跳过 / 覆盖率 93%（门槛 90，余量 3 个点），约 75 秒。
 
 **下一步（按价值排序）**：
 

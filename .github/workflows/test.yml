@@ -44,6 +44,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: 生成构建戳
+        # 冻结态取不到源码 mtime，版本条读的就是这个戳；漏了会显示"未知"
+        run: python scripts/make_stamp.py
+
       - name: 打包
         run: |
           python -m PyInstaller -F -w -n "AI交接看板" scripts\desktop.py `
