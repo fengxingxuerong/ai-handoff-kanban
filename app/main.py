@@ -2120,6 +2120,7 @@ class AIConfigIn(BaseModel):
     active_model: str | None = None
     schedule: dict | None = None
     mcp_readonly: bool | None = None
+    session_sources: list[dict] | None = None
 
 
 def _merge_keys(old_keys: list[str], new_keys: list[str], fallback_pool: list[str] | None = None) -> list[str]:
@@ -2180,6 +2181,13 @@ def put_ai_config(body: AIConfigIn):
             s["enabled"] = bool(s.get("enabled"))
         if body.mcp_readonly is not None:
             cfg["ai"]["mcp_readonly"] = bool(body.mcp_readonly)
+        if body.session_sources is not None:
+            cfg["ai"]["session_sources"] = [
+                {"name": (s.get("name") or "未命名源").strip(),
+                 "path": (s.get("path") or "").strip(),
+                 "type": (s.get("type") or "text").strip()}
+                for s in body.session_sources if isinstance(s, dict) and (s.get("path") or "").strip()
+            ]
 
     return llm.mask_config(llm.update_config(apply))
 

@@ -24,6 +24,7 @@
 | `scripts/scenario_test.py` | 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据，可导出报告） |
 | `scripts/delivery_drill.py` | 交付演练：模拟换智能体接手，端到端 19 项（接手→执行→交接物→脱敏→迁移） |
 | `scripts/real_ai_test.py` | 真实模型 AI 功能测试：5 大功能 × 6 模型通道（消耗真实配额） |
+| `scripts/release_regression.py` | 发版回归：自起独立实例（不碰真实数据），v1.1 新功能全链路 23 项；`--no-ai` 可跳过真实调用；真实 Key 从 `KANBAN_REAL_DATA_DIR` 指向的配置读取 |
 | `scripts/test_all_llm.py` | LLM 端点全量实测：端点×Key×模型 健康矩阵 |
 | `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
