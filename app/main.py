@@ -1647,7 +1647,7 @@ def scan_sessions():
                     if d.is_dir() and (d / "ui_messages.json").exists():
                         files.append(d / "ui_messages.json")
             else:
-                files = [f for f in root.glob("*") if f.is_file()]
+                files = [f for f in root.rglob("*") if f.is_file()][:200]
         except Exception:
             continue
         recent = sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)[:8]
