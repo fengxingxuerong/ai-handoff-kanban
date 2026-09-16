@@ -19,6 +19,18 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_from_ancestor_repo(monkeypatch, tmp_path):
+    """别让用例受"自己所在的目录"影响。
+
+    受限环境（杀软/沙箱）下要用 `--basetemp .pytest_tmp` 把临时目录放进项目里，
+    于是 tmp_path 成了本仓库的子目录 —— 这时 `git rev-parse` 会往上找到项目的 `.git`，
+    "这个目录不是仓库"的断言就会假红（2026-09-16 实际踩到：两条用例红了，但产品行为是对的）。
+    `GIT_CEILING_DIRECTORIES` 把向上查找钉在 tmp_path，用例从此与位置无关。
+    """
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+
+
 def make_repo(tmp_path, name="demo-repo", commits=3, dirty=False):
     repo = tmp_path / name
     repo.mkdir(parents=True, exist_ok=True)

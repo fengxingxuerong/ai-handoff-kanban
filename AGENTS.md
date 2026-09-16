@@ -232,6 +232,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    **不是用例失败、也不是代码问题**。能用的姿势：
    - 分批跑（按文件切，每批 30-60 个用例）
    - `--basetemp .pytest_tmp`（落在项目内，已在 `.gitignore`；`tmp_path_retention_policy=none` 已设）
+     ⚠️ **副作用**：临时目录成了本仓库的子目录，git 类用例会往上找到项目的 `.git`，
+     "这个目录不是仓库"的断言会**假红**（2026-09-16 踩到两条）。已在 `tests/test_git.py`
+     用 autouse fixture 设 `GIT_CEILING_DIRECTORIES=tmp_path`，把向上查找钉住，用例从此与位置无关。
    - 覆盖率数据换名：`COVERAGE_FILE=.cov_x`，且指向**不存在**的新文件
    - 真要全量：交给 CI（没有这层限制）
 9. **分批跑覆盖率必须 combine**：分两批各带 `--cov=app` + 各自的 `COVERAGE_FILE`，

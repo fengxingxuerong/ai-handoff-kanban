@@ -22,7 +22,8 @@ __pycache__/
 .cov*
 htmlcov/
 # 测试用的固定 basetemp（本机受管环境里必须指定，见 AGENTS.md「容易踩的坑」）
-.pytest_tmp/
+# 用通配符：临时目录常被顺手起成 .pytest_tmp2 / .pytest_tmp3，漏网就会被 git add -A 吞进提交
+.pytest_tmp*/
 
 # 本地备份目录
 _backup_*/
