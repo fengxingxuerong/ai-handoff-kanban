@@ -17,7 +17,7 @@
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
-| `tests/` | pytest 套件 302 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测 94%）。含真实浏览器点击测试 `test_frontend_e2e.py` |
+| `tests/` | pytest 套件 324 项 + 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测 92%，1.1.0 新增面大、余量偏薄）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
 | `scripts/live_check.py` | 对着**已在跑**的实例打接口做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
 | `scripts/live_ui_check.py` | 对着**已在跑**的实例开真浏览器做只读校验（Playwright + 系统 Edge/Chrome）：证明界面真的渲染出来了，不是白屏。全程只点导航类操作，不写一个字节 |
@@ -111,6 +111,16 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 10. **接手页（`app/handoff_page.py`）必须自包含**：不引任何 CDN、不联网、单文件双击可用；
    依赖图用内联 SVG，不要引 mermaid 之类的在线渲染（任务标题会发给第三方）。
    `tests/test_handoff_page.py` 会强制这两条（无外链、字段转义）。
+
+11. **任何"追加型"存储必须有上限**。已经踩过/收过口的两处：
+    `usage.jsonl` 超 `MAX_USAGE_LINES` 裁到最近 `KEEP_ON_TRIM` 条；
+    任务 `journal` 有 `MAX_JOURNAL` 条数与 `MAX_JOURNAL_TEXT` 长度上限 ——
+    它存在 `projects.json` 里，**不设上限就是让每次读写都要整份解析的核心文件悄悄变胖**。
+    新增同类字段（日志、轨迹、事件流）时先想清楚这一层，别等它涨起来才发现。
+12. **会被送进 LLM 的读取必须限定来源**。`preview_session` / `ingest_session` 只接受
+    `is_allowed_session_file()` 放行的路径（已配置的会话源目录内）。
+    不限源 = 任意本机文件（`config.json` 里的 Key、`.env`、别的项目源码）都能被搬到外部模型，
+    直接掀翻第 9 条。
 
 ## MCP 服务（让代理直接读写看板）
 
@@ -286,8 +296,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-16）**：`pytest` 302 收集（296 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-覆盖率 94%（门槛 90，余量 4 个点）。并行（`-n auto`，已写进 `pytest.ini`）约 45 秒；串行 135 秒。
+**验证基线（2026-09-16 晚）**：`pytest` 324 收集（318 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+覆盖率 92%（门槛 90，**余量只剩 2 个点**）。并行（`-n auto`，已写进 `pytest.ini`）约 45 秒。
+
+> 1.1.0 一次加了会话捕获 / 过程轨迹 / 记忆层 / 用量追踪 / 提醒 / 只读模式六个面，
+> 语句数从 1630 涨到 1943，而用例只补了 9 条 —— 覆盖率从 94% 掉到 92%。
+> **加功能时同步补测试**，否则再叠两个版本就会撞上 90 的门槛。
 
 > 用例数**只在这一处写死**，README 与本文档其他位置引用时写「见验证基线」。
 > 数字以命令输出为准：`python -m pytest -o addopts="" --collect-only | tail -1`。

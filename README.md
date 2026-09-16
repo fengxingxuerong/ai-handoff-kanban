@@ -209,8 +209,9 @@ rem （CI 里也有这一步：.github/workflows/test.yml 的 scenario job，改
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 ```
 
-`tests/` 共 302 项（其中 6 项默认跳过，需 `KANBAN_LIVE=1` 才跑真实模型），覆盖率门槛 90%，
-实测 94%。数字以 `python -m pytest -o addopts="" --collect-only` 输出为准 —— 别手填，会漂。
+测试规模与覆盖率以 `AGENTS.md` 的「验证基线」为唯一数字来源（README 里再写一份必然漂）；
+取数命令：`python -m pytest -o addopts="" --collect-only`。
+其中 6 项默认跳过（需 `KANBAN_LIVE=1` 才跑真实模型），覆盖率门槛 90%。
 
 慢的用例都是「真东西」：真 uvicorn 子进程、真 MCP stdio、真浏览器。它们彼此独立，
 所以用 `-n auto` 并行把这些墙钟时间叠起来（实测 135s → 41s）。串行跑只是为了定位问题。

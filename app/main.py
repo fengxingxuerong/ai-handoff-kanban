@@ -275,6 +275,7 @@ def _sanitize(data: dict) -> dict:
             if t.get("priority") not in DEFAULT_PRIORITY:
                 t["priority"] = "中"
             t["refs"] = clean_refs(t.get("refs"))      # 老数据没有这个字段，顺带补齐
+            t["journal"] = clean_journal(t.get("journal"))   # 过程轨迹也收一道，防导入的脏数据撑大文件
             if not isinstance(t.get("depends_on"), list):
                 t["depends_on"] = []
         # 顺手清掉指向已删除任务的依赖（否则任务永远"等一个不存在的东西"）
@@ -870,15 +871,46 @@ def update_task(tid: str, body: TaskIn):
         })
         # 状态流转自动沉淀过程轨迹
         if body.status != old_status:
-            t.setdefault("journal", []).append({
-                "time": now, "text": f"状态：{old_status} → {body.status}",
-            })
+            _append_journal(t, f"状态：{old_status} → {body.status}", now)
         p["updated_at"] = now
 
     t = mutate_task(tid, apply)
     if t is None:
         raise HTTPException(404, "任务不存在")
     return t
+
+
+MAX_JOURNAL = 50           # 每个任务最多留多少条过程记录
+MAX_JOURNAL_TEXT = 500     # 单条正文上限（输入框限制 2000，这里再收一道）
+
+
+def _append_journal(t: dict, text: str, when: str = "") -> None:
+    """追加一条过程轨迹，并裁掉超出的部分。
+
+    journal 存在 projects.json 里 —— 那是每次读写都要整份解析的核心文件，
+    状态流转还会自动追加，不设上限就是"悄悄变胖"：读写变慢、备份变大、交接包变长。
+    """
+    j = t.get("journal")
+    if not isinstance(j, list):
+        j = t["journal"] = []
+    j.append({"time": when or now_str(), "text": (text or "")[:MAX_JOURNAL_TEXT]})
+    if len(j) > MAX_JOURNAL:
+        del j[:-MAX_JOURNAL]
+
+
+def clean_journal(raw) -> list[dict]:
+    """规范化过程轨迹：只留字典条目、限长限量（导入的脏数据也走这里）"""
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw[-MAX_JOURNAL:]:
+        if not isinstance(item, dict):
+            continue
+        out.append({
+            "time": str(item.get("time") or "")[:32],
+            "text": str(item.get("text") or "")[:MAX_JOURNAL_TEXT],
+        })
+    return out
 
 
 class JournalIn(BaseModel):
@@ -890,7 +922,7 @@ def add_task_journal(tid: str, body: JournalIn):
     """手动追加一条过程记录（做了什么、改了什么决策、踩了什么坑）"""
     def apply(t: dict, p: dict) -> None:
         now = now_str()
-        t.setdefault("journal", []).append({"time": now, "text": body.text.strip()})
+        _append_journal(t, body.text.strip(), now)
         p["updated_at"] = now
 
     t = mutate_task(tid, apply)
@@ -1715,8 +1747,48 @@ def _extract_session_text(path: str, max_chars: int = 12000) -> str:
     return "\n\n".join(texts)[-max_chars:]
 
 
+def _session_roots() -> list[Path]:
+    """已配置的会话源根目录（默认源 + config 里用户自定义的）"""
+    roots = []
+    for src in session_sources():
+        p = (src or {}).get("path") if isinstance(src, dict) else None
+        if not p:
+            continue
+        try:
+            roots.append(Path(p).resolve())
+        except Exception:
+            continue
+    return roots
+
+
+def is_allowed_session_file(raw_path: str) -> bool:
+    """只允许读取「已配置的会话源」里的文件。
+
+    为什么必须收口：preview/ingest 读到的内容会**送进 LLM** ——
+    等于把文件内容搬到外部模型。不限源的话，任意本机路径（config.json 里的 API Key、
+    .env、别的项目源码）都能被读走 12000 字符，直接掀翻「数据不出本机」这条边界。
+    """
+    if not raw_path:
+        return False
+    try:
+        target = Path(raw_path).resolve()
+    except Exception:
+        return False
+    if not target.is_file():
+        return False
+    for root in _session_roots():
+        try:
+            if target == root or root in target.parents:
+                return True
+        except Exception:
+            continue
+    return False
+
+
 @app.get("/api/sessions/preview")
 def preview_session(path: str):
+    if not is_allowed_session_file(path):
+        raise HTTPException(400, "只能预览已配置的会话源里的文件（AI 设置可添加自定义源）")
     text = _extract_session_text(path)
     return {"text": text, "chars": len(text)}
 
@@ -1730,6 +1802,8 @@ def ingest_session(body: dict):
         raise HTTPException(400, "缺少会话文件路径")
     if not pid:
         raise HTTPException(400, "请先选择要入库的项目")
+    if not is_allowed_session_file(path):
+        raise HTTPException(400, "只能导入已配置的会话源里的文件（AI 设置可添加自定义源）")
     text = _extract_session_text(path)
     result = _summarize_inner(pid, text)
     result["path"] = path

@@ -170,6 +170,24 @@ def _usage_file() -> Path:
 
 _USAGE_LOCK = threading.Lock()
 
+# 用量是流水账：每次 LLM 调用写一行，不裁就会一直涨（顺带让 /api/usage 的汇总越来越慢）。
+# 超过上限就只留最近 KEEP_ON_TRIM 条 —— 老账没人翻，留着只是白占磁盘。
+MAX_USAGE_LINES = 5000
+KEEP_ON_TRIM = 2000
+
+
+def _trim_usage(f: Path) -> None:
+    """滚动裁剪 usage.jsonl，只保留最近 KEEP_ON_TRIM 条"""
+    try:
+        lines = f.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return
+    if len(lines) <= MAX_USAGE_LINES:
+        return
+    tmp = f.with_suffix(".jsonl.tmp")
+    tmp.write_text("\n".join(lines[-KEEP_ON_TRIM:]) + "\n", encoding="utf-8")
+    os.replace(tmp, f)
+
 
 def _record_usage(feature: str, endpoint: str, model: str, usage: dict | None, duration: float, ok: bool) -> None:
     """追加一条用量记录到 usage.jsonl（失败静默，不影响主流程）"""
@@ -183,8 +201,10 @@ def _record_usage(feature: str, endpoint: str, model: str, usage: dict | None, d
             "ok": ok,
         }
         with _USAGE_LOCK:
-            with open(_usage_file(), "a", encoding="utf-8") as f:
-                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            f = _usage_file()
+            with open(f, "a", encoding="utf-8") as fp:
+                fp.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            _trim_usage(f)
     except Exception:
         pass
 
