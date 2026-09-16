@@ -157,7 +157,15 @@ def t_find_project(args: dict) -> str:
     return "\n".join(f"- [{h['id']}] {h['name']} · {h['status']} · {h['progress']}%" for h in hits)
 
 
+def _ensure_writable() -> None:
+    """MCP 只读模式开关：开启后所有写操作被拒绝（个人默认关，分享/演示时打开）"""
+    cfg = kanban.llm.load_config()
+    if cfg.get("ai", {}).get("mcp_readonly"):
+        raise ValueError("看板当前为 MCP 只读模式（AI 设置里可关闭），写操作被拒绝")
+
+
 def t_create_project(args: dict) -> str:
+    _ensure_writable()
     body = kanban.ProjectIn(
         name=args.get("name") or "",
         status=args.get("status") or "规划中",
@@ -174,6 +182,7 @@ def t_create_project(args: dict) -> str:
 
 
 def t_update_project(args: dict) -> str:
+    _ensure_writable()
     pid = args.get("project_id") or ""
     p = _find(pid)
     if not p:
@@ -200,6 +209,7 @@ def t_update_project(args: dict) -> str:
 
 
 def t_add_task(args: dict) -> str:
+    _ensure_writable()
     pid = args.get("project_id") or ""
     body = kanban.TaskIn(
         title=args.get("title") or "",
@@ -216,6 +226,7 @@ def t_add_task(args: dict) -> str:
 
 
 def t_update_task(args: dict) -> str:
+    _ensure_writable()
     tid = args.get("task_id") or ""
     project, task = _task_by_id(tid)
     if not task:
@@ -269,6 +280,7 @@ def t_next_task(args: dict) -> str:
 
 
 def t_delete_task(args: dict) -> str:
+    _ensure_writable()
     tid = args.get("task_id") or ""
     if not _task_by_id(tid)[1]:
         raise ValueError(f"找不到任务：{tid}")

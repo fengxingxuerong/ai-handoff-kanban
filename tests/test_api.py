@@ -2,6 +2,8 @@
 """基础接口：项目/任务 CRUD、交接导出、删除后 404"""
 from __future__ import annotations
 
+import json
+
 import pytest
 
 
@@ -216,3 +218,98 @@ def test_export_redact_hides_secrets(server):
     # 全项目导出同样支持
     _, safe_all = server.get("/api/export-all?redact=1")
     assert "sk-abcd1234efgh5678" not in safe_all
+
+
+# ---------------- 任务过程日志 ----------------
+
+def test_task_journal_and_status_transition(server):
+    status, proj = server.create_project("日志项目")
+    pid = proj["id"]
+    status, task = server.post(f"/api/projects/{pid}/tasks", {"title": "有日志的任务", "status": "待办"})
+    tid = task["id"]
+    # 手动追加
+    status, entry = server.post(f"/api/tasks/{tid}/journal", {"text": "完成了接口设计评审"})
+    assert status == 201 and entry["text"] == "完成了接口设计评审"
+    # 状态变化自动记录
+    server.put(f"/api/tasks/{tid}", {"title": "有日志的任务", "status": "进行中"})
+    _, detail = server.get(f"/api/projects/{pid}")
+    t = detail["tasks"][0]
+    assert t["journal"] and t["journal"][-1]["text"] == "状态：待办 → 进行中"
+    assert t["journal"][0]["text"] == "完成了接口设计评审"
+
+
+# ---------------- 项目记忆层 ----------------
+
+def test_memories_crud_and_recall(server):
+    status, proj = server.create_project("记忆项目")
+    pid = proj["id"]
+    s, m1 = server.post("/api/memories", {"pid": pid, "type": "坑", "text": "并发写必须加锁"})
+    assert s == 201 and m1["ok"] is True
+    # 去重
+    s, m2 = server.post("/api/memories", {"pid": pid, "type": "坑", "text": "并发写必须加锁"})
+    assert m2.get("deduped") is True
+    # 列表与过滤
+    _, lst = server.get("/api/memories?pid=" + pid)
+    assert len(lst["memories"]) == 1
+    _, lst2 = server.get("/api/memories?q=加锁")
+    assert len(lst2["memories"]) == 1
+    # 召回进 AI brief
+    _, brief = server.get("/api/projects")
+    s, _ = server.get(f"/api/context/{pid}")
+    assert s == 200
+    # 删除
+    assert server.delete("/api/memories/" + m1["memory"]["id"])[0] == 200
+    _, lst3 = server.get("/api/memories?pid=" + pid)
+    assert lst3["memories"] == []
+
+
+# ---------------- 会话捕获 ----------------
+
+def test_session_scan_and_extract(server, tmp_path):
+    # 造一个假的 Claude Code 会话目录
+    src = tmp_path / "claude-projects" / "demo-proj"
+    src.mkdir(parents=True)
+    jsonl = src / "abc123.jsonl"
+    lines = [
+        json.dumps({"type": "user", "message": {"role": "user", "content": "帮我修复登录超时"}}),
+        json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "已定位：token 校验逻辑缺少刷新"}}),
+    ]
+    jsonl.write_text("\n".join(lines), encoding="utf-8")
+    # 用环境变量把源指过去
+    import os
+    from app import llm
+    cfg = llm.load_config()
+    cfg["ai"]["session_sources"] = [{"name": "测试源", "path": str(tmp_path / "claude-projects"), "type": "claude_jsonl"}]
+    llm.save_config(cfg)
+    try:
+        status, r = server.get("/api/sessions/scan")
+        assert status == 200 and len(r["sessions"]) >= 1
+        assert r["sessions"][0]["source"] == "测试源"
+        from urllib.parse import quote
+        status, pv = server.get("/api/sessions/preview?path=" + quote(str(jsonl)))
+        assert status == 200 and "登录超时" in pv["text"]
+        # ingest 走真实提炼（stub 端点场景外，这里只验证结构校验）
+        status, r2 = server.post("/api/sessions/ingest", {"path": str(jsonl)})
+        assert status == 400, "缺 pid 应被拒"
+    finally:
+        cfg["ai"]["session_sources"] = []
+        llm.save_config(cfg)
+
+
+# ---------------- 用量追踪 ----------------
+
+def test_usage_endpoint(app_client):
+    status, u = app_client.get("/api/usage")
+    assert status == 200
+    assert "totals" in u and "by_feature" in u and "by_model" in u
+    assert u["totals"]["calls"] >= 0
+
+
+# ---------------- MCP 只读开关 ----------------
+
+def test_config_accepts_mcp_readonly(app_client):
+    status, cfg = app_client.put("/api/ai/config", {"mcp_readonly": True})
+    assert status == 200
+    assert cfg["ai"]["mcp_readonly"] is True
+    status, cfg2 = app_client.put("/api/ai/config", {"mcp_readonly": False})
+    assert cfg2["ai"]["mcp_readonly"] is False

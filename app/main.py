@@ -622,6 +622,10 @@ def project_context(pid: str):
             d["refs"] = t["refs"]
         if t.get("desc"):
             d["desc"] = (t.get("desc") or "")[:200]
+        jr = t.get("journal") or []
+        if jr:
+            d["recent_journal"] = [{"time": e.get("time", ""), "text": (e.get("text") or "")[:120]}
+                                   for e in jr[-2:]]
         waiting = [by_id[x].get("title", x) for x in (t.get("depends_on") or [])
                    if x in by_id and by_id[x].get("status") != "已完成"]
         if waiting:
@@ -641,6 +645,7 @@ def project_context(pid: str):
             "handoff_note": p.get("handoff_note", ""),
             "next_action": p.get("next_action", ""),
         },
+        "memories": [m for m in _load_memories() if m.get("pid") == p.get("id")][-15:],
         "code_reality": ({
             "branch": snap.get("branch", ""),
             "last_commit_at": (snap.get("head") or {}).get("date", ""),
@@ -819,7 +824,7 @@ def create_task(pid: str, body: TaskIn):
         "title": body.title.strip(), "desc": body.desc,
         "status": body.status, "priority": body.priority,
         "agent": body.agent.strip(), "due_date": body.due_date,
-        "created_at": now, "updated_at": now,
+        "created_at": now, "updated_at": now, "journal": [],
         "refs": clean_refs(body.refs),
         "depends_on": clean_deps(body.depends_on, ids),
     }
@@ -854,6 +859,7 @@ def update_task(tid: str, body: TaskIn):
 
     def apply(t: dict, p: dict) -> None:
         now = now_str()
+        old_status = t.get("status", "")
         t.update({
             "title": body.title.strip(), "desc": body.desc,
             "status": body.status, "priority": body.priority,
@@ -862,12 +868,35 @@ def update_task(tid: str, body: TaskIn):
             "refs": clean_refs(body.refs),
             "depends_on": deps,
         })
+        # 状态流转自动沉淀过程轨迹
+        if body.status != old_status:
+            t.setdefault("journal", []).append({
+                "time": now, "text": f"状态：{old_status} → {body.status}",
+            })
         p["updated_at"] = now
 
     t = mutate_task(tid, apply)
     if t is None:
         raise HTTPException(404, "任务不存在")
     return t
+
+
+class JournalIn(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000)
+
+
+@app.post("/api/tasks/{tid}/journal", status_code=201)
+def add_task_journal(tid: str, body: JournalIn):
+    """手动追加一条过程记录（做了什么、改了什么决策、踩了什么坑）"""
+    def apply(t: dict, p: dict) -> None:
+        now = now_str()
+        t.setdefault("journal", []).append({"time": now, "text": body.text.strip()})
+        p["updated_at"] = now
+
+    t = mutate_task(tid, apply)
+    if t is None:
+        raise HTTPException(404, "任务不存在")
+    return t["journal"][-1]
 
 
 @app.delete("/api/tasks/{tid}")
@@ -948,6 +977,23 @@ def _build_handoff_markdown(p: dict) -> str:
             lines.append(f"| {title} | {t['status']} | {t['priority']} | {t.get('agent','') or '—'} "
                          f"| {dep_txt} | {desc} |")
         lines.append("")
+        journaled = [(t, t.get("journal") or []) for t in tasks]
+        journaled = [(t, j) for t, j in journaled if j]
+        if journaled:
+            lines.append("### 任务过程记录（每个任务最近 3 条）")
+            lines.append("")
+            for t, j in journaled:
+                lines.append(f"**{t.get('title', '')}**")
+                for e in j[-3:]:
+                    lines.append(f"- [{e.get('time', '')}] {e.get('text', '')}")
+                lines.append("")
+        mems = [m for m in _load_memories() if m.get("pid") == p.get("id")]
+        if mems:
+            lines.append("### 已沉淀记忆（结构化要点）")
+            lines.append("")
+            for m in mems[-15:]:
+                lines.append(f"- 【{m.get('type', '事实')}】[{m.get('time', '')}] {m.get('text', '')}")
+            lines.append("")
         with_refs = [t for t in tasks if t.get("refs")]
         if with_refs:
             lines.append("### 涉及代码位置")
@@ -1259,7 +1305,7 @@ def _generate_agents_md(p: dict) -> tuple[str, str, str]:
     try:
         cfg = llm.load_config()
         text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg},
-                                  {"role": "user", "content": user_msg}], temperature=0.2)
+                                  {"role": "user", "content": user_msg}], temperature=0.2, feature="AGENTS.md")
         if not text or len(text.strip()) < 30:
             raise ValueError("生成内容过短")
         return text.strip(), "ai", ep
@@ -1458,6 +1504,238 @@ def import_all_data(body: ImportBody):
     return {"ok": True, "imported": len(projects)}
 
 
+# ---- LLM 用量统计 ----
+
+@app.get("/api/usage")
+def usage_stats():
+    f = llm._usage_file()
+    recs = []
+    if f.exists():
+        for line in f.read_text(encoding="utf-8").splitlines():
+            try:
+                recs.append(json.loads(line))
+            except Exception:
+                continue
+    ok = [r for r in recs if r.get("ok")]
+    totals = {"calls": len(ok), "prompt_tokens": 0, "completion_tokens": 0, "failed": len(recs) - len(ok)}
+    by_feature, by_model = {}, {}
+    for r in ok:
+        pt = r.get("prompt_tokens") or 0
+        ct = r.get("completion_tokens") or 0
+        totals["prompt_tokens"] += pt
+        totals["completion_tokens"] += ct
+        bf = by_feature.setdefault(r.get("feature", "?"), {"calls": 0, "tokens": 0})
+        bf["calls"] += 1
+        bf["tokens"] += pt + ct
+        bm = by_model.setdefault(r.get("model", "?"), {"calls": 0, "tokens": 0})
+        bm["calls"] += 1
+        bm["tokens"] += pt + ct
+    recent = sorted(recs, key=lambda r: r.get("time", ""), reverse=True)[:20]
+    return {"totals": totals, "by_feature": by_feature, "by_model": by_model, "recent": recent}
+
+
+# ---- 项目记忆层（结构化、可检索，对标 Mem0 的本地轻量版） ----
+
+MEMORY_TYPES = ["决策", "坑", "约定", "事实"]
+
+
+def memories_file() -> Path:
+    return data_dir() / "memories.json"
+
+
+def _load_memories() -> list[dict]:
+    f = memories_file()
+    if not f.exists():
+        return []
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _save_memories(items: list[dict]) -> None:
+    f = memories_file()
+    tmp = f.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as fp:
+        json.dump(items, fp, ensure_ascii=False, indent=2)
+    os.replace(tmp, f)
+
+
+class MemoryIn(BaseModel):
+    pid: str = ""
+    type: str = "事实"
+    text: str = Field(..., min_length=1, max_length=2000)
+    source: str = "手动"
+
+
+@app.get("/api/memories")
+def list_memories(pid: str = "", q: str = "", mtype: str = ""):
+    items = _load_memories()
+    if pid:
+        items = [m for m in items if m.get("pid") == pid]
+    if mtype:
+        items = [m for m in items if m.get("type") == mtype]
+    if q.strip():
+        ql = q.strip().lower()
+        items = [m for m in items if ql in (m.get("text") or "").lower()]
+    items = sorted(items, key=lambda m: m.get("time", ""), reverse=True)
+    return {"memories": items}
+
+
+@app.post("/api/memories", status_code=201)
+def add_memory(body: MemoryIn):
+    if body.type not in MEMORY_TYPES:
+        body.type = "事实"
+    entry = {
+        "id": uuid.uuid4().hex[:12],
+        "pid": body.pid, "type": body.type,
+        "text": body.text.strip(),
+        "source": body.source, "time": now_str(),
+    }
+    items = _load_memories()
+    # 去重：同项目同文本不重复入
+    if any(m.get("pid") == entry["pid"] and m.get("text") == entry["text"] for m in items):
+        return {"ok": True, "deduped": True, "memory": entry}
+    items.append(entry)
+    _save_memories(items)
+    return {"ok": True, "memory": entry}
+
+
+@app.delete("/api/memories/{mid}")
+def delete_memory(mid: str):
+    items = _load_memories()
+    before = len(items)
+    items = [m for m in items if m.get("id") != mid]
+    if len(items) == before:
+        raise HTTPException(404, "记忆不存在")
+    _save_memories(items)
+    return {"ok": True}
+
+
+# ---- 会话捕获：自动发现 AI 工具的本地会话文件 ----
+
+def session_sources() -> list[dict]:
+    """默认探测常见 AI 工具会话目录；自定义源存 config.ai.session_sources"""
+    home = Path(os.environ.get("USERPROFILE") or str(Path.home()))
+    defaults = [
+        {"name": "Claude Code", "path": str(home / ".claude" / "projects"), "type": "claude_jsonl"},
+        {"name": "Cline (VS Code)", "path": str(home / "AppData" / "Roaming" / "Code" / "User"
+                                                / "globalStorage" / "saoudrizwan.claude-dev" / "tasks"), "type": "cline"},
+        {"name": "Cline (独立版)", "path": str(home / ".cline" / "data" / "tasks"), "type": "cline"},
+    ]
+    cfg = llm.load_config()
+    custom = cfg.get("ai", {}).get("session_sources") or []
+    return defaults + [c for c in custom if isinstance(c, dict) and c.get("path")]
+
+
+@app.get("/api/sessions/scan")
+def scan_sessions():
+    """扫描各 AI 工具会话目录，返回最近活跃的会话文件（按修改时间倒序）"""
+    out = []
+    for src in session_sources():
+        root = Path(src["path"])
+        if not root.exists():
+            continue
+        stype = src.get("type", "text")
+        files: list[Path] = []
+        try:
+            if stype == "claude_jsonl":
+                files = list(root.glob("*/*.jsonl"))
+            elif stype == "cline":
+                for d in root.glob("*"):
+                    if d.is_dir() and (d / "ui_messages.json").exists():
+                        files.append(d / "ui_messages.json")
+            else:
+                files = [f for f in root.glob("*") if f.is_file()]
+        except Exception:
+            continue
+        recent = sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)[:8]
+        for f in recent:
+            try:
+                stat = f.stat()
+            except OSError:
+                continue
+            out.append({
+                "source": src["name"], "type": stype, "path": str(f),
+                "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                "mtime_ts": stat.st_mtime,
+                "size_kb": round(stat.st_size / 1024, 1),
+            })
+    out.sort(key=lambda x: x["mtime_ts"], reverse=True)
+    for x in out:
+        x.pop("mtime_ts", None)
+    return {"sessions": out[:20]}
+
+
+def _extract_session_text(path: str, max_chars: int = 12000) -> str:
+    """从会话文件提取对话文本（尾部优先）。支持 Claude Code JSONL / cline JSON / 纯文本"""
+    f = Path(path)
+    if not f.exists():
+        raise HTTPException(404, "会话文件不存在")
+    texts: list[str] = []
+    if f.suffix.lower() == ".jsonl":
+        try:
+            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception:
+            lines = []
+        for line in lines[-200:]:
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            msg = obj.get("message") or {}
+            role = str(obj.get("type") or msg.get("role") or "")
+            content = msg.get("content")
+            if isinstance(content, list):
+                content = " ".join(c.get("text", "") for c in content
+                                   if isinstance(c, dict) and c.get("type") == "text")
+            if isinstance(content, str) and content.strip():
+                tag = "用户" if "user" in role.lower() else "助手"
+                texts.append(f"{tag}：{content.strip()[:600]}")
+    elif f.suffix.lower() == ".json":
+        try:
+            data = json.loads(f.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            data = None
+        if isinstance(data, list):
+            for m in data[-120:]:
+                if not isinstance(m, dict):
+                    continue
+                txt = m.get("text") or ""
+                say = str(m.get("say") or m.get("type") or "")
+                if txt and "api_req" not in say and "tool" not in say:
+                    role = "用户" if "user" in say else "助手"
+                    texts.append(f"{role}：{str(txt)[:600]}")
+    if not texts:
+        raw = f.read_text(encoding="utf-8", errors="replace")
+        texts = [raw[-6000:]]
+    return "\n\n".join(texts)[-max_chars:]
+
+
+@app.get("/api/sessions/preview")
+def preview_session(path: str):
+    text = _extract_session_text(path)
+    return {"text": text, "chars": len(text)}
+
+
+@app.post("/api/sessions/ingest")
+def ingest_session(body: dict):
+    """读取捕获的会话 → 走提炼 → 返回解析结果（前端确认后应用）"""
+    pid = (body or {}).get("pid") or ""
+    path = (body or {}).get("path") or ""
+    if not path:
+        raise HTTPException(400, "缺少会话文件路径")
+    if not pid:
+        raise HTTPException(400, "请先选择要入库的项目")
+    text = _extract_session_text(path)
+    result = _summarize_inner(pid, text)
+    result["path"] = path
+    return result
+
+
 # ---- 数据恢复：从 .bak 或历史快照还原（损坏自愈之后还能回去） ----
 
 class RestoreBody(BaseModel):
@@ -1560,9 +1838,9 @@ class SummarizeBody(BaseModel):
     text: str = Field(..., min_length=10, max_length=20000)
 
 
-@app.post("/api/ai/summarize")
-def ai_summarize(body: SummarizeBody):
-    found = find_project(body.pid)
+def _summarize_inner(pid: str, text: str) -> dict:
+    """会话提炼核心：给粘贴提炼与会话捕获共用"""
+    found = find_project(pid)
     if not found:
         raise HTTPException(404, "项目不存在")
     p = found[1]
@@ -1573,27 +1851,36 @@ def ai_summarize(body: SummarizeBody):
         '{"summary": "这段会话的一句话总结", '
         '"new_tasks": [{"title": "任务标题", "desc": "描述", "priority": "高/中/低", "status": "待办/进行中/已完成/阻塞"}], '
         '"next_action": "建议的下一步行动（若没有则为空字符串）", '
+        '"memories": [{"type": "决策/坑/约定/事实", "text": "值得长期记住的要点"}], '
         '"handoff_note_updates": "建议补充进交接说明的要点（纯文本一段，若没有则为空字符串）"}\n'
         "规则：1) new_tasks 只收录明确提到要做、且不在现有任务清单里的事项，不要编造；"
-        "2) summary 一句话；3) 中文输出。"
+        "2) memories 收录决策、踩坑、约定类要点，没有则为空数组；"
+        "3) summary 一句话；4) 中文输出。"
     )
     user_msg = (f"项目：{p['name']}\n"
                 f"现有任务：{json.dumps(existing, ensure_ascii=False)}\n\n"
-                f"会话记录：\n{body.text}")
+                f"会话记录：\n{text}")
     try:
         cfg = llm.load_config()
         text, ep = llm.chat(cfg, [
             {"role": "system", "content": sys_msg},
             {"role": "user", "content": user_msg},
-        ], temperature=0.15)
+        ], temperature=0.15, feature="会话提炼")
         parsed = _extract_json(text)
         if not isinstance(parsed, dict):
             raise ValueError("提炼结果格式不正确")
         return {"parsed": parsed, "endpoint": ep}
     except llm.LLMError as e:
         raise HTTPException(502, f"AI 调用失败：{e}")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, f"提炼失败：{e}")
+
+
+@app.post("/api/ai/summarize")
+def ai_summarize(body: SummarizeBody):
+    return _summarize_inner(body.pid, body.text)
 
 
 # =====================================================================
@@ -1807,8 +2094,12 @@ def _projects_brief(projects: list[dict]) -> list[dict]:
             "background": (p.get("background") or "")[:300],
             "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", ""),
                        **({"due_date": t["due_date"]} if t.get("due_date") else {}),
-                       **({"refs": t["refs"]} if t.get("refs") else {})}
+                       **({"refs": t["refs"]} if t.get("refs") else {}),
+                       **({"recent_journal": [(e.get("time", ""), (e.get("text") or "")[:80])
+                                              for e in (t.get("journal") or [])[-1:]]} if t.get("journal") else {})}
                       for t in (p.get("tasks") or [])[:40]],
+            "memories": [m for m in _load_memories()
+                         if m.get("pid") == p["id"]][-10:],
         }
         snap = git_snapshot(p.get("repo_path", ""), limit=1)
         if snap.get("ok"):
@@ -1828,6 +2119,7 @@ class AIConfigIn(BaseModel):
     endpoints: list[dict] | None = None
     active_model: str | None = None
     schedule: dict | None = None
+    mcp_readonly: bool | None = None
 
 
 def _merge_keys(old_keys: list[str], new_keys: list[str], fallback_pool: list[str] | None = None) -> list[str]:
@@ -1886,6 +2178,8 @@ def put_ai_config(body: AIConfigIn):
             s = cfg["ai"].setdefault("schedule", {})
             s.update({k: v for k, v in body.schedule.items() if k in ("enabled", "frequency", "time", "last_run")})
             s["enabled"] = bool(s.get("enabled"))
+        if body.mcp_readonly is not None:
+            cfg["ai"]["mcp_readonly"] = bool(body.mcp_readonly)
 
     return llm.mask_config(llm.update_config(apply))
 
@@ -1958,7 +2252,7 @@ def _run_analyze(trigger: str = "manual") -> dict:
     projects = data.get("projects", [])
     cfg = llm.load_config()
     messages = _build_analyze_prompt(_projects_brief(projects))
-    text, ep = llm.chat(cfg, messages, temperature=0.2)
+    text, ep = llm.chat(cfg, messages, temperature=0.2, feature="监管分析")
     parsed = _extract_json(text)
     if not isinstance(parsed, dict):
         raise ValueError("监管分析结果格式不正确")
@@ -2066,7 +2360,7 @@ def ai_generate_handoff(pid: str, body: HandoffBody):
         user_msg += "\n\n现有交接说明（请在其基础上润色增强，保留有效信息）：\n" + p["handoff_note"]
     try:
         cfg = llm.load_config()
-        text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}], temperature=0.3)
+        text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}], temperature=0.3, feature="会话提炼")
         return {"text": text.strip(), "endpoint": ep}
     except llm.LLMError as e:
         raise HTTPException(502, f"AI 调用失败：{e}")
@@ -2103,7 +2397,7 @@ def ai_command(body: CommandBody):
     user_msg = "看板数据：\n" + json.dumps(projects, ensure_ascii=False, indent=1) + "\n\n用户指令：" + body.text
     try:
         cfg = llm.load_config()
-        text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}], temperature=0.1)
+        text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}], temperature=0.1, feature="自然语言指令")
         parsed = _extract_json(text)
         return {"parsed": parsed, "endpoint": ep}
     except llm.LLMError as e:

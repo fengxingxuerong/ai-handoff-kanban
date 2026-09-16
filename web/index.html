@@ -563,6 +563,39 @@
   .tcard.dragging { opacity: .45; }
   .kcol.drag-over { background: rgba(76,194,255,.08); border-color: var(--accent); border-style: dashed; }
 
+  /* ---------- 提醒横幅 ---------- */
+  #remind-banner {
+    margin: 10px 22px 0; padding: 10px 14px; border-radius: 11px;
+    background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.35);
+    color: var(--text); font-size: 13px; display: none; align-items: center; gap: 10px;
+  }
+  #remind-banner .rb-text { flex: 1; line-height: 1.5; }
+  #remind-banner .rb-text b { color: var(--orange); }
+  .memory-item {
+    display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px;
+    background: var(--bg-soft); border-radius: 8px; margin-bottom: 6px;
+  }
+  .memory-item .m-type { flex-shrink: 0; font-size: 10.5px; padding: 1px 7px; border-radius: 5px;
+    background: rgba(139,124,246,.14); color: var(--accent2); font-weight: 600; }
+  .memory-item .m-text { flex: 1; font-size: 12.5px; line-height: 1.55; color: var(--text); }
+  .memory-item .m-time { flex-shrink: 0; font-size: 10px; color: var(--text-faint); }
+  .memory-item .m-del { flex-shrink: 0; border: none; background: transparent; color: var(--text-faint);
+    cursor: pointer; font-size: 12px; padding: 0 2px; }
+  .memory-item .m-del:hover { color: var(--red); }
+  .sess-item {
+    cursor: pointer; background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: 9px; padding: 9px 12px; display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; transition: border .15s;
+  }
+  .sess-item:hover { border-color: var(--accent); }
+  .sess-item .s-src { flex-shrink: 0; font-size: 10.5px; padding: 1px 7px; border-radius: 5px;
+    background: rgba(76,194,255,.12); color: var(--accent); font-weight: 600; }
+  .journal-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; max-height: 140px; overflow-y: auto; }
+  .journal-list .j-row { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
+  .journal-list .j-row b { color: var(--text-faint); font-weight: 400; margin-right: 4px; }
+  .usage-box { font-size: 12px; color: var(--text-dim); line-height: 1.9; }
+  .usage-box b { color: var(--text); }
+
   /* ---------- 备份 / 提炼 ---------- */
   .backup-list { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-dim); max-height: 120px; overflow-y: auto; }
   .backup-list .bk { display: flex; justify-content: space-between; padding: 4px 8px; background: var(--bg); border-radius: 6px; }
@@ -600,11 +633,14 @@
     <button class="btn" data-act="openAICmd">🤖 AI 指令</button>
     <button class="btn" data-act="openReport">📊 AI 监管</button>
     <button class="btn" data-act="openGlobalSearch" title="全局任务搜索（Ctrl+K）">🔎</button>
+    <button class="btn" data-act="openSessionCapture" title="捕获本机 AI 工具会话并提炼入库">📥 捕获</button>
     <button class="btn" data-act="toggleTheme" title="切换深浅色主题" id="theme-btn">🌙</button>
     <button class="btn" data-act="openAISettings">⚙️</button>
     <button class="btn primary" data-act="openProjectModal">＋ 新建项目</button>
   </div>
 </header>
+
+<div id="remind-banner" style="display:none"></div>
 
 <div class="filter-bar">
   <button class="chip active" data-f="全部" data-act="setFilter" data-arg="全部">全部</button>
@@ -664,6 +700,13 @@
         <div class="panel" id="readiness-panel">
           <h3>🧭 交接就绪度</h3>
           <div id="readiness-body"></div>
+        </div>
+
+        <div class="panel">
+          <h3 style="justify-content:space-between">🧠 项目记忆
+            <button class="btn small" data-act="addMemory">＋ 添加</button>
+          </h3>
+          <div id="memory-body" style="max-height:260px;overflow-y:auto"></div>
         </div>
 
         <div class="panel">
@@ -795,6 +838,14 @@
       <div class="field"><label>截止日期（可选）</label><input type="date" id="t-due">
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了截止日期，仪表盘会统计临期/逾期，任务卡上也会标出来</div>
       </div>
+      <div class="field" id="t-journal-field" style="display:none">
+        <label>过程日志（自动记录状态流转，也可手动追加）</label>
+        <div class="journal-list" id="t-journal-list"></div>
+        <div style="display:flex;gap:8px">
+          <input id="t-journal-input" placeholder="追加一条过程记录：做了什么 / 改了什么决策…" style="flex:1">
+          <button class="btn small" data-act="appendJournal">＋ 记录</button>
+        </div>
+      </div>
     </div>
     <div class="mfoot">
       <button class="btn" data-act="closeModal" data-arg="task-modal">取消</button>
@@ -833,6 +884,10 @@
       <div class="field"><label>AI 端点（Key 已脱敏显示，直接粘贴新 Key 可替换）</label>
         <div id="ai-endpoints" style="display:flex;flex-direction:column;gap:10px"></div>
       </div>
+      <div class="field" style="flex-direction:row;align-items:center;gap:10px">
+        <label class="switch" style="flex-shrink:0"><input type="checkbox" id="mcp-readonly"><span class="slider"></span></label>
+        <span style="font-size:12.5px;color:var(--text-dim)">MCP 只读模式（开启后外部智能体经 MCP 只能读不能写）</span>
+      </div>
       <div class="field"><label>定时自动监管</label>
         <div class="row3">
           <div class="field"><label>启用</label>
@@ -854,6 +909,9 @@
         </div>
         <div class="backup-list" id="backup-list"></div>
         <div id="recover-list" style="display:none;margin-top:10px;font-size:12px;line-height:1.9"></div>
+      </div>
+      <div class="field"><label>📊 LLM 用量统计（本地记录）</label>
+        <div class="usage-box" id="usage-body">打开设置时自动加载…</div>
       </div>
     </div>
     <div class="mfoot">
@@ -947,6 +1005,33 @@
     <div class="mbody">
       <div class="field"><input id="gs-input" placeholder="搜任务标题 / 描述 / 负责人 / 代码位置…" autocomplete="off"></div>
       <div id="gs-results" style="display:flex;flex-direction:column;gap:6px;max-height:380px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 会话捕获弹窗 -->
+<div class="modal-mask" id="session-modal">
+  <div class="modal" style="width:min(720px,100%)">
+    <div class="mhead"><h2>📥 会话捕获 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">自动发现本机 AI 工具的最近会话，提炼入库</span></h2><button class="btn icon" data-act="closeModal" data-arg="session-modal">✕</button></div>
+    <div class="mbody">
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn" id="scan-btn" data-act="scanSessions">🔄 扫描本机会话</button>
+        <span style="font-size:11px;color:var(--text-faint)">自动探测 Claude Code / Cline 的本地会话目录</span>
+      </div>
+      <div id="session-list" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto"></div>
+      <div class="field" id="session-ingest-row" style="display:none">
+        <label>入库项目 <span class="req">*</span></label>
+        <select id="session-pid" style="width:100%"></select>
+      </div>
+      <div class="field" id="session-preview-row" style="display:none">
+        <label>会话内容预览</label>
+        <textarea id="session-preview" readonly style="min-height:130px;font-family:Consolas,monospace;font-size:11.5px"></textarea>
+      </div>
+      <div id="session-result" style="display:none"></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" id="session-ingest-btn" style="display:none" data-act="ingestSession">✨ AI 提炼</button>
+      <button class="btn primary" id="session-apply-btn" style="display:none" data-act="applySummarize">✅ 应用到项目</button>
     </div>
   </div>
 </div>
@@ -1079,6 +1164,7 @@ async function loadOverview() {
         : "检测到数据文件损坏：已备份为 .bak 并重置为空看板");
     }
     renderDash();
+    checkReminders(stats);
     renderOverview();
   } catch (e) {
     toast("加载失败：" + e.message);
@@ -1208,6 +1294,14 @@ const ACTIONS = {
   openGlobalSearch: () => openGlobalSearch(),
   toggleTheme: () => toggleTheme(),
   copyContextJson: () => copyContextJson(),
+  addMemory: () => addMemory(),
+  deleteMemory: (arg, ev, el) => deleteMemory(el.dataset.mid),
+  appendJournal: () => appendJournal(),
+  openSessionCapture: () => openSessionCapture(),
+  scanSessions: () => scanSessions(),
+  dismissReminder: () => dismissReminder(),
+  ingestSession: () => ingestSession(),
+  applySummarize: () => applySummarize(),
   showRecoverable: () => showRecoverable(),
   restoreData: (arg) => restoreData(arg),
   sendCommand: () => sendCommand(),
@@ -1296,6 +1390,7 @@ function renderDetail() {
   document.getElementById("d-handoff").innerHTML = renderMarkdown(p.handoff_note || "（未填写，建议补充给智能体的交接说明）");
   document.getElementById("d-next").innerHTML = renderMarkdown(p.next_action || "（未填写）");
   renderReadiness(p.id);
+  renderMemories(p.id);
   const tasks = p.tasks || [];
   document.getElementById("d-task-total").textContent = "共 " + tasks.length + " 个任务";
   const cols = { "待办": "col-todo", "进行中": "col-doing", "已完成": "col-done", "阻塞": "col-blocked" };
@@ -1513,6 +1608,16 @@ function openTaskModal(taskId) {
   document.getElementById("t-agent").value = "";
   document.getElementById("t-refs").value = "";
   document.getElementById("t-due").value = "";
+  const journalField = document.getElementById("t-journal-field");
+  if (taskId) {
+    const t0 = (current.tasks || []).find(x => x.id === taskId);
+    if (t0) {
+      journalField.style.display = "flex";
+      renderJournal(t0.journal);
+    } else { journalField.style.display = "none"; }
+  } else {
+    journalField.style.display = "none";
+  }
   const depsSel = document.getElementById("t-deps");
   depsSel.innerHTML = (current && current.tasks ? current.tasks : [])
     .filter(x => x.id !== taskId)
@@ -1586,7 +1691,9 @@ async function openAISettings() {
     document.getElementById("ai-sched-freq").value = s.frequency || "daily";
     document.getElementById("ai-sched-time").value = s.time || "09:00";
     document.getElementById("ai-sched-last").textContent = s.last_run || "—";
+    document.getElementById("mcp-readonly").checked = !!(aiConfig.ai.mcp_readonly);
     loadBackups();
+    loadUsage();
     openModal("ai-settings-modal");
   } catch (e) { toast("加载配置失败：" + e.message); }
 }
@@ -1620,6 +1727,7 @@ async function saveAISettings() {
   const body = {
     endpoints,
     active_model: document.getElementById("ai-active-model").value,
+    mcp_readonly: document.getElementById("mcp-readonly").checked,
     schedule: {
       enabled: document.getElementById("ai-sched-enabled").checked,
       frequency: document.getElementById("ai-sched-freq").value,
@@ -2377,6 +2485,14 @@ async function applySummarize() {
       if (note !== p.handoff_note) { p.handoff_note = note; changed = true; }
     }
     if (changed) await api("/api/projects/" + currentPid, { method: "PUT", body: JSON.stringify(p) });
+    // 会话中的决策/坑/约定自动沉淀为结构化记忆
+    for (const m of (summarizeData.memories || [])) {
+      if (!m.text) continue;
+      try {
+        await api("/api/memories", { method: "POST", body: JSON.stringify({
+          pid: currentPid, type: m.type || "事实", text: m.text, source: "会话提炼" }) });
+      } catch (e) { /* 记忆写入失败不阻塞主流程 */ }
+    }
     toast(`应用完成：新增任务 ${ok} 个，失败 ${fail} 个 ✓`);
     closeModal("summarize-modal");
     current = await api("/api/projects/" + currentPid);
@@ -2606,6 +2722,204 @@ async function downloadHandoffPage() {
     URL.revokeObjectURL(a.href);
     toast("接手页已下载 ✓ 双击即可打开（离线可用）");
   } catch (e) { toast("接手页生成失败：" + e.message); }
+}
+
+// ============ 项目记忆 ============
+async function renderMemories(pid) {
+  const box = document.getElementById("memory-body");
+  if (!box) return;
+  try {
+    const r = await api("/api/memories?pid=" + encodeURIComponent(pid));
+    const items = r.memories || [];
+    box.innerHTML = items.length
+      ? items.map(m => `
+        <div class="memory-item">
+          <span class="m-type">${esc(m.type || "事实")}</span>
+          <span class="m-text">${esc(m.text)}</span>
+          <span class="m-time">${esc((m.time || "").slice(5, 10))}</span>
+          <button class="m-del" title="删除" data-act="deleteMemory" data-mid="${esc(m.id)}">✕</button>
+        </div>`).join("")
+      : '<div style="font-size:12px;color:var(--text-faint)">暂无记忆。会话提炼会自动沉淀决策/坑/约定，也可手动添加。</div>';
+  } catch (e) { box.innerHTML = '<div style="font-size:12px;color:var(--red)">加载失败</div>'; }
+}
+
+async function addMemory() {
+  if (!currentPid) return;
+  const text = prompt("添加一条项目记忆（决策 / 坑 / 约定 / 关键事实）：");
+  if (!text || !text.trim()) return;
+  const type = prompt("类型（决策 / 坑 / 约定 / 事实）：", "事实") || "事实";
+  try {
+    await api("/api/memories", { method: "POST", body: JSON.stringify({
+      pid: currentPid, type: type.trim(), text: text.trim(), source: "手动" }) });
+    toast("记忆已添加 ✓");
+    renderMemories(currentPid);
+  } catch (e) { toast("添加失败：" + e.message); }
+}
+
+async function deleteMemory(mid) {
+  if (!mid || !confirm("删除这条记忆？")) return;
+  try {
+    await api("/api/memories/" + mid, { method: "DELETE" });
+    renderMemories(currentPid);
+  } catch (e) { toast("删除失败：" + e.message); }
+}
+
+// ============ 任务过程日志 ============
+async function appendJournal() {
+  const input = document.getElementById("t-journal-input");
+  const text = (input.value || "").trim();
+  if (!text) { toast("先输入记录内容"); return; }
+  if (!editTaskId) { toast("请先保存任务后再追加日志"); return; }
+  try {
+    await api("/api/tasks/" + editTaskId + "/journal", { method: "POST", body: JSON.stringify({ text }) });
+    input.value = "";
+    const t = (current.tasks || []).find(x => x.id === editTaskId);
+    (t.journal = t.journal || []).push({ time: new Date().toLocaleString("sv-SE").slice(0, 16), text });
+    renderJournal(t.journal);
+    toast("已记录 ✓");
+  } catch (e) { toast("记录失败：" + e.message); }
+}
+
+function renderJournal(journal) {
+  const list = document.getElementById("t-journal-list");
+  const items = journal || [];
+  list.innerHTML = items.length
+    ? items.map(e => `<div class="j-row"><b>[${esc((e.time || "").slice(5, 16))}]</b>${esc(e.text)}</div>`).join("")
+    : '<div class="j-row">暂无记录</div>';
+}
+
+// ============ 会话捕获 ============
+let capturedSession = null;
+
+async function openSessionCapture() {
+  capturedSession = null;
+  document.getElementById("session-list").innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:4px">点「扫描」发现本机 AI 工具的最近会话</div>';
+  document.getElementById("session-ingest-row").style.display = "none";
+  document.getElementById("session-preview-row").style.display = "none";
+  document.getElementById("session-result").style.display = "none";
+  document.getElementById("session-ingest-btn").style.display = "none";
+  document.getElementById("session-apply-btn").style.display = "none";
+  openModal("session-modal");
+  scanSessions();
+}
+
+async function scanSessions() {
+  const list = document.getElementById("session-list");
+  const btn = document.getElementById("scan-btn");
+  btn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/sessions/scan");
+    const items = r.sessions || [];
+    if (!items.length) {
+      list.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:4px">没有发现本地会话文件（未安装 Claude Code / Cline，或目录不存在）。自定义会话源可在配置文件 config.json 的 ai.session_sources 里添加。</div>';
+      return;
+    }
+    list.innerHTML = items.map((s, i) => `
+      <div class="sess-item" data-i="${i}">
+        <span class="s-src">${esc(s.source)}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.path)}">${esc(s.path.split(/[\\\\/]/).slice(-2).join("/"))}</span>
+        <span style="color:var(--text-faint);flex-shrink:0">${esc(s.mtime)} · ${s.size_kb}KB</span>
+      </div>`).join("");
+    list.querySelectorAll(".sess-item").forEach(el => {
+      el.addEventListener("click", () => {
+        list.querySelectorAll(".sess-item").forEach(x => x.style.borderColor = "");
+        el.style.borderColor = "var(--accent)";
+        capturedSession = items[Number(el.dataset.i)];
+        loadSessionPreviewAndPrepare();
+      });
+    });
+  } catch (e) { list.innerHTML = '<div style="color:var(--red);font-size:12px">扫描失败：' + esc(e.message) + "</div>"; }
+  btn.classList.remove("ai-loading-btn");
+}
+
+async function loadSessionPreviewAndPrepare() {
+  if (!capturedSession) return;
+  document.getElementById("session-ingest-row").style.display = "block";
+  document.getElementById("session-preview-row").style.display = "block";
+  document.getElementById("session-result").style.display = "none";
+  document.getElementById("session-ingest-btn").style.display = "block";
+  document.getElementById("session-apply-btn").style.display = "none";
+  // 项目下拉：默认当前项目（若在详情页）
+  const sel = document.getElementById("session-pid");
+  const data = await api("/api/projects");
+  sel.innerHTML = (data.projects || []).map(pp => `<option value="${esc(pp.id)}">${esc(pp.name)}</option>`).join("");
+  if (currentPid) sel.value = currentPid;
+  try {
+    const pv = await api("/api/sessions/preview?path=" + encodeURIComponent(capturedSession.path));
+    document.getElementById("session-preview").value = pv.text;
+  } catch (e) {
+    document.getElementById("session-preview").value = "预览失败：" + e.message;
+  }
+}
+
+async function ingestSession() {
+  if (!capturedSession) return;
+  const pid = document.getElementById("session-pid").value;
+  if (!pid) { toast("请选择入库项目"); return; }
+  currentPid = pid;
+  const btn = document.getElementById("session-ingest-btn");
+  btn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/sessions/ingest", { method: "POST", body: JSON.stringify({
+      pid, path: capturedSession.path }) });
+    summarizeData = r.parsed;
+    // 复用提炼结果渲染
+    const box = document.getElementById("session-result");
+    box.style.display = "block";
+    const d = r.parsed;
+    const tasks = (d.new_tasks || []).map(t =>
+      `<div class="task-row"><span class="tag2 pri-${t.priority || "中"}">${t.priority || "中"}</span><span>${esc(t.title)}</span></div>`).join("");
+    box.innerHTML = `<div class="summ-box">
+      <div class="sec"><span class="lab">📌 总结</span><div class="body">${esc(d.summary || "（无）")}</div></div>
+      ${tasks ? `<div class="sec"><span class="lab">➕ 建议新增任务（${(d.new_tasks || []).length} 个）</span><div class="tasks">${tasks}</div></div>` : ""}
+      ${d.next_action ? `<div class="sec"><span class="lab">🎯 建议下一步</span><div class="body">${esc(d.next_action)}</div></div>` : ""}
+      ${d.handoff_note_updates ? `<div class="sec"><span class="lab">🤝 建议补充进交接说明</span><div class="body">${esc(d.handoff_note_updates)}</div></div>` : ""}
+    </div>`;
+    document.getElementById("session-apply-btn").style.display =
+      ((d.new_tasks || []).length || d.next_action || d.handoff_note_updates) ? "block" : "none";
+    if (!tasks && !d.next_action) toast("这段会话没有提炼出可入库的内容");
+  } catch (e) { toast("提炼失败：" + e.message); }
+  btn.classList.remove("ai-loading-btn");
+}
+
+// 会话应用后复用 applySummarize（它基于 summarizeData + currentPid，弹窗关闭不冲突）
+// ============ 逾期/临期提醒 ============
+function checkReminders(stats) {
+  if (!stats) return;
+  const overdue = stats.overdue_tasks || 0;
+  const soon = stats.duesoon_tasks || 0;
+  const banner = document.getElementById("remind-banner");
+  if (!overdue && !soon) { banner.style.display = "none"; return; }
+  let today;
+  try { today = new Date().toISOString().slice(0, 10); } catch (e) { return; }
+  try {
+    if (localStorage.getItem("kanban-remind-date") === today) { banner.style.display = "none"; return; }
+  } catch (e) {}
+  banner.innerHTML = `
+    <span>⏰ 提醒：${overdue ? `<b>${overdue} 个任务已逾期</b>` : ""}${overdue && soon ? "，" : ""}${soon ? `<b>${soon} 个任务 2 天内到期</b>` : ""}。建议尽快处理或调整截止日期。</span>
+    <button class="btn small" data-act="dismissReminder">知道了</button>`;
+  banner.style.display = "flex";
+}
+
+function dismissReminder() {
+  const banner = document.getElementById("remind-banner");
+  banner.style.display = "none";
+  try { localStorage.setItem("kanban-remind-date", new Date().toISOString().slice(0, 10)); } catch (e) {}
+}
+
+// ============ 用量统计 ============
+async function loadUsage() {
+  const box = document.getElementById("usage-body");
+  if (!box) return;
+  try {
+    const u = await api("/api/usage");
+    const t = u.totals || {};
+    const feats = Object.entries(u.by_feature || {}).sort((a, b) => b[1].calls - a[1].calls);
+    box.innerHTML = `
+      调用 <b>${t.calls || 0}</b> 次（失败 ${t.failed || 0}） · Token <b>${(t.prompt_tokens || 0).toLocaleString()}</b> + <b>${(t.completion_tokens || 0).toLocaleString()}</b><br>
+      ${feats.length ? "按功能：" + feats.map(([k, v]) => `${esc(k)} ${v.calls}次/${v.tokens.toLocaleString()}tk`).join(" · ") : "暂无记录（AI 功能调用后自动记录）"}
+      ${t.failed ? `<br><span style="color:var(--red)">最近有失败调用，详情见 usage.jsonl</span>` : ""}`;
+  } catch (e) { box.innerHTML = "加载失败：" + esc(e.message); }
 }
 
 // ============ 启动 ============

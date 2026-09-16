@@ -76,6 +76,8 @@ def default_config() -> dict:
             "endpoints": DEFAULT_ENDPOINTS,
             "active_model": "deepseek-v4-flash",
             "schedule": {"enabled": False, "frequency": "daily", "time": "09:00", "last_run": ""},
+            "session_sources": [],   # 自定义会话捕获源 [{name, path, type}]
+            "mcp_readonly": False,   # MCP 只读模式（外部智能体只能读不能写）
         }
     }
 
@@ -142,7 +144,7 @@ def mask_config(cfg: dict) -> dict:
     return out
 
 
-def _post(base_url: str, api_key: str, model: str, messages: list, temperature: float, timeout: float) -> str:
+def _post(base_url: str, api_key: str, model: str, messages: list, temperature: float, timeout: float) -> tuple[str, dict | None]:
     url = base_url.rstrip("/") + "/chat/completions"
     payload = {
         "model": model,
@@ -158,7 +160,33 @@ def _post(base_url: str, api_key: str, model: str, messages: list, temperature: 
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         raw = resp.read().decode("utf-8", "replace")
     data = json.loads(raw)
-    return data["choices"][0]["message"]["content"]
+    usage = data.get("usage") if isinstance(data, dict) else None
+    return data["choices"][0]["message"]["content"], (usage if isinstance(usage, dict) else None)
+
+
+def _usage_file() -> Path:
+    return config_file().parent / "usage.jsonl"
+
+
+_USAGE_LOCK = threading.Lock()
+
+
+def _record_usage(feature: str, endpoint: str, model: str, usage: dict | None, duration: float, ok: bool) -> None:
+    """追加一条用量记录到 usage.jsonl（失败静默，不影响主流程）"""
+    try:
+        rec = {
+            "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "feature": feature, "endpoint": endpoint, "model": model,
+            "prompt_tokens": (usage or {}).get("prompt_tokens"),
+            "completion_tokens": (usage or {}).get("completion_tokens"),
+            "duration_s": round(duration, 2),
+            "ok": ok,
+        }
+        with _USAGE_LOCK:
+            with open(_usage_file(), "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
 
 
 def _model_temp(model: str, temperature: float) -> float:
@@ -168,8 +196,10 @@ def _model_temp(model: str, temperature: float) -> float:
     return temperature
 
 
-def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = DEFAULT_TIMEOUT) -> tuple[str, str]:
-    """统一 LLM 调用入口：返回 (内容, 使用的端点名)。失败时抛出 LLMError。"""
+def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = DEFAULT_TIMEOUT,
+         feature: str = "") -> tuple[str, str]:
+    """统一 LLM 调用入口：返回 (内容, 使用的端点名)。失败时抛出 LLMError。
+    feature：调用用途标签（监管分析/自然语言指令/…），用于用量统计。"""
     endpoints = [ep for ep in cfg.get("ai", {}).get("endpoints", []) if ep.get("enabled")]
     if not endpoints:
         raise LLMError("没有可用的 AI 端点，请在 AI 设置中配置")
@@ -190,9 +220,13 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
         model = active if active in models else models[0]
         temp = _model_temp(model, temperature)
         for key in keys:
+            t0 = time.time()
             try:
-                return _post(ep["base_url"], key, model, messages, temp, timeout), ep["name"]
+                content, usage = _post(ep["base_url"], key, model, messages, temp, timeout)
+                _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t0, True)
+                return content, ep["name"]
             except urllib.error.HTTPError as e:
+                _record_usage(feature or "未标注", ep["name"], model, None, time.time() - t0, False)
                 code = e.code
                 body = ""
                 try:
@@ -202,7 +236,10 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
                 # 模型不支持低 temperature（如 kimi 只允许 1）：用 1 重试一次
                 if code == 400 and "emperature" in body and temp != 1:
                     try:
-                        return _post(ep["base_url"], key, model, messages, 1, timeout), ep["name"]
+                        t1 = time.time()
+                        content, usage = _post(ep["base_url"], key, model, messages, 1, timeout)
+                        _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t1, True)
+                        return content, ep["name"]
                     except Exception as e2:
                         errors.append(f"{ep['name']}/{model}: temp=1 重试仍失败 {type(e2).__name__}")
                         time.sleep(0.4)
@@ -221,6 +258,7 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
                     errors.append(f"{ep['name']}/{model}: HTTP {code}")
                 time.sleep(0.4)
             except Exception as e:  # 超时/网络/解析
+                _record_usage(feature or "未标注", ep["name"], model, None, time.time() - t0, False)
                 errors.append(f"{ep['name']}/{model}: {type(e).__name__}")
                 time.sleep(0.4)
     raise LLMError("所有 AI 端点均调用失败：" + " | ".join(errors))

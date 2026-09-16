@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 # 语义化版本：主版本.次版本.修订
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 ROOT = Path(__file__).resolve().parent.parent
 
