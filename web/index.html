@@ -746,7 +746,17 @@
 
       <div>
         <div class="panel" style="margin-bottom:0">
-          <h3>🗃 任务看板 <span style="margin-left:auto; text-transform:none; letter-spacing:0; font-weight:400; color:var(--text-faint)" id="d-task-total"></span></h3>
+          <h3>🗃 任务看板
+            <span style="margin-left:auto; display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:0; font-weight:400">
+              <span style="color:var(--text-faint)" id="d-task-total"></span>
+              <select id="task-sort" style="font-size:12px; padding:2px 6px" title="列内排序（只影响显示，不改数据顺序）">
+                <option value="default">默认顺序</option>
+                <option value="priority">按优先级</option>
+                <option value="due">按截止日期</option>
+                <option value="updated">按最近更新</option>
+              </select>
+            </span>
+          </h3>
           <div class="kanban">
             <div class="kcol k-todo">
               <div class="khead"><span class="dot"></span>待办<span class="n" id="c-todo">0</span></div>
@@ -1368,6 +1378,26 @@ function showOverview() {
   loadOverview();
 }
 
+// 列内排序（只影响显示，不动数据顺序 —— 数据顺序由新建/更新的时间决定）
+let taskSortMode = "default";
+try { taskSortMode = localStorage.getItem("kanban-task-sort") || "default"; } catch (e) {}
+
+function sortTasks(tasks, mode) {
+  const arr = (tasks || []).slice();
+  const pri = { "高": 0, "中": 1, "低": 2 };
+  if (mode === "priority") {
+    arr.sort((a, b) => (pri[a.priority] ?? 1) - (pri[b.priority] ?? 1)
+      || String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+  } else if (mode === "due") {
+    // 已完成的往后排；没设截止的排在有截止的后面
+    const key = t => (t.status === "已完成" ? "9" : "0") + (t.due_date || "9999-12-31");
+    arr.sort((a, b) => key(a).localeCompare(key(b)));
+  } else if (mode === "updated") {
+    arr.sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+  }
+  return arr;
+}
+
 function renderDetail() {
   const p = current;
   const stName = STATUS_SET.has(p.status) ? p.status : "规划中";
@@ -1391,7 +1421,7 @@ function renderDetail() {
   document.getElementById("d-next").innerHTML = renderMarkdown(p.next_action || "（未填写）");
   renderReadiness(p.id);
   renderMemories(p.id);
-  const tasks = p.tasks || [];
+  const tasks = sortTasks(p.tasks || [], taskSortMode);
   document.getElementById("d-task-total").textContent = "共 " + tasks.length + " 个任务";
   const cols = { "待办": "col-todo", "进行中": "col-doing", "已完成": "col-done", "阻塞": "col-blocked" };
   const counts = { "待办": 0, "进行中": 0, "已完成": 0, "阻塞": 0 };
@@ -2704,6 +2734,17 @@ async function copyContextJson() {
     catch (e) { fallbackCopy(text); }
   } catch (e) { toast("获取失败：" + e.message); }
 }
+
+(function bindTaskSort() {
+  const sel = document.getElementById("task-sort");
+  if (!sel) return;
+  sel.value = taskSortMode;
+  sel.addEventListener("change", () => {
+    taskSortMode = sel.value;
+    try { localStorage.setItem("kanban-task-sort", taskSortMode); } catch (e) {}
+    if (current) renderDetail();
+  });
+})();
 
 async function downloadHandoffPage() {
   if (!currentPid) return;

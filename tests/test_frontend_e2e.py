@@ -407,3 +407,43 @@ def test_pages_handle_empty_board(ui):
     page.wait_for_selector("[data-act='openProjectModal']", timeout=15000)
     page.wait_for_timeout(500)
     assert "还没有项目" in page.locator("body").inner_text() or page.locator(".pcard").count() == 0
+
+
+def test_task_sort_reorders_cards(ui):
+    """切换排序后卡片顺序要真的变（默认顺序是新建在前）"""
+    page, api, _ = ui
+    p = make_project(api, "排序检查项目")
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "高优先任务", "status": "待办", "priority": "高"})
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "低优先任务", "status": "待办", "priority": "低"})
+    page.reload(wait_until="domcontentloaded")
+
+    page.click(".pcard:has-text('排序检查项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.wait_for_selector("#col-todo .tcard", timeout=10000)
+
+    first_before = page.locator("#col-todo .tcard .tt").first.inner_text()
+    assert "低优先" in first_before, f"默认应是新建在前，实际首张：{first_before}"
+
+    page.select_option("#task-sort", "priority")
+    first_after = page.locator("#col-todo .tcard .tt").first.inner_text()
+    assert "高优先" in first_after, f"按优先级排序后高优先应在前，实际首张：{first_after}"
+
+
+def test_task_sort_reorders_cards(ui):
+    """切换排序后卡片顺序要真的变（默认顺序是新建在前）"""
+    page, api, _ = ui
+    p = make_project(api, "排序检查项目")
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "高优先任务", "status": "待办", "priority": "高"})
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "低优先任务", "status": "待办", "priority": "低"})
+    page.reload(wait_until="domcontentloaded")
+
+    page.click(".pcard:has-text('排序检查项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.wait_for_selector("#col-todo .tcard", timeout=10000)
+
+    first_before = page.locator("#col-todo .tcard .tt").first.inner_text()
+    assert "低优先" in first_before, f"默认应是新建在前，实际首张：{first_before}"
+
+    page.select_option("#task-sort", "priority")
+    first_after = page.locator("#col-todo .tcard .tt").first.inner_text()
+    assert "高优先" in first_after, f"按优先级排序后高优先应在前，实际首张：{first_after}"
