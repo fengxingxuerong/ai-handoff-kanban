@@ -230,6 +230,8 @@ rem （CI 里也有这一步：.github/workflows/test.yml 的 scenario job，改
 | `test_coverage_gaps.py` | 补齐"逻辑真但一直没测到"的分支：健康趋势对比（down/up/flat/new）、调度触发与防重、LLM 网关错误分类与 temperature 重试、导出路径放行 |
 | `test_version.py` | 版本与构建时间：源码态取最新 mtime、打包态读构建戳、生成物不参与比较、缺戳如实报「未知」 |
 | `test_data_io.py` | 全量数据导出/导入：导出不含密钥、导入是覆盖语义且先做快照、脏数据规范化、坏文件拒绝、往返一致性 |
+| `test_v110_features.py` | 1.1.0 六个新面：用量聚合与坏行跳过、记忆层 CRUD/过滤/去重/类型归一、会话扫描与三种格式解析、会话入库链路、轨迹在 context 与交接包里可见 |
+| `test_storage_limits.py` | 存储不无限增长：usage 滚动裁剪、并发追加不错行、journal 条数与长度上限、脏轨迹规范化、会话读取限源、只读模式作用域 |
 
 AI 用例默认打本地假端点（`tests/llm_stub.py`，OpenAI 兼容），**不消耗任何模型配额**；
 只有 `KANBAN_LIVE=1` 的 `test_ai.py` 会走真实模型。

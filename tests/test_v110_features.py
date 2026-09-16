@@ -1,0 +1,227 @@
+# -*- coding: utf-8 -*-
+"""1.1.0 六个新功能面的补测
+
+背景：1.1.0 一次加了会话捕获 / 过程轨迹 / 记忆层 / 用量追踪 / 提醒 / 只读模式，
+语句数从 1630 涨到 1943，覆盖率从 94% 掉到 92%（门槛 90，余量只剩 2 点）。
+这里把**逻辑真**的分支补上，不为数字硬凑异常分支。
+"""
+from __future__ import annotations
+
+import json
+import time
+
+import pytest
+
+from app.main import _extract_session_text
+
+
+# ---------------- 用量追踪 ----------------
+
+def test_usage_stats_with_no_records(app_client):
+    status, body = app_client.get("/api/usage")
+    assert status == 200
+    assert body["totals"]["calls"] == 0 and body["totals"]["failed"] == 0
+
+
+def test_usage_stats_aggregates_by_feature_and_model(app_client):
+    import app.llm as llm
+
+    f = llm._usage_file()
+    recs = [
+        {"time": "2026-09-01 10:00:00", "feature": "监管分析", "endpoint": "A", "model": "m1",
+         "prompt_tokens": 100, "completion_tokens": 50, "duration_s": 1.0, "ok": True},
+        {"time": "2026-09-01 11:00:00", "feature": "监管分析", "endpoint": "A", "model": "m2",
+         "prompt_tokens": 10, "completion_tokens": 5, "duration_s": 1.0, "ok": True},
+        {"time": "2026-09-01 12:00:00", "feature": "指令解析", "endpoint": "A", "model": "m1",
+         "prompt_tokens": None, "completion_tokens": None, "duration_s": 1.0, "ok": False},
+    ]
+    f.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in recs) + "\n", encoding="utf-8")
+
+    status, body = app_client.get("/api/usage")
+    assert status == 200
+    assert body["totals"]["calls"] == 2, "只统计成功的调用"
+    assert body["totals"]["failed"] == 1
+    assert body["totals"]["prompt_tokens"] == 110
+    assert body["by_feature"]["监管分析"]["calls"] == 2
+    assert body["by_model"]["m1"]["calls"] == 1
+    assert len(body["recent"]) == 3
+
+
+def test_usage_stats_skips_corrupt_lines(app_client):
+    """文件被人手改坏或写到一半 —— 跳过坏行，不能让整个设置页白屏"""
+    import app.llm as llm
+
+    good = {"time": "2026-09-01 10:00:00", "feature": "x", "endpoint": "A", "model": "m",
+            "prompt_tokens": 1, "completion_tokens": 1, "duration_s": 1.0, "ok": True}
+    llm._usage_file().write_text(
+        "这不是 JSON\n" + json.dumps(good, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    status, body = app_client.get("/api/usage")
+    assert status == 200 and body["totals"]["calls"] == 1
+
+
+# ---------------- 项目记忆层 ----------------
+
+def test_memory_crud_and_filters(app_client):
+    _, p = app_client.create_project("记忆项目", status="进行中")
+    st, m = app_client.post("/api/memories", {"pid": p["id"], "type": "坑", "text": "ffmpeg 8k 要重采样"})
+    assert st == 201 and m["memory"]["type"] == "坑"
+
+    app_client.post("/api/memories", {"pid": p["id"], "type": "约定", "text": "提交前跑 npm test"})
+    app_client.post("/api/memories", {"pid": "别的项目", "type": "事实", "text": "不属于这个项目的记忆"})
+
+    _, body = app_client.get(f"/api/memories?pid={p['id']}")
+    assert len(body["memories"]) == 2, "按项目过滤"
+
+    _, body = app_client.get(f"/api/memories?pid={p['id']}&mtype=约定")
+    assert len(body["memories"]) == 1 and "npm test" in body["memories"][0]["text"]
+
+    _, body = app_client.get(f"/api/memories?pid={p['id']}&q=ffmpeg")
+    assert len(body["memories"]) == 1 and "重采样" in body["memories"][0]["text"]
+
+
+def test_memory_dedupes_same_text_in_same_project(app_client):
+    _, p = app_client.create_project("去重项目", status="进行中")
+    st1, _ = app_client.post("/api/memories", {"pid": p["id"], "text": "同一条记忆"})
+    st2, body = app_client.post("/api/memories", {"pid": p["id"], "text": "同一条记忆"})
+    assert st1 == 201 and st2 == 201
+    assert body.get("deduped") is True, "同项目同文本不该重复入库"
+
+    _, listing = app_client.get(f"/api/memories?pid={p['id']}")
+    assert len(listing["memories"]) == 1
+
+
+def test_memory_unknown_type_falls_back_to_fact(app_client):
+    _, p = app_client.create_project("类型项目", status="进行中")
+    _, body = app_client.post("/api/memories", {"pid": p["id"], "type": "瞎写的类型", "text": "某条事实"})
+    assert body["memory"]["type"] == "事实"
+
+
+def test_memory_delete_then_404(app_client):
+    _, p = app_client.create_project("删除记忆项目", status="进行中")
+    _, m = app_client.post("/api/memories", {"pid": p["id"], "text": "待删除"})
+    mid = m["memory"]["id"]
+    assert app_client.delete(f"/api/memories/{mid}")[0] == 200
+    assert app_client.delete(f"/api/memories/{mid}")[0] == 404
+
+
+def test_memories_file_corrupt_returns_empty(app_client):
+    """文件坏了要能继续用，而不是整个设置页报错"""
+    from app.main import memories_file
+
+    memories_file().write_text("{ 不是合法 JSON", encoding="utf-8")
+    status, body = app_client.get("/api/memories")
+    assert status == 200 and body["memories"] == []
+
+
+# ---------------- 会话捕获 ----------------
+
+def test_scan_sessions_finds_files_in_custom_source(seeded_client):
+    src = seeded_client.data_dir / "scan_src"
+    src.mkdir(exist_ok=True)
+    (src / "a.json").write_text(json.dumps([{"text": "你好", "say": "user"}]), encoding="utf-8")
+    (src / "b.jsonl").write_text(
+        json.dumps({"type": "user", "message": {"role": "user", "content": "在吗"}}) + "\n", encoding="utf-8")
+
+    st, _ = seeded_client.put("/api/ai/config", {
+        "session_sources": [{"name": "扫描源", "path": str(src), "type": "text"}]})
+    assert st == 200
+
+    status, body = seeded_client.get("/api/sessions/scan")
+    assert status == 200
+    paths = [str(s.get("path", "")) for s in body.get("sessions", [])]
+    assert any(p.endswith("a.json") or p.endswith("b.jsonl") for p in paths), f"扫描结果：{paths}"
+
+
+def test_scan_sessions_skips_missing_sources(seeded_client):
+    """源目录不存在（工具没装）不该报错，跳过即可"""
+    missing = seeded_client.data_dir / "根本不存在"
+    st, _ = seeded_client.put("/api/ai/config", {
+        "session_sources": [{"name": "空源", "path": str(missing), "type": "text"}]})
+    assert st == 200
+    status, body = seeded_client.get("/api/sessions/scan")
+    assert status == 200 and isinstance(body.get("sessions"), list)
+
+
+def test_extract_session_text_claude_jsonl(tmp_path):
+    f = tmp_path / "s.jsonl"
+    f.write_text("\n".join([
+        json.dumps({"type": "user", "message": {"role": "user", "content": "帮我看这个 bug"}}),
+        json.dumps({"type": "assistant", "message": {"role": "assistant",
+                                                     "content": [{"type": "text", "text": "先跑测试"}]}}),
+        "坏行",
+    ]), encoding="utf-8")
+    text = _extract_session_text(str(f))
+    assert "帮我看这个 bug" in text and "先跑测试" in text
+    assert "用户" in text and "助手" in text, "要能区分角色"
+
+
+def test_extract_session_text_cline_json(tmp_path):
+    f = tmp_path / "ui_messages.json"
+    f.write_text(json.dumps([
+        {"say": "user", "text": "加一个导出按钮"},
+        {"say": "api_req_started", "text": "忽略我"},
+        {"say": "assistant", "text": "已加上"},
+    ], ensure_ascii=False), encoding="utf-8")
+    text = _extract_session_text(str(f))
+    assert "加一个导出按钮" in text and "已加上" in text
+    assert "忽略我" not in text, "工具调用类的中间消息要过滤掉"
+
+
+def test_extract_session_text_falls_back_to_raw_and_truncates(tmp_path):
+    f = tmp_path / "note.txt"
+    f.write_text("纯文本会话记录" * 2000, encoding="utf-8")
+    text = _extract_session_text(str(f), max_chars=500)
+    assert len(text) == 500, "必须按上限截断，别把超大文件整个读进上下文"
+
+
+def test_extract_session_text_missing_file(tmp_path):
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as ei:
+        _extract_session_text(str(tmp_path / "不存在.jsonl"))
+    assert ei.value.status_code == 404
+
+
+def test_ingest_session_applies_extracted_results(ai_client):
+    """完整链路：会话文件 → 提炼 → 返回待确认的结果（不直接落库）"""
+    from pathlib import Path
+
+    src = Path(ai_client.data_dir) / "ingest_src"
+    src.mkdir(exist_ok=True)
+    f = src / "chat.jsonl"
+    f.write_text(json.dumps({"type": "user", "message": {"role": "user", "content": "把部署文档补了"}}),
+                 encoding="utf-8")
+
+    _, p = ai_client.create_project("会话入库项目", status="进行中")
+    st, _ = ai_client.put("/api/ai/config", {
+        "session_sources": [{"name": "入库源", "path": str(src), "type": "text"}]})
+    assert st == 200
+
+    ai_client.stub.push_json({
+        "summary": "聊了部署文档",
+        "new_tasks": [{"title": "写部署文档", "desc": "含回滚", "priority": "高", "status": "待办"}],
+        "next_action": "先补部署文档",
+        "handoff_note_updates": "部署走 CI",
+    })
+    status, body = ai_client.post("/api/sessions/ingest", {"pid": p["id"], "path": str(f)})
+    assert status == 200, body
+    assert body["parsed"]["new_tasks"][0]["title"] == "写部署文档"
+    assert body["path"] == str(f)
+
+
+# ---------------- 过程轨迹（journal）在交接物里露出来 ----------------
+
+def test_journal_appears_in_context_and_handoff(app_client):
+    """轨迹要能被接手的人看到 —— 否则记了等于没记"""
+    _, p = app_client.create_project("轨迹可见项目", status="进行中",
+                                     handoff_note="交接说明", next_action="下一步")
+    _, t = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "带轨迹的任务"})
+    app_client.post(f"/api/tasks/{t['id']}/journal", {"text": "先把 ffmpeg 参数调对"})
+
+    _, ctx = app_client.get(f"/api/context/{p['id']}")
+    blob = json.dumps(ctx, ensure_ascii=False)
+    assert "ffmpeg" in blob, "机器可读接手包要带上最近轨迹"
+
+    _, md = app_client.get(f"/api/export/{p['id']}")
+    assert "ffmpeg" in md, "Markdown 交接包同样要带上"
