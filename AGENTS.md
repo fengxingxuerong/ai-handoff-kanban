@@ -234,6 +234,15 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    （2026-09-16 凌晨实际踩到：一条调度用例在 00:01 那天红了）。
 6. **隐藏元素取文本要用 `text_content()`**：`inner_text()` 只返回"渲染出来"的文本，
    弹窗/折叠区里的文字（如设置面板里的版本号）拿不到，会误判成"没渲染"。
+7. **用例不许写真实数据目录**（`%USERPROFILE%\.ai-kanban`）。
+   `conftest.py` 有 autouse 夹具在**环境变量层**把 `KANBAN_DATA_DIR` 指到临时目录 ——
+   因为 `app/llm.py` 是**自己**按这个变量解析数据目录的，不认 `main.data_dir()` 的 monkeypatch。
+   历史事故（2026-09-17 实测复现）：`test_llm_gateway.py` 直接调 `llm.chat()`，
+   其中的 `_record_usage()` 落到真实 `usage.jsonl`，跑一次测试掺 12 行假数据
+   （endpoint「甲」/model「stub-model」），用户的「用量」页面数字随之失真。
+   新增直连 `app/llm.py` 的用例时**不要**去掉这层隔离；确实需要真实配置的用例自己
+   `monkeypatch.delenv("KANBAN_DATA_DIR")`（如 test_ai.py 的 live 用例）。
+   `tests/test_isolation.py` 守着这条。
 7. **并行是默认行为**：`pytest.ini` 的 addopts 带 `-n auto`（实测 135s → 41s）。
    慢用例都是真子进程（uvicorn / MCP stdio）与真浏览器，彼此独立，叠起来就是净赚。
    定位单个问题用串行更易读：`pytest -o addopts="-q" tests/test_x.py`。

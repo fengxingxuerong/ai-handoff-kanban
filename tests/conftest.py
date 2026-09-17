@@ -17,6 +17,24 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 
 
+@pytest.fixture(autouse=True)
+def _isolate_data_dir(tmp_path, monkeypatch):
+    """**任何用例都不许碰真实数据目录**（`%USERPROFILE%\\.ai-kanban`）。
+
+    历史事故（2026-09-17 实测）：`test_llm_gateway.py` 直接调 `llm.chat()`，
+    而 `llm` 自己按 `KANBAN_DATA_DIR` 解析数据目录 —— 那些用例没设这个变量，
+    于是 `_record_usage()` 落到**用户真实目录**的 `usage.jsonl`：
+    跑一次测试就给真实用量账本掺 12 行假数据（endpoint「甲」/model「stub-model」），
+    `/api/usage` 的调用次数与成功率跟着失真。
+
+    在**环境变量层**隔离，覆盖所有进程内代码路径（llm / main / mcp 都从同一处解析），
+    不依赖每条用例自觉。需要真实配置的用例（如 test_ai.py 的 live 用例）自己 pop 这个变量。
+    """
+    d = tmp_path / "kanban-autouse"
+    d.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("KANBAN_DATA_DIR", str(d))
+
+
 def free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
