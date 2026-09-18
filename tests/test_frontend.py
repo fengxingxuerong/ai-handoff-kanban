@@ -159,3 +159,37 @@ def test_task_sort_control_exists():
     assert 'id="task-sort"' in HTML
     assert "function sortTasks(" in HTML
     assert "bindTaskSort" in HTML, "切换排序要用 addEventListener，不能写内联 onchange"
+
+
+# ---------------- 样式层技术债：布局算错、窄屏无断点、写死色值 ----------------
+
+def test_view_heights_subtract_the_reminder_banner():
+    """两个视图的高度都是 calc(100vh - 定值)，而提醒横幅站在正常流里；
+    不把它扣掉，横幅一出现页面就多出第二条滚动条、看板底部被裁。"""
+    assert "--banner-h: 0px;" in HTML, "没有横幅高度的 CSS 变量"
+    for sel in ("#view-overview", "#view-detail"):
+        rule = re.search(re.escape(sel) + r"\s*\{[^}]*height: calc\((?:[^()]|\([^()]*\))*\)", HTML)
+        assert rule, f"没找到 {sel} 的高度规则"
+        assert "--banner-h" in rule.group(0), f"{sel} 的高度没扣横幅：{rule.group(0)}"
+    assert "function setBanner(" in HTML, "横幅高度得由 JS 量出来写回变量"
+
+
+def test_narrow_viewport_collapses_to_one_column():
+    block = HTML[HTML.index("@media (max-width: 700px)"):]
+    assert ".kanban { grid-template-columns: 1fr" in block[:300], "窄屏没把四列看板收成单列"
+    assert ".row3 { grid-template-columns: 1fr" in block[:300], "窄屏没把三列表单收成单列"
+
+
+def test_theme_colors_come_from_variables_not_hardcoded_values():
+    """写死的色值在另一套主题下会直接看不见：趋势图数据点的描边曾是深色的 #0e1320，
+    浅色主题下等于给浅点描了浅边；失败提示的 #e08080 也不跟随 --red。"""
+    assert "#e08080" not in HTML, "还有写死的红色，改主题时会不一致"
+    assert 'stroke="#0e1320"' not in HTML, "SVG 描边还写死成深色背景"
+    assert "style=\"stroke:var(--bg)\"" in HTML, "描边应走 --bg（随主题变）"
+
+
+def test_keyboard_focus_ring_is_defined():
+    """卡片/条目都是 div+click，键盘用户至少要看得见焦点在哪"""
+    assert ":focus-visible" in HTML
+    for sel in (".btn", ".pcard", ".tcard", ".gs-item", ".sess-item"):
+        assert re.search(r"[^{}]*" + re.escape(sel) + r":focus-visible", HTML), f"{sel} 缺焦点环"

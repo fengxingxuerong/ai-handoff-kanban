@@ -26,6 +26,9 @@
     --shadow: 0 10px 30px rgba(0,0,0,.35);
     --accent-soft: rgba(76,194,255,.08);
     --accent2-soft: rgba(139,124,246,.08);
+    /* 提醒横幅占掉的高度由 JS 写回来：两个视图的高度都是按视口算的，
+       横幅出现时不扣这一段，页面就会多出第二条滚动条、看板底部被裁掉 */
+    --banner-h: 0px;
   }
   :root[data-theme="light"] {
     --bg: #f2f5fb;
@@ -93,6 +96,12 @@
     font-size: 13px; outline: none; transition: border .2s;
   }
   .search-box input:focus { border-color: var(--accent); }
+  /* 键盘可达性：可交互元素必须有可见焦点环（输入框上面有 :focus 边框变化兜底） */
+  .btn:focus-visible, .pcard:focus-visible, .tcard:focus-visible,
+  .gs-item:focus-visible, .sess-item:focus-visible, .memory-item:focus-visible,
+  .kcol:focus-visible, .kcol .tcard:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
   .search-box svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); opacity: .5; }
 
   .header-actions { display: flex; gap: 10px; align-items: center; }
@@ -133,7 +142,7 @@
   .filter-bar .count { font-size: 12px; color: var(--text-faint); }
 
   /* ---------- 总览视图 ---------- */
-  #view-overview { height: calc(100vh - 118px); overflow-y: auto; padding: 20px 22px 40px; }
+  #view-overview { height: calc(100vh - 118px - var(--banner-h)); overflow-y: auto; padding: 20px 22px 40px; }
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -211,7 +220,7 @@
   .empty .big { font-size: 44px; margin-bottom: 14px; }
 
   /* ---------- 详情视图 ---------- */
-  #view-detail { display: none; height: calc(100vh - 60px); }
+  #view-detail { display: none; height: calc(100vh - 60px - var(--banner-h)); }
   #view-detail.active { display: block; }
   .detail-scroll { height: 100%; overflow-y: auto; padding: 18px 22px 60px; }
   .d-head {
@@ -252,6 +261,12 @@
   /* 任务看板 */
   .kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
   @media (max-width: 1200px) { .kanban { grid-template-columns: repeat(2, 1fr); } }
+  /* 窄到 700px 以下（半屏贴边、小笔记本、分屏）时四列/三列都挤成没法读的条，收成单列 */
+  @media (max-width: 700px) {
+    .kanban { grid-template-columns: 1fr; }
+    .row3 { grid-template-columns: 1fr; }
+    #view-overview, #view-detail { padding-left: 12px; padding-right: 12px; }
+  }
   .kcol {
     background: rgba(10,14,24,.5); border: 1px solid var(--border);
     border-radius: 12px; padding: 10px; min-height: 160px;
@@ -2308,7 +2323,7 @@ function renderTrends(series) {
     const pts = (s.points || []).map((p, i) => `${x(i)},${y(p.health)}`).join(" ");
     if ((s.points || []).length > 1) svg += `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/>`;
     (s.points || []).forEach((p, i) => {
-      svg += `<circle cx="${x(i)}" cy="${y(p.health)}" r="3.5" fill="${col}" stroke="#0e1320" stroke-width="1.5"><title>${esc(s.name)} ${esc(p.time)}: ${p.health}分</title></circle>`;
+      svg += `<circle cx="${x(i)}" cy="${y(p.health)}" r="3.5" fill="${col}" stroke-width="1.5" style="stroke:var(--bg)"><title>${esc(s.name)} ${esc(p.time)}: ${p.health}分</title></circle>`;
     });
   });
   svg += "</svg>";
@@ -2443,7 +2458,7 @@ function renderAgentFiles(res) {
   }).join("");
   let extra = "";
   if (skippedExisting.length) extra = `<div style="margin-top:4px;color:var(--text-faint)">跳过了 ${skippedExisting.length} 个已有文件（勾选「覆盖」可强制写入）</div>`;
-  else if (failed.length) extra = `<div style="margin-top:4px;color:#e08080">${failed.length} 个写入失败</div>`;
+  else if (failed.length) extra = `<div style="margin-top:4px;color:var(--red)">${failed.length} 个写入失败</div>`;
   box.innerHTML = `<div style="margin-bottom:4px;color:var(--text-faint)">${head} · 内容来源：${esc(srcName)}</div>${rows}${extra}`;
   box.style.display = "block";
 }
@@ -2521,7 +2536,7 @@ async function loadGitInfo() {
     }
     box.innerHTML = rows.join("<br>");
   } catch (e) {
-    box.innerHTML = `<span style="color:#e08080">${esc(e.message)}</span>`
+    box.innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`
       + '<div style="margin-top:4px;color:var(--text-faint)">先在项目里填对「代码路径」，并确认它是个 git 仓库</div>';
   }
 }
@@ -2704,7 +2719,7 @@ async function showRecoverable() {
       const usable = it.usable;
       const desc = usable
         ? `${it.project_count} 个项目 / ${it.task_count} 个任务 · ${esc(it.mtime || "")} · ${(it.names || []).map(esc).join("、")}`
-        : `<span style="color:#e08080">${esc(it.reason || "不可用")}</span>`;
+        : `<span style="color:var(--red)">${esc(it.reason || "不可用")}</span>`;
       const btn = usable
         ? `<button class="btn" data-act="restoreData" data-arg="${esc(it.source)}">恢复</button>`
         : "";
@@ -3027,26 +3042,34 @@ async function ingestSession() {
 
 // 会话应用后复用 applySummarize（它基于 summarizeData + currentPid，弹窗关闭不冲突）
 // ============ 逾期/临期提醒 ============
+function setBanner(visible) {
+  const banner = document.getElementById("remind-banner");
+  banner.style.display = visible ? "flex" : "none";
+  // 两个视图的高度都按视口算（calc(100vh - ...)），横幅在正常流里占多高就得从
+  // 可用高度里扣掉多少，否则横幅出现时页面多出第二条滚动条、看板底部被裁。
+  // 10 是横幅自己的 margin-top。必须在 display 改完之后再量，否则 offsetHeight 是 0。
+  document.documentElement.style.setProperty("--banner-h", visible ? (banner.offsetHeight + 10) + "px" : "0px");
+}
+
 function checkReminders(stats) {
   if (!stats) return;
   const overdue = stats.overdue_tasks || 0;
   const soon = stats.duesoon_tasks || 0;
-  const banner = document.getElementById("remind-banner");
-  if (!overdue && !soon) { banner.style.display = "none"; return; }
+  if (!overdue && !soon) { setBanner(false); return; }
   let today;
   try { today = new Date().toISOString().slice(0, 10); } catch (e) { return; }
   try {
-    if (localStorage.getItem("kanban-remind-date") === today) { banner.style.display = "none"; return; }
+    if (localStorage.getItem("kanban-remind-date") === today) { setBanner(false); return; }
   } catch (e) {}
+  const banner = document.getElementById("remind-banner");
   banner.innerHTML = `
     <span>⏰ 提醒：${overdue ? `<b>${overdue} 个任务已逾期</b>` : ""}${overdue && soon ? "，" : ""}${soon ? `<b>${soon} 个任务 2 天内到期</b>` : ""}。建议尽快处理或调整截止日期。</span>
     <button class="btn small" data-act="dismissReminder">知道了</button>`;
-  banner.style.display = "flex";
+  setBanner(true);
 }
 
 function dismissReminder() {
-  const banner = document.getElementById("remind-banner");
-  banner.style.display = "none";
+  setBanner(false);
   try { localStorage.setItem("kanban-remind-date", new Date().toISOString().slice(0, 10)); } catch (e) {}
 }
 

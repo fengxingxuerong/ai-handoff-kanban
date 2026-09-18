@@ -569,3 +569,28 @@ def test_package_budget_stays_quiet_for_short_package(ui):
     assert "行" in text and "KB" in text, text
     assert "过长" not in text and "偏长" not in text, text
     assert page.locator("#package-budget").evaluate("e => e.style.color") == "var(--text-faint)"
+
+
+def test_reminder_banner_does_not_break_viewport_height(ui):
+    """横幅出现时页面应当仍然恰好占满视口：以前两个视图按 calc(100vh - 定值) 算高度，
+    横幅一出现就多出一条页面级滚动条，看板最底下一排被裁到看不见。"""
+    from datetime import date, timedelta
+
+    page, api, _ = ui
+    past = (date.today() - timedelta(days=3)).isoformat()
+    p = make_project(api, "逾期布局项目")
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "早该做完的", "due_date": past})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("#remind-banner:visible", timeout=15000)
+
+    var = page.evaluate("getComputedStyle(document.documentElement)"
+                        ".getPropertyValue('--banner-h')").strip()
+    assert var.endswith("px") and float(var[:-2]) > 20, f"横幅高度没写回变量：{var!r}"
+    overflow = page.evaluate("document.documentElement.scrollHeight - window.innerHeight")
+    assert overflow <= 1, f"横幅出现后整页溢出 {overflow}px（第二条滚动条）"
+
+    page.click("[data-act='dismissReminder']")
+    page.wait_for_selector("#remind-banner", state="hidden", timeout=10000)
+    assert page.evaluate("getComputedStyle(document.documentElement)"
+                         ".getPropertyValue('--banner-h')").strip() == "0px"
+    assert page.evaluate("document.documentElement.scrollHeight - window.innerHeight") <= 1
