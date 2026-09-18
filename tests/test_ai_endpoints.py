@@ -59,6 +59,23 @@ def test_report_detail_404(ai):
     assert ai.get("/api/ai/reports/no-such-report")[0] == 404
 
 
+def test_report_detail_rejects_path_traversal(ai):
+    """rid 只能整段是时间戳，否则这个端点就是任意 .json 读取器。
+
+    reports/ 上一层就是 config.json —— 里面是所有端点的明文 Key。
+    真实 uvicorn 下 `%2E%2E%5Cconfig` 就能读到（路由只挡 `%2F`，反斜杠不挡），
+    所以这里把两种分隔符、编码与未编码的形式都过一遍。
+    """
+    (ai.data_dir / "secret-probe.json").write_text(
+        json.dumps({"leak": "sk-never-read-this"}), encoding="utf-8")
+    payloads = ["..%5Csecret-probe", "..\\secret-probe", "../secret-probe",
+                "20260101_090000%5C..%5Csecret-probe", "%2E%2E%5Csecret-probe"]
+    for rid in payloads:
+        status, body = ai.get("/api/ai/reports/" + rid)
+        assert status == 404, f"rid={rid!r} 竟然返回 {status}：{str(body)[:200]}"
+        assert "sk-never-read-this" not in str(body), f"rid={rid!r} 读到了目录外的文件"
+
+
 def test_reports_list_skips_broken_files(ai):
     """历史报告文件损坏时列表不能整体失败"""
     reports_dir = ai.data_dir / "reports"

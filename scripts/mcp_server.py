@@ -36,10 +36,14 @@ os.environ.setdefault("KANBAN_NO_SCHEDULER", "1")   # 短命进程不起后台�
 from app import main as kanban  # noqa: E402
 
 SERVER_NAME = "ai-kanban"
-SERVER_VERSION = "1.0.0"
+# 与看板本体同一个版本号：手写的 "1.0.0" 在应用升到 1.1.0 之后就成了假信息，
+# 客户端拿 serverInfo.version 判断能力/兼容性时会误判。
+SERVER_VERSION = kanban.APP_VERSION
 
-# 桌面应用服务的端口（与 app/main.py 的 SERVICE_PORT 同一口径），用于给出"活数据"直链
-SERVICE_PORT = os.environ.get("KANBAN_PORT", "18320")
+# 桌面应用服务的端口，用于给出"活数据"直链。直接取本体的常量而不是重抄一遍
+# `os.environ.get("KANBAN_PORT", "18320")` —— 两份兜底值改一处就会漂移，
+# 而漂移的后果是交接包里的链接指向一个没在听的端口。
+SERVICE_PORT = kanban.SERVICE_PORT
 
 
 def local_url(path: str) -> str:

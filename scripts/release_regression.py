@@ -31,6 +31,15 @@ BASE = f"http://127.0.0.1:{PORT}"
 NO_AI = "--no-ai" in sys.argv
 DATA_DIR = Path(tempfile.mkdtemp(prefix="kanban_regression_"))
 
+# 控制台默认 cp936，而这个脚本要打印 ✓ / 中文，也要读 MCP 子进程的 UTF-8 输出。
+# 不显式收口的话，同一条命令在 PowerShell 里绿、在 GBK 控制台里红 —— 假失败会让人怀疑产品坏了。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:                                     # noqa: BLE001  重定向到管道时可能没有 reconfigure
+    pass
+# 本机常年挂着代理：127.0.0.1 必须直连，否则演练请求被代理拦下，全线超时
+OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 passed, failed = [], []
 
 
@@ -39,7 +48,7 @@ def req(method, path, body=None, timeout=180):
     r = urllib.request.Request(BASE + path, data=data, method=method,
                                headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(r, timeout=timeout) as resp:
+        with OPENER.open(r, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
             ct = resp.headers.get("content-type", "")
             return resp.status, (json.loads(raw) if "json" in ct else raw)
@@ -71,6 +80,7 @@ def start_server() -> subprocess.Popen:
     env = dict(os.environ)
     env["KANBAN_DATA_DIR"] = str(DATA_DIR)
     env["KANBAN_PORT"] = str(PORT)
+    env["PYTHONIOENCODING"] = "utf-8"     # 子进程日志里有中文，别让父进程按 cp936 解
     python = str(ROOT / ".venv" / "Scripts" / "python.exe")
     if not Path(python).exists():
         python = sys.executable
@@ -243,6 +253,10 @@ def t6_mcp_readonly():
     env = dict(os.environ)
     env["KANBAN_DATA_DIR"] = str(DATA_DIR)
     env["KANBAN_PORT"] = str(PORT)
+    # mcp_server 用 ensure_ascii=False 往 stdout 写 JSON，中文（"只读模式"那句拒绝理由）就在里面。
+    # 不钉 UTF-8，子进程会按控制台 cp936 编码、父进程按 UTF-8 解码 → 判成乱码，
+    # 于是这条用例只在 GBK 控制台里红，跟产品没关系。
+    env["PYTHONIOENCODING"] = "utf-8"
     req("PUT", "/api/ai/config", {"mcp_readonly": True})
     call = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                        "params": {"name": "kanban_add_task",

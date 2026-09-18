@@ -11,6 +11,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# 门禁脚本大量往 stdout 打 ✓/✅，而 runner 的 Python 标准输出跟随系统区域编码
+# （windows-latest 是 cp1252，连 ✓ 都编不出来）→ 不设这行，scenario job 会在
+# 第一次打印时 UnicodeEncodeError 红掉，报的还不是被测代码的问题。
+env:
+  PYTHONIOENCODING: utf-8
+
 jobs:
   pytest:
     runs-on: windows-latest
@@ -86,9 +92,12 @@ jobs:
           restore-keys: ${{ runner.os }}-pip-
 
       - name: 安装依赖
+        # pyinstaller 只在 requirements-dev.txt 里（build.bat 是单独装的）——
+        # 这一 job 原来只装 requirements.txt，下一步 python -m PyInstaller 必然 ModuleNotFoundError。
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: 生成构建戳
         # 冻结态取不到源码 mtime，版本条读的就是这个戳；漏了会显示"未知"
@@ -109,6 +118,15 @@ jobs:
         env:
           KANBAN_NO_WINDOW: "1"
         run: python scripts/frozen_smoke.py
+
+      - name: 上传 exe
+        # 原来打完包什么也不留：exe 随 runner 一起销毁，CI 从不产出可安装产物。
+        # 放在冻结版自查之后 —— 只有真起得来、接口打得通的包才值得被下载。
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-kanban-windows
+          path: dist/AI交接看板.exe
+          if-no-files-found: error
 
       - name: 启动日志（失败时定位用）
         if: failure()

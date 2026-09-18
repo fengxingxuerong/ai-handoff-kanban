@@ -601,9 +601,25 @@ DATA_FILE = data_file()
 _ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
+def _host_of(raw: str) -> str:
+    """Host 头里只取主机名，端口丢掉。
+
+    原来写的是 `raw.split(":")[0]` —— 碰到 IPv6 的 `[::1]:18320` 只切出一个 `[`，
+    再 strip("[]") 就成了空串，于是 `if host` 短路，任何带方括号的 Host 都放行。
+    """
+    raw = (raw or "").strip()
+    try:
+        host = urlparse("//" + raw).hostname
+    except ValueError:
+        # 方括号里塞的不是 IPv6（`[evil.example.com]`）—— hostname 会当场抛，
+        # 但这恰恰是最该挡的形式，不能因为解析失败就当成"没有 Host"放过。
+        host = raw[1:].split("]")[0] if raw.startswith("[") else raw.split(":")[0]
+    return (host or "").strip().lower()
+
+
 @app.middleware("http")
 async def guard_local_request(request: Request, call_next):
-    host = (request.headers.get("host") or "").split(":")[0].strip().strip("[]").lower()
+    host = _host_of(request.headers.get("host") or "")
     if host and host not in _ALLOWED_HOSTS:
         return JSONResponse({"detail": "拒绝非本机 Host 访问"}, status_code=403)
     origin = request.headers.get("origin")
@@ -2603,8 +2619,19 @@ def ai_reports():
     return {"reports": out}
 
 
+_REPORT_ID_RE = re.compile(r"^\d{8}_\d{6}$")  # 报告 id 由 datetime.strftime("%Y%m%d_%H%M%S") 生成
+
+
 @app.get("/api/ai/reports/{rid}")
 def ai_report_detail(rid: str):
+    """按 id 取一份报告。
+
+    rid 必须整段匹配时间戳格式：`Path(dir) / f"{rid}.json"` 不做任何清洗，
+    `%2E%2E%5Cconfig` 这类编码后穿越会解析到 `..\\config.json`，
+    而那份文件里是所有端点的明文 Key。路由只挡 `%2F`，挡不住反斜杠。
+    """
+    if not _REPORT_ID_RE.match(rid):
+        raise HTTPException(404, "报告不存在")
     f = reports_dir() / f"{rid}.json"
     if not f.exists():
         raise HTTPException(404, "报告不存在")

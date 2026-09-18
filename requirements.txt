@@ -1,3 +1,6 @@
 fastapi>=0.110
 uvicorn>=0.29
 pywebview>=5.0
+# app/main.py 直接 from pydantic import ...（field_validator 是 v2 的写法），
+# 原来只靠 fastapi 传递依赖带进来 —— 一旦上游换了校验层，装完 requirements 直接 ImportError。
+pydantic>=2.7

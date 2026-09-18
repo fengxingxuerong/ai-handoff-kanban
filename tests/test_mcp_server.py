@@ -118,6 +118,26 @@ def test_server_discover(mcp):
     assert res["serverInfo"]["name"] == "ai-kanban" and len(res["tools"]) >= 10
 
 
+def test_server_version_matches_app_version(mcp):
+    """MCP 报的版本必须与看板本体同源。
+
+    这里曾经手填 "1.0.0"，而应用已经升到 1.1.0 —— 客户端拿 serverInfo.version
+    判断能力就会误判。所以断言的是"两边一致"，而不是某个具体数字。
+    """
+    sys.path.insert(0, str(ROOT))
+    from app.version import APP_VERSION
+
+    resp = mcp.call("initialize", {"protocolVersion": "2025-06-18"})
+    assert resp["result"]["serverInfo"]["version"] == APP_VERSION
+
+
+def test_local_link_port_follows_kanban_port_env(mcp):
+    """交接包/指令里的直链端口与本体同一个口径（读 KANBAN_PORT）"""
+    resp = mcp.call("initialize", {"protocolVersion": "2025-06-18"})
+    port = os.environ.get("KANBAN_PORT", "18320")
+    assert f"127.0.0.1:{port}" in resp["result"]["instructions"]
+
+
 def test_notification_gets_no_reply(mcp):
     """通知不能回包：先发通知、再发请求，第一个读到的必须是对请求的响应"""
     mcp.call("notifications/initialized", notify=True)

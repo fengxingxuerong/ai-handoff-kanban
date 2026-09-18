@@ -7,10 +7,12 @@ keys.local.json
 # 环境与构建产物
 .venv/
 app/_build_stamp.py
-build/
-build_*/
-dist/
-dist_*/
+# 构建产物一律**只在根目录**，所以锚定：不锚定的话 `web/build/`、`scripts/dist/`
+# 这类将来真要提交的源码目录会被静默忽略（比漏提交更难发现）。
+/build/
+/build_*/
+/dist/
+/dist_*/
 __pycache__/
 *.pyc
 *.spec
@@ -18,8 +20,9 @@ __pycache__/
 .pytest_probe/
 .coverage
 .coverage.*
-# 覆盖率数据文件可以被环境变量改名（分批跑时常用），xdist 还会留下 .cov_x.pid* 分片
-.cov*
+# 覆盖率数据文件可以被环境变量改名（分批跑时常用），xdist 还会留下 .cov_x.pid* 分片。
+# 只锚定 .cov_ 前缀：写成 `.cov*` 会把将来的 `.coveragerc` 一起吞掉。
+/.cov_*
 htmlcov/
 # 测试用的固定 basetemp（本机受管环境里必须指定，见 AGENTS.md「容易踩的坑」）
 # 用通配符：临时目录常被顺手起成 .pytest_tmp2 / .pytest_tmp3，漏网就会被 git add -A 吞进提交

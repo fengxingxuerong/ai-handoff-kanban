@@ -2206,6 +2206,21 @@ async function executeActions() {
   }
 }
 
+/* AI 指令可改字段 = 看板里的普通内容字段，**排除带本机权限的那一个**：
+   项目的 repo_path 一旦指向某个本地目录，监管分析就会去跑 git，
+   把分支、最后一条提交、脏文件数拼进 prompt 送给模型（_projects_brief）。
+   模型可能被项目名/背景里的注入文案带偏，一条 {field:"repo_path", value:"D:\\某仓库"}
+   就等于让外部内容远程探测本机目录结构 —— 所以 AI 只能改内容，不能改"读哪里"。
+   用户自己在编辑弹窗里填 repo_path 走的是另一条路径，不受这里限制。 */
+const AI_PROJECT_FIELDS = ["name", "status", "progress", "priority", "tags",
+                           "background", "handoff_note", "next_action"];
+const AI_TASK_FIELDS = ["title", "desc", "status", "priority", "agent", "due_date",
+                        "refs", "depends_on"];
+
+function assertAiField(allowed, field, type) {
+  if (!allowed.includes(field)) throw new Error(`${type} 不支持修改字段「${field}」`);
+}
+
 async function execSingleAction(a) {
   const type = a.type;
   if (type === "create_project") {
@@ -2214,6 +2229,7 @@ async function execSingleAction(a) {
       progress: Number(a.progress) || 0, next_action: a.next_action || "", handoff_note: a.handoff_note || "", background: a.background || "",
     }) });
   } else if (type === "update_project") {
+    assertAiField(AI_PROJECT_FIELDS, a.field, "update_project");
     const p = await api("/api/projects/" + a.project_id);
     p[a.field] = a.value;
     await api("/api/projects/" + a.project_id, { method: "PUT", body: JSON.stringify(p) });
@@ -2225,6 +2241,7 @@ async function execSingleAction(a) {
       status: a.status || "待办", agent: a.agent || "",
     }) });
   } else if (type === "update_task") {
+    assertAiField(AI_TASK_FIELDS, a.field, "update_task");
     const tid = await resolveTaskId(a);
     const project = await findProjectOfTask(a);
     if (!tid || !project) throw new Error("找不到对应任务");

@@ -80,6 +80,18 @@ def test_localhost_host_allowed(server):
     assert server.get("/api/health", host="127.0.0.1")[0] == 200
 
 
+@pytest.mark.parametrize("raw", ["[::1]", "[::1]:18321"])
+def test_ipv6_host_is_parsed_not_truncated(server, raw):
+    """带端口的 IPv6 Host 里冒号不止一个，`split(":")[0]` 只剩一个 `[` → 判成空 Host 放行。
+    真正要挡的是 `[fe80::1]` / `[evil.example.com]` 这种同样带方括号、但并非本机的 Host。"""
+    assert server.get("/api/health", host=raw)[0] == 200
+
+
+@pytest.mark.parametrize("raw", ["[fe80::1]", "[evil.example.com]", "evil.example.com:80"])
+def test_bracketed_foreign_host_rejected(server, raw):
+    assert server.get("/api/health", host=raw)[0] == 403
+
+
 def test_export_save_rejects_system_dir(fresh_server):
     status, _ = fresh_server.post("/api/export/save", {
         "filename": "x.md", "content": "# hi", "path": r"C:\Windows\evil.md"})

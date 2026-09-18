@@ -1,23 +1,111 @@
 # -*- coding: utf-8 -*-
 """
-真实任务交付演练（Delivery Drill）：以真实项目数据为样例，把「换 AI 智能体接手」的
-完整交付链路端到端走一遍，验证看板的核心承诺——切换智能体无缝交付。
+真实任务交付演练（Delivery Drill）：把「换 AI 智能体接手」的完整交付链路端到端走一遍，
+验证看板的核心承诺——切换智能体无缝交付。
 
-演练对运行中的服务执行，创建专用演练项目（不动真实数据），结束后自动清理。
+**默认自己起一个隔离实例**（专用端口 + 临时数据目录），跑完即拆。
+以前默认打的是 18320 —— 也就是用户真实在看的那块板，而演练会：
+建/删演练项目、以及阶段 5 用 `POST /api/data/import` **整份覆盖**项目列表。
+"结束会清理干净"不是安全保证：中途 Ctrl+C 或导入失败，真实数据就是半改状态。
+显式传 base_url 仍然支持（对着测试实例跑），但那道实例必须自证数据目录是隔离的。
 
 用法：
-    .venv\\Scripts\\python.exe scripts\\delivery_drill.py [base_url]
+    .venv\\Scripts\\python.exe scripts\\delivery_drill.py                 # 自起隔离实例
+    .venv\\Scripts\\python.exe scripts\\delivery_drill.py http://127.0.0.1:18401
 """
 import json
+import os
+import socket
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
-BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:18320"
+ROOT = Path(__file__).resolve().parent.parent
 DRILL_NAME = "交付演练-临时项目"
 
-passed, failed = [], []
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:                                     # noqa: BLE001
+    pass
+# 本机常年挂代理：127.0.0.1 必须直连，否则演练请求被代理拦下、全线超时
+OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+_proc = None
+DATA_DIR = None
+
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def start_isolated() -> str:
+    """自起一个只服务这份演练的实例"""
+    global _proc, DATA_DIR
+    DATA_DIR = Path(tempfile.mkdtemp(prefix="kanban_drill_"))
+    port = _free_port()
+    env = dict(os.environ)
+    env["KANBAN_DATA_DIR"] = str(DATA_DIR)
+    env["KANBAN_PORT"] = str(port)
+    env["KANBAN_NO_SCHEDULER"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    python = str(ROOT / ".venv" / "Scripts" / "python.exe")
+    if not Path(python).exists():
+        python = sys.executable
+    _proc = subprocess.Popen(
+        [python, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
+         "--port", str(port), "--log-level", "warning"],
+        cwd=str(ROOT), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(50):
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                return f"http://127.0.0.1:{port}"
+        except OSError:
+            time.sleep(0.3)
+    stop_isolated()
+    raise RuntimeError("演练实例启动超时")
+
+
+def stop_isolated() -> None:
+    global _proc, DATA_DIR
+    if _proc is not None:
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(_proc.pid)], capture_output=True)
+        _proc = None
+    if DATA_DIR is not None:
+        import shutil
+        shutil.rmtree(DATA_DIR, ignore_errors=True)
+
+
+def assert_isolated(base: str) -> None:
+    """演练会整份覆盖目标实例的数据 —— 先确认它不是用户真实那块板。
+
+    只认 `/api/health` 报回来的 data_file：它就是这台实例真实写盘的位置，
+    比看端口可靠（用户可以把真实实例挪到任何端口）。
+    """
+    global BASE
+    status, health = req("GET", "/api/health")
+    if status != 200 or not isinstance(health, dict):
+        raise SystemExit(f"目标实例不可用：{base}（{status}）")
+    # 与 app/main.py 的 data_dir() 同一套解析：Windows 下先看 USERPROFILE，
+    # 不能用 expanduser("~") —— 受管机器上 HOME 会被别的变量带跑。
+    home = os.environ.get("USERPROFILE") or str(Path.home())
+    real = os.path.join(home, ".ai-kanban", "projects.json")
+    reported = os.path.normcase(os.path.abspath(health.get("data_file") or ""))
+    if reported == os.path.normcase(os.path.abspath(real)) and not os.environ.get("KANBAN_DRILL_ALLOW_REAL"):
+        raise SystemExit(
+            "拒绝对真实数据目录跑演练：\n"
+            f"  目标实例的 projects.json = {health.get('data_file')}\n"
+            "  演练会建/删项目并用 /api/data/import 整份覆盖，中途失败就是半改状态。\n"
+            "  不传 base_url 会自起隔离实例；确认真要跑在这块板上再设 KANBAN_DRILL_ALLOW_REAL=1。")
+    BASE = base
+
+
+BASE = (sys.argv[1] if len(sys.argv) > 1 else None)
 
 
 def req(method, path, body=None):
@@ -25,7 +113,7 @@ def req(method, path, body=None):
     r = urllib.request.Request(BASE + path, data=data, method=method,
                                headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(r, timeout=120) as resp:
+        with OPENER.open(r, timeout=120) as resp:
             raw = resp.read().decode("utf-8")
             ct = resp.headers.get("content-type", "")
             return resp.status, (json.loads(raw) if "json" in ct else raw)
@@ -41,6 +129,16 @@ def check(name, cond, extra=""):
         failed.append(name)
         print(f"  [FAIL] {name}  {extra}")
 
+
+passed, failed = [], []
+
+if BASE is None:
+    BASE = start_isolated()
+    import atexit
+    atexit.register(stop_isolated)      # 中途 raise / sys.exit 也不能把 uvicorn 留在后台
+    print(f"[演练实例] 自起隔离实例 {BASE}（数据目录 {DATA_DIR}，跑完即删）")
+else:
+    assert_isolated(BASE)
 
 print("=" * 62)
 print("真实任务交付演练：模拟「项目 A 的 AI 干到一半，换智能体 B 接手」")
