@@ -1012,6 +1012,30 @@ def _local_url(path: str) -> str:
     return f"http://127.0.0.1:{SERVICE_PORT}{path}"
 
 
+def context_budget(text: str, warn_lines: int = 150, over_lines: int = 300) -> dict:
+    """交接物有多长（行 / KB / 档位）。
+
+    为什么值得报这个数字：接手方是模型，上下文窗口是它的稀缺资源 ——
+    上游（Claude Code 对 CLAUDE.md 的官方口径）也是按"超过约 200 行遵循度开始掉"
+    来建议的。交接包不是越长越负责：过长会被截断、被略读，反而丢关键信息。
+    报出来让人和智能体自己决定要不要精简。
+    """
+    lines = len(text.splitlines())
+    kb = round(len(text.encode("utf-8")) / 1024, 1)
+    level = "ok" if lines <= warn_lines else ("warn" if lines <= over_lines else "over")
+    return {"lines": lines, "kb": kb, "level": level}
+
+
+def _budget_note(text: str) -> str:
+    """给交接物末尾追加一行尺寸提示（只在偏长/过载时说话，正常长度不打扰）"""
+    b = context_budget(text)
+    if b["level"] == "ok":
+        return ""
+    hint = {"warn": "偏长，建议精简背景与已完成任务",
+            "over": "过长：接手方很可能读不完或被截断，务必裁剪"}[b["level"]]
+    return f"\n\n—— 本包约 {b['lines']} 行 / {b['kb']} KB，{hint}。"
+
+
 def _build_handoff_markdown(p: dict) -> str:
     lines = []
     lines.append(f"# {p['name']} · 项目交接摘要")
@@ -1183,6 +1207,7 @@ class SaveExportBody(BaseModel):
     filename: str = "交接包.md"
     content: str = ""
     path: str | None = None  # 可选：显式保存路径（用户输入）
+    overwrite: bool = False  # 显式路径时是否允许覆盖已有文件（默认不覆盖）
 
 
 # 允许"用户填路径保存"，但不允许落到系统目录 —— 防止被诱导覆盖系统/程序文件
@@ -1236,6 +1261,10 @@ def save_export(body: SaveExportBody):
             raise HTTPException(400, "仅支持保存为 .md / .txt / .markdown / .agentsmd 文件")
         if _is_forbidden_target(target):
             raise HTTPException(400, "不允许写入系统目录，请换一个路径")
+        if target.exists() and not body.overwrite:
+            # 与 /api/export/agent-files 同一口径：这个路径很可能指向用户手写的文件
+            # （默认填的就是 <仓库>\AGENTS.md），静默覆盖等于内容丢失。
+            raise HTTPException(409, f"文件已存在：{target}（要覆盖请勾选「覆盖已有文件」）")
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")

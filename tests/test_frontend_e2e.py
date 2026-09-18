@@ -535,3 +535,37 @@ def test_ai_suggested_priority_cannot_inject_markup(ai_ui):
     page.wait_for_selector("#summarize-result:visible", timeout=20000)
     assert page.locator("#pri-probe").count() == 0, "AI 给的优先级被当 HTML 渲染了"
     assert "带毒优先级的任务" in page.locator("#summarize-result").inner_text()
+
+
+def test_package_modal_shows_context_budget(ui):
+    """交接包弹窗要报"约 N 行 / X KB"，超阈值变红：模型读不完的东西不该越长越负责"""
+    page, api, _ = ui
+    p = make_project(api, "预算条项目", background="背景说明一行\n" * 400)
+    page.reload(wait_until="domcontentloaded")
+    page.click(f".pcard:has-text('预算条项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+
+    page.click("[data-act='openHandoffPackage']")
+    page.wait_for_selector("#package-modal.show", timeout=15000)
+    text = page.locator("#package-budget").inner_text()
+    assert "行" in text and "KB" in text, text
+    assert page.locator("#package-content").input_value().count("\n") > 300
+    # 过载档要变红（inline style 上就是 var(--red)，不依赖计算样式的写法差异）
+    page.wait_for_function(
+        "() => document.getElementById('package-budget').style.color === 'var(--red)'",
+        timeout=5000)
+
+
+def test_package_budget_stays_quiet_for_short_package(ui):
+    """正常长度不该在弹窗里堆一句废话"""
+    page, api, _ = ui
+    make_project(api, "短包项目", background="就一行背景。")
+    page.reload(wait_until="domcontentloaded")
+    page.click(".pcard:has-text('短包项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.click("[data-act='openHandoffPackage']")
+    page.wait_for_selector("#package-modal.show", timeout=15000)
+    text = page.locator("#package-budget").inner_text()
+    assert "行" in text and "KB" in text, text
+    assert "过长" not in text and "偏长" not in text, text
+    assert page.locator("#package-budget").evaluate("e => e.style.color") == "var(--text-faint)"

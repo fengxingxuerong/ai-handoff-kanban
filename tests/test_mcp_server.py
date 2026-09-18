@@ -597,3 +597,20 @@ def test_memory_add_tool_writes_into_memory_layer(mcp):
     assert not is_err, text
     ctx, _ = mcp.tool("kanban_context", {"project_id": pid})
     assert "8k 采样要重采样" in ctx, f"记忆没被接手包召回：{ctx}"
+
+
+def test_handoff_tool_reports_package_size(mcp):
+    """智能体是把整包读进上下文窗口的，得知道它有多大、以及偏大时改走 kanban_context"""
+    proj, _ = mcp.tool("kanban_create_project", {
+        "name": "超长交接项目",
+        "background": "背景行\n" * 400,
+    })
+    pid = proj.split("[")[-1].split("]")[0]
+    text, is_err = mcp.tool("kanban_handoff", {"project_id": pid})
+    assert not is_err, text
+    assert "本包约" in text and "KB" in text, f"交接包尾部没有尺寸提示：{text[-200:]}"
+
+    small, _ = mcp.tool("kanban_create_project", {"name": "小项目"})
+    sid = small.split("[")[-1].split("]")[0]
+    text2, _ = mcp.tool("kanban_handoff", {"project_id": sid})
+    assert "本包约" not in text2, "正常长度不该打扰"

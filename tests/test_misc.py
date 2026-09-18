@@ -236,3 +236,41 @@ def test_scheduler_start_is_idempotent():
     assert callable(main.start_scheduler)
     main.start_scheduler()      # 重复调用不应抛错，也不应再起线程
     assert main._SCHEDULER_STARTED is True
+
+
+# ---------------- 交接物尺寸预算（接手方是模型，上下文窗口才是稀缺资源） ----------------
+
+def test_context_budget_levels():
+    from app.main import context_budget
+
+    b = context_budget("一行\n" * 10)
+    assert b == {"lines": 10, "kb": round(len(("一行\n" * 10).encode("utf-8")) / 1024, 1), "level": "ok"}
+    assert context_budget("x\n" * 150)["level"] == "ok"
+    assert context_budget("x\n" * 151)["level"] == "warn"
+    assert context_budget("x\n" * 300)["level"] == "warn"
+    assert context_budget("x\n" * 301)["level"] == "over"
+
+
+def test_context_budget_counts_utf8_bytes_not_chars():
+    """KB 必须按 UTF-8 字节算：中文一字三字节，按字符算会把包"报小"三倍"""
+    from app.main import context_budget
+
+    text = "中文" * 1536          # 3072 字符 = 9216 字节
+    b = context_budget(text)
+    assert b["kb"] > 8, f"KB 看着像按字符算的：{b}"
+
+
+def test_budget_note_stays_quiet_when_short_but_warns_when_long():
+    from app.main import _budget_note
+
+    assert _budget_note("短包\n" * 20) == "", "正常长度不该往交接物里塞废话"
+    note = _budget_note("长行\n" * 400)
+    assert "400 行" in note and "KB" in note, note
+    assert "读不完" in note, f"过载档要给明确动作：{note}"
+
+
+def test_handoff_markdown_still_renders_without_budget_noise(app_client):
+    """预算只加在 MCP 出口与界面提示上，_build_handoff_markdown 本体不该被改长"""
+    pid = app_client.post("/api/projects", {"name": "干净交接包"})[1]["id"]
+    md = _build_handoff_markdown(app_client.get(f"/api/projects/{pid}")[1])
+    assert "本包约" not in md

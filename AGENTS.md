@@ -184,8 +184,10 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
    按白名单来源（`last-good` / `bak` / `backup_*`）覆盖恢复，**恢复前先把当前数据另存为
    `projects.json.before-restore.bak`**。恢复是覆盖语义，不是合并。
 4. **写盘默认不覆盖已有文件**：`/api/export/agent-files` 遇到已存在的 `AGENTS.md`/`CLAUDE.md`
-   默认跳过并回报 `skipped_existing`，要覆盖必须显式 `overwrite=true`。
-   仓库里的入口文件很可能是用户手写的，静默覆盖等于内容丢失。
+   默认跳过并回报 `skipped_existing`，`/api/export/save` 带显式 `path` 且目标已存在时返回
+   **409** —— 两处都必须显式 `overwrite=true` 才覆盖。仓库里的入口文件很可能是用户手写的，
+   静默覆盖等于内容丢失（`saveAgentsMD` 的默认路径就是 `<仓库>\AGENTS.md`，与"写入项目目录"
+   共用界面上同一个勾选框）。不给 `path` 的自动命名导出仍然直接替换：那是本应用自己写过的文件。
 5. **记忆层是第二个文件，projects 的规矩一条都盖不到它**：`memories.json` 与
    `projects.json` 分开存，所以它的读-改-写必须走 `_mutate_memories()`（与 `mutate()`
    同一套线程锁 + 跨进程锁），条数受 `MAX_MEMORIES` / `KEEP_MEMORIES_ON_TRIM` 约束（约定 11），
@@ -198,6 +200,14 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
    这两条绕过端点校验的路。环一旦进存储不会报错，只会让 `topo_order` 静默退回原序、
    `executable_tasks` 永远等不齐前置 —— 用户看到的就是"顺序怎么不对/任务永远动不了"。
    剪环按入列顺序保留能保留的依赖，不抛异常（读路径上抛错会把整个看板打不开）。
+7. **交接物要报尺寸**：`context_budget()` 给出行数 / UTF-8 字节 KB / 档位（150 行内 ok，
+   151~300 warn，再往上 over）。接手的模型受上下文窗口限制，包不是越长越负责 ——
+   上游对 CLAUDE.md 的官方建议也是"超过约 200 行遵循度开始下降"。
+   出口只有两处：MCP 的 `kanban_handoff`/`kanban_agents_md` 尾部（`_budget_note`，
+   只在 warn/over 时说话）与界面交接包弹窗下的计量条。**不要**把提示塞进
+   `_build_handoff_markdown()` 本体（会被复制进仓库、也会污染全项目合并包）。
+   界面上的阈值是 JS 里另写的一份常量，改 `context_budget` 的默认阈值要同步改 `PKG_BUDGET`。
+
 
 ## 多智能体入口文件（别退化成 N 份副本）
 
@@ -340,8 +350,8 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-18）**：`pytest` 385 收集（379 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-覆盖率 93%（语句 2052 / 缺 134，门槛 90，余量 3 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
+**验证基线（2026-09-18）**：`pytest` 396 收集（390 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+覆盖率 94%（语句 2066 / 缺 134，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
 并行（`-n auto`，已写进 `pytest.ini`）冷跑约 50 秒、热跑约 20 秒。
 
 > 1.1.0 一次加了会话捕获 / 过程轨迹 / 记忆层 / 用量追踪 / 提醒 / 只读模式六个面，

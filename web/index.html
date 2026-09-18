@@ -1009,7 +1009,8 @@
         <span style="font-size:12.5px;color:var(--text-dim)">🔒 脱敏导出（自动隐藏 API Key / 令牌 / 密码 / 邮箱后再生成）</span>
       </div>
       <div class="field"><label>交接包内容（Markdown，可直接编辑后再导出）</label>
-        <textarea class="tall" id="package-content" style="min-height:320px;font-family:Consolas,monospace;font-size:12px" readonly></textarea>
+        <textarea class="tall" id="package-content" style="min-height:320px;font-family:Consolas,monospace;font-size:12px"></textarea>
+        <div id="package-budget" style="font-size:11.5px;color:var(--text-faint);margin-top:5px"></div>
       </div>
     </div>
     <div class="mfoot">
@@ -1078,7 +1079,7 @@
         </div>
         <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--text-dim)">
           <input type="checkbox" id="agentsmd-overwrite" style="width:auto">
-          覆盖仓库里已有的入口文件（默认跳过，避免把你手写的 AGENTS.md / CLAUDE.md 冲掉）
+          覆盖已有文件（默认跳过，避免把你手写的 AGENTS.md / CLAUDE.md 冲掉；两个保存按钮共用这一项）
         </label>
         <div style="font-size:11px;color:var(--text-faint);margin-top:6px;line-height:1.7">
           AGENTS.md · CLAUDE.md（桥接 @AGENTS.md，Claude Code 只认这个）· .cursor/rules/project.mdc（带 frontmatter）·
@@ -2318,6 +2319,32 @@ function renderTrends(series) {
 // ============ 完整交接包 ============
 let packageMode = "single";
 
+// 交接包尺寸提示：接手方是模型，上下文窗口才是它的稀缺资源。
+// 阈值与 app/main.py 的 context_budget() 一致（150 / 300 行），改一处要改两处。
+const PKG_BUDGET = { warn: 150, over: 300 };
+
+function renderPackageBudget() {
+  const ta = document.getElementById("package-content");
+  const box = document.getElementById("package-budget");
+  if (!ta || !box) return;
+  const text = ta.value || "";
+  const lines = text ? text.replace(/\r\n?/g, "\n").replace(/\n+$/, "").split("\n").length : 0;
+  let kb = 0;
+  try { kb = Math.round(new TextEncoder().encode(text).length / 102.4) / 10; }
+  catch (e) { kb = Math.round(text.length / 102.4) / 10; }
+  const level = lines <= PKG_BUDGET.warn ? "ok" : (lines <= PKG_BUDGET.over ? "warn" : "over");
+  box.textContent = "约 " + lines + " 行 / " + kb + " KB" + ({
+    ok: "", warn: " · 偏长，建议精简背景与已完成任务",
+    over: " · 过长，接手方可能读不完或被截断，建议裁剪",
+  })[level];
+  box.style.color = { ok: "var(--text-faint)", warn: "var(--orange)", over: "var(--red)" }[level];
+}
+
+(function bindPackageBudget() {
+  const ta = document.getElementById("package-content");
+  if (ta) ta.addEventListener("input", renderPackageBudget);
+})();
+
 async function openHandoffPackage() {
   packageMode = "single";
   document.getElementById("package-title").textContent = "📦 完整交接包 · " + (current ? current.name : "");
@@ -2325,6 +2352,7 @@ async function openHandoffPackage() {
     const redact = document.getElementById("package-redact").checked ? 1 : 0;
     const md = await api("/api/export/" + currentPid + (redact ? "?redact=1" : ""));
     document.getElementById("package-content").value = md;
+    renderPackageBudget();
     openModal("package-modal");
   } catch (e) { toast("生成失败：" + e.message); }
 }
@@ -2336,6 +2364,7 @@ async function openAllPackage() {
     const redact = document.getElementById("package-redact").checked ? 1 : 0;
     const md = await api("/api/export-all" + (redact ? "?redact=1" : ""));
     document.getElementById("package-content").value = md;
+    renderPackageBudget();
     openModal("package-modal");
   } catch (e) { toast("生成失败：" + e.message); }
 }
@@ -2457,7 +2486,12 @@ async function saveAgentsMD(ev) {
   const btn = (ev && ev.currentTarget) || document.getElementById("agentsmd-save-btn");
   btn.classList.add("ai-loading-btn");
   try {
-    const r = await api("/api/export/save", { method: "POST", body: JSON.stringify({ filename: "AGENTS.md", content, path }) });
+    // 目标默认就是 <仓库>\AGENTS.md，很可能是用户手写的 —— 与"写入项目目录"共用同一个
+    // 覆盖开关，409 时 api() 会把服务端的提示原样送到 toast 里。
+    const r = await api("/api/export/save", { method: "POST", body: JSON.stringify({
+      filename: "AGENTS.md", content, path,
+      overwrite: !!(document.getElementById("agentsmd-overwrite") || {}).checked,
+    }) });
     toast("已保存：" + r.path + " ✓");
   } catch (e) { toast("保存失败：" + e.message); }
   btn.classList.remove("ai-loading-btn");

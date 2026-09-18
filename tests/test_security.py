@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -114,3 +115,45 @@ def test_token_required_for_write(app_client, monkeypatch):
     status, project = app_client.request("POST", "/api/projects", body, token="pytest-token")
     assert status == 201
     assert app_client.delete(f"/api/projects/{project['id']}", token="pytest-token")[0] == 200
+
+
+# ---------------- 保存导出文件：不许静默冲掉用户手写的文件 ----------------
+
+def test_save_export_refuses_to_clobber_existing_file(app_client, tmp_path):
+    target = tmp_path / "手写的AGENTS.md"
+    target.write_text("我自己写的交接文件，一个字都不能少\n", encoding="utf-8")
+
+    status, res = app_client.post("/api/export/save", {
+        "filename": "AGENTS.md", "content": "生成的内容", "path": str(target)})
+    assert status == 409, f"已存在的文件被直接覆盖了：{status} {res}"
+    assert "已存在" in str(res.get("detail")), res
+    assert "一个字都不能少" in target.read_text(encoding="utf-8"), "拒绝之前就已经写过了"
+
+    status, res = app_client.post("/api/export/save", {
+        "filename": "AGENTS.md", "content": "生成的内容", "path": str(target), "overwrite": True})
+    assert status == 200, res
+    assert target.read_text(encoding="utf-8") == "生成的内容"
+
+
+def test_save_export_creates_missing_parents(app_client, tmp_path):
+    target = tmp_path / "深层" / "子目录" / "交接包.md"
+    status, res = app_client.post("/api/export/save", {
+        "filename": "交接包.md", "content": "正文", "path": str(target)})
+    assert status == 200, res
+    assert target.exists() and target.read_text(encoding="utf-8") == "正文"
+
+
+def test_save_export_auto_name_still_replaces_its_own_export(app_client):
+    """不给 path 时走"桌面→数据目录 exports/"的自动命名，这是本应用自己写过的文件，
+    重复导出应当直接替换（否则每天导出一次就会开始报错）。"""
+    body = {"filename": "同日重复导出.md", "content": "第一版"}
+    assert app_client.post("/api/export/save", body)[0] == 200
+    assert app_client.post("/api/export/save", {**body, "content": "第二版"})[0] == 200
+
+
+def test_agentsmd_save_sends_the_overwrite_flag():
+    """界面必须把覆盖开关接到 /api/export/save，否则用户没有任何办法覆盖旧文件"""
+    html = (Path(__file__).resolve().parent.parent / "web" / "index.html").read_text(encoding="utf-8")
+    i = html.index("async function saveAgentsMD")
+    assert "overwrite:" in html[i:i + 1200], "保存按钮没带 overwrite"
+    assert 'id="agentsmd-overwrite"' in html

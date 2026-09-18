@@ -311,7 +311,9 @@ def t_handoff(args: dict) -> str:
     p = _find(pid)
     if not p:
         raise ValueError(f"找不到项目：{pid}")
-    return kanban._build_handoff_markdown(p)
+    md = kanban._build_handoff_markdown(p)
+    # 智能体是把整包读进上下文窗口的，报个尺寸让它知道要不要改用 kanban_context 分片取
+    return md + kanban._budget_note(md)
 
 
 def t_agents_md(args: dict) -> str:
@@ -320,7 +322,8 @@ def t_agents_md(args: dict) -> str:
     if not p:
         raise ValueError(f"找不到项目：{pid}")
     text, source, _ep = kanban._generate_agents_md(p)
-    return f"<!-- 来源：{source} -->\n\n{text}"
+    body = f"<!-- 来源：{source} -->\n\n{text}"
+    return body + kanban._budget_note(body)
 
 
 def t_context(args: dict) -> str:
