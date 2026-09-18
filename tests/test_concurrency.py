@@ -58,3 +58,43 @@ def test_mixed_write_does_not_lose_project(fresh_server):
     _, detail = fresh_server.get(f"/api/projects/{pid}")
     assert len(detail["tasks"]) == 10
     assert detail["next_action"].startswith("第 ")
+
+
+def test_cross_process_lock_is_reentrant_within_the_same_thread():
+    """自愈写盘发生在 mutate() 持锁期间（_load_data 里）。
+    Windows 的字节锁按句柄生效，同进程再开一个句柄也会互相冲突 ——
+    不可重入的话这里不会报错，而是等满 timeout 再抛 TimeoutError。"""
+    import time
+
+    from app.main import _cross_process_lock
+
+    t0 = time.time()
+    with _cross_process_lock(timeout=3.0):
+        with _cross_process_lock(timeout=3.0):
+            pass
+    assert time.time() - t0 < 2.0, "嵌套取锁被当成争用处理了（会拖满 timeout）"
+
+
+def test_cross_process_lock_still_blocks_another_thread():
+    """重入只对同线程放行；换个线程仍必须排队，否则这层锁就白加了"""
+    import threading
+    import time
+
+    from app.main import _cross_process_lock
+
+    entered = threading.Event()
+    order: list[str] = []
+
+    def worker() -> None:
+        with _cross_process_lock(timeout=8.0):
+            order.append("second")
+            entered.set()
+
+    with _cross_process_lock(timeout=8.0):
+        order.append("first")
+        th = threading.Thread(target=worker)
+        th.start()
+        assert not entered.wait(0.4), "另一线程拿到了同一把锁 —— 重入放行放到了别人身上"
+    th.join(timeout=15)      # 必须在释放之后再等，否则是自己跟自己要锁
+    assert order == ["first", "second"]
+    assert not th.is_alive()

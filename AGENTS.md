@@ -85,8 +85,9 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 ## 硬性约定
 
 1. **所有写操作必须走 `mutate()`**（`app/main.py`）。禁止 `get_projects_data()` 拿到数据、
-   改完再 `write_projects_data()` —— 那样读-改-写不在同一临界区，并发请求会互相覆盖。
-   历史事故：20 并发创建全部返回 201，实际只落盘 3 条，数据静默丢失。
+   改完再另起一次锁写回 —— 那样读-改-写不在同一临界区，并发请求会互相覆盖。
+   曾经用来"自己持锁整份覆盖"的 `write_projects_data()` 已删除：全库零调用点，
+   而它唯一的用处就是让端点写成两段式（导入端点就中过一次）。
    定位用 `mutate_project(pid, fn)` / `mutate_task(tid, fn)`。
 2. **`fn(data)` 返回 `(changed, result)`**，`changed=False` 时不落盘，避免无意义写放大。
 3. **前端交互一律走 `data-act`，不写内联事件**。页面里 `onclick`/`onkeydown` 必须保持为 0：

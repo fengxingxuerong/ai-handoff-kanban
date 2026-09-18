@@ -133,6 +133,21 @@ def mask_key(key: str) -> str:
     return key[:6] + "****" + key[-4:]
 
 
+def mask_matches(real: str, masked: str) -> bool:
+    """判断"掩码后的字符串"是不是指回这把真实 Key。
+
+    掩码有两种形态（上面 mask_key）：长 key 是 前6****后4，短 key（≤12 字符）是 前3****。
+    回填时只认长形态的话，用短 Key 的人在设置页改任何一项都会把自己的 Key 整条丢掉 ——
+    掩码值匹配不到原值，就被当成"用户新输入的 Key"之外的东西丢弃了。
+    """
+    if "****" not in masked or not real:
+        return False
+    head, _, tail = masked.partition("****")
+    if len(head) < 3:
+        return False          # 掩码太短会把整池子都匹配上
+    return real.startswith(head) and (tail == "" or real.endswith(tail))
+
+
 def mask_config(cfg: dict) -> dict:
     """对外返回时掩码 Key"""
     import copy

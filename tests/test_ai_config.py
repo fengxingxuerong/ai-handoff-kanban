@@ -127,3 +127,21 @@ def test_period_key_daily_and_weekly():
     # 同一周内不同天应得到同一个周期键（weekly 真的按周去重）
     assert _period_key(datetime(2026, 9, 20, 9, 0), "weekly") == "2026-W38"
     assert _period_key(datetime(2026, 9, 21, 9, 0), "weekly") == "2026-W39"
+
+
+def test_short_api_key_survives_a_settings_save():
+    """`mask_key` 对 ≤12 字符的 Key 只留「前3 + ****」，而回填曾只认「前6****后4」——
+    用短 Key 的人在设置页改任何一项，都会把自己的 Key 整条丢掉且毫无提示。"""
+    from app import llm
+    from app.main import _merge_keys
+
+    short = "Abc98765"
+    masked_short = llm.mask_key(short)
+    assert masked_short == "Abc****", f"短 Key 掩码形态变了，回填逻辑要同步：{masked_short}"
+    assert _merge_keys([short], [masked_short], []) == [short]
+
+    long = "sk-exca19pN9sKAjNszizKVEgnFSt"
+    assert _merge_keys([long], [llm.mask_key(long)], []) == [long]
+
+    # 前缀不足三位时不许放出去匹配整池，否则 "ab****" 能把别的 Key 捞出来
+    assert _merge_keys(["abcdefgh123456"], ["ab****"], []) == []

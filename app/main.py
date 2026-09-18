@@ -69,6 +69,7 @@ def data_file() -> Path:
 
 
 _LOCK = threading.Lock()
+_LOCK_DEPTH = threading.local()   # _cross_process_lock 的同线程重入计数
 
 _SAMPLE_DATA = {
     "projects": [
@@ -326,10 +327,14 @@ def _load_data() -> dict:
                 healed = None
         # 3) 落盘（救回来了就写回数据，否则写空结构）。
         #    注意不能更新 last-good：这次写的可能是空看板，别把救命副本覆盖掉。
-        _save_data(healed if healed is not None else {"projects": []}, update_last_good=False)
+        #    这条路径可能只拿着 _LOCK 就被调进来（get_projects_data），写盘必须和
+        #    mutate() 抢同一把跨进程锁，否则会与另一个进程的写入互相覆盖。
+        healed_data = healed if healed is not None else {"projects": []}
+        with _cross_process_lock():
+            _save_data(healed_data, update_last_good=False)
         _DATA_RECOVERED = True
         _DATA_RECOVERED_FROM = "last-good" if healed is not None else ""
-        return healed if healed is not None else {"projects": []}
+        return healed_data
 
 
 def _save_data(data: dict, update_last_good: bool = True) -> None:
@@ -356,8 +361,21 @@ def now_str() -> str:
 
 @contextmanager
 def _cross_process_lock(timeout: float = 15.0):
+    """跨进程写锁。同线程可重入 —— Windows 的字节锁按**句柄**生效，
+    `mutate()` 持锁期间 `_load_data()` 的自愈写盘若再开一个句柄抢同一把锁，
+    同进程也会互相冲突，然后一路等到 15 秒超时报错。"""
+    depth = getattr(_LOCK_DEPTH, "n", 0)
+    if depth:
+        _LOCK_DEPTH.n = depth + 1
+        try:
+            yield
+        finally:
+            _LOCK_DEPTH.n = depth
+        return
+
     path = data_dir() / "projects.lock"
     fh = open(path, "a+b")
+    _LOCK_DEPTH.n = 1
     try:
         deadline = time.time() + timeout
         while True:
@@ -378,6 +396,7 @@ def _cross_process_lock(timeout: float = 15.0):
                 time.sleep(0.05)
         yield
     finally:
+        _LOCK_DEPTH.n = 0
         try:
             fh.seek(0)
             if os.name == "nt":
@@ -399,19 +418,13 @@ def get_projects_data() -> dict:
         return _load_data()
 
 
-def write_projects_data(data: dict) -> None:
-    """整份覆盖写入。仅用于已自行持锁的内部流程，业务接口请改用 mutate()"""
-    with _LOCK, _cross_process_lock():
-        _save_data(data)
-
-
 def mutate(fn) -> tuple[bool, object]:
     """在同一个临界区内完成「读 → 改 → 写」。
 
     fn(data) 需要返回 (changed, result)：
       changed=False 时不落盘（避免无意义的写放大），result 原样透出。
-    所有写接口必须走这里 —— 拆成 get_projects_data() + write_projects_data()
-    两次取锁会让并发请求互相覆盖，实测 20 并发只落盘 3 条。
+    所有写接口必须走这里 —— 自己取一份快照、改完再另起一次锁写回，两次取锁之间会被
+    并发请求互相覆盖，实测 20 并发创建全部返回 201 却只落盘 3 条。
     """
     with _LOCK, _cross_process_lock():
         data = _load_data()
@@ -1568,10 +1581,14 @@ def import_all_data(body: ImportBody):
         create_backup()
     except Exception:
         pass
-    data = get_projects_data()
-    data["projects"] = projects
-    write_projects_data(data)
-    return {"ok": True, "imported": len(projects)}
+
+    def worker(data: dict):
+        # 读-改-写必须在同一个临界区里（硬性约定 1）：先前这里取了一次读锁拿快照、
+        # 再取一次写锁整份覆盖，两次取锁之间别的进程/接口写入的项目会被无声抹掉。
+        data["projects"] = projects
+        return True, {"ok": True, "imported": len(projects)}
+
+    return mutate(worker)[1]
 
 
 # ---- LLM 用量统计 ----
@@ -2251,7 +2268,7 @@ def _merge_keys(old_keys: list[str], new_keys: list[str], fallback_pool: list[st
         if "****" in k:
             found = None
             for ok in pool:
-                if len(ok) >= 10 and len(k) >= 10 and ok[:6] == k[:6] and ok[-4:] == k[-4:]:
+                if llm.mask_matches(ok, k):
                     found = ok
                     break
             if found:
@@ -2328,10 +2345,31 @@ def _build_analyze_prompt(projects: list[dict]) -> list[dict]:
     return [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}]
 
 
+MAX_REPORTS = 100   # 监管报告留多少份（报告 id 就是时间戳，可直接按文件名排序）
+
+
+def _trim_reports() -> None:
+    """裁掉超出上限的旧报告。
+
+    开了定时监管后每天/每周都会落一份 JSON，reports/ 只写不删就是无界增长 ——
+    而列报告的接口是逐文件读的，越往后越慢。
+    """
+    try:
+        files = sorted(reports_dir().glob("*.json"), reverse=True)
+    except Exception:
+        return
+    for old in files[MAX_REPORTS:]:
+        try:
+            old.unlink()
+        except Exception:
+            pass
+
+
 def _save_report(report: dict) -> dict:
     rid = report["id"]
     (reports_dir() / f"{rid}.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    _trim_reports()
     return report
 
 

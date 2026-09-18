@@ -157,3 +157,17 @@ def test_mcp_readonly_does_not_block_http_writes(seeded_client):
 
     status, body = seeded_client.create_project("只读模式下手动建的项目", status="规划中")
     assert status == 201, body
+
+
+def test_reports_dir_is_capped_and_keeps_the_newest(tmp_path, monkeypatch):
+    """监管报告只写不删 = 无界增长，而列表接口是逐文件读的。
+    开了定时监管每天一份，一年就是几百份。"""
+    from app import main
+
+    monkeypatch.setattr(main, "MAX_REPORTS", 5)
+    for i in range(9):
+        main._save_report({"id": f"2026{i:04d}", "summary": "s", "insights": []})
+    names = sorted(p.stem for p in main.reports_dir().glob("*.json"))
+    assert len(names) == 5, f"报告没裁剪：{names}"
+    assert names[-1] == "20260008", "必须留下最新的一份"
+    assert "20260000" not in names, "该被裁掉的最旧一份还在"
