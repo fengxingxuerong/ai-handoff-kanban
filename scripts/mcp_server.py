@@ -219,6 +219,7 @@ def t_add_task(args: dict) -> str:
         agent=args.get("agent") or "",
         refs=args.get("refs") or [],
         depends_on=args.get("depends_on") or [],
+        due_date=args.get("due_date") or "",
     )
     task = kanban.create_task(pid, body)
     refs = ("；涉及 " + "、".join(task["refs"])) if task.get("refs") else ""
@@ -244,6 +245,7 @@ def t_update_task(args: dict) -> str:
         agent=pick("agent", task.get("agent") or ""),
         refs=pick("refs", task.get("refs") or []),
         depends_on=pick("depends_on", task.get("depends_on") or []),
+        due_date=pick("due_date", task.get("due_date") or ""),
     )
     updated = kanban.update_task(tid, body)
     return f"任务 [{tid}] 已更新为 {updated['status']}/{updated['priority']}（所属项目 {project.get('name')}）"
@@ -440,6 +442,8 @@ TOOLS: list[dict] = [
                          "description": "相关代码位置，如 [\"app/main.py:120\", \"tests/test_api.py\"]"},
                 "depends_on": {"type": "array", "items": {"type": "string"},
                                "description": "前置任务 id（同一项目内），用于排「先做哪个」"},
+                "due_date": {"type": "string",
+                             "description": "截止日期 YYYY-MM-DD，留空表示未设置"},
             },
             "required": ["project_id", "title"], "additionalProperties": False,
         },
@@ -460,6 +464,8 @@ TOOLS: list[dict] = [
                          "description": "相关代码位置；不改就省略"},
                 "depends_on": {"type": "array", "items": {"type": "string"},
                                "description": "前置任务 id；不改就省略"},
+                "due_date": {"type": "string",
+                             "description": "截止日期 YYYY-MM-DD；不改就省略（传空串等于清掉截止日期）"},
             },
             "required": ["task_id"], "additionalProperties": False,
         },

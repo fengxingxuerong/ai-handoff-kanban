@@ -275,11 +275,6 @@ def test_add_task_with_refs_roundtrip(mcp):
     assert "涉及：app/main.py:120" in detail
 
 
-def last_id(text: str) -> str:
-    """从「已在项目 [pid] 新增任务 [tid] …」里取最后一个方括号中的 id"""
-    return text.split("[")[-1].split("]")[0]
-
-
 def test_next_task_tool(mcp):
     """接手时最该先问的问题：现在能动手的是哪个"""
     pid = last_id(mcp.tool("kanban_create_project", {"name": "有依赖的活"})[0])
@@ -401,22 +396,60 @@ def test_context_tool_returns_live_link(mcp):
     assert f"127.0.0.1:18320/api/context/{pid}" in text
 
 
-# ---------------- 实时直链（本机取活数据，而不是吃快照） ----------------
+# ---------------- 字段保真：只传要改的字段时，不能把没提的字段抹掉 ----------------
 
-def test_initialize_instructions_advertise_local_url(mcp):
-    resp = mcp.call("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}})
-    text = resp["result"]["instructions"]
-    assert "/api/context/" in text
-    assert "127.0.0.1" in text, "直链只能指向本机，不能引导智能体去公网取数据"
+def _task_on_disk(data_dir: Path, tid: str) -> dict:
+    data = json.loads((data_dir / "projects.json").read_text(encoding="utf-8"))
+    for p in data["projects"]:
+        for t in p.get("tasks") or []:
+            if t.get("id") == tid:
+                return t
+    raise AssertionError(f"落盘数据里找不到任务 {tid}")
 
 
-def test_context_tool_returns_live_link(mcp):
-    _, err = mcp.tool("kanban_create_project", {"name": "直链测试项目", "status": "进行中"})
-    assert not err
-    text, err = mcp.tool("kanban_find_project", {"query": "直链测试项目"})
-    assert not err
-    pid = text.split("[")[-1].split("]")[0]
+def test_add_task_honours_due_date(tmp_path):
+    data_dir = tmp_path / "kanban-mcp-due"
+    c = McpClient(data_dir)
+    try:
+        pid = last_id(c.tool("kanban_create_project", {"name": "截止日保真"})[0])
+        text, is_err = c.tool("kanban_add_task", {
+            "project_id": pid, "title": "带截止日的任务", "due_date": "2030-05-06"})
+        assert not is_err, text
+        assert _task_on_disk(data_dir, last_id(text))["due_date"] == "2030-05-06"
+    finally:
+        c.close()
 
-    text, err = mcp.tool("kanban_context", {"project_id": pid})
-    assert not err
-    assert f"127.0.0.1:18320/api/context/{pid}" in text
+
+def test_update_task_preserves_fields_it_was_not_given(tmp_path):
+    """回归：`t_update_task` 用 pick() 逐字段回填，早期漏了 due_date ——
+    智能体每改一次状态就把截止日期静默清空，而且全程没有任何测试变红。"""
+    data_dir = tmp_path / "kanban-mcp-preserve"
+    c = McpClient(data_dir)
+    try:
+        pid = last_id(c.tool("kanban_create_project", {"name": "回填保真"})[0])
+        tid = last_id(c.tool("kanban_add_task", {
+            "project_id": pid, "title": "别抹我的字段", "priority": "高",
+            "due_date": "2030-05-06", "refs": ["app/main.py:120"]})[0])
+        assert _task_on_disk(data_dir, tid)["refs"] == ["app/main.py:120"]
+
+        text, is_err = c.tool("kanban_update_task", {"task_id": tid, "status": "进行中"})
+        assert not is_err, text
+        task = _task_on_disk(data_dir, tid)
+        assert task["status"] == "进行中"
+        assert task["due_date"] == "2030-05-06", "只改状态不该顺手清掉截止日期"
+        assert task["refs"] == ["app/main.py:120"], "只改状态不该顺手清掉代码位置"
+        assert task["priority"] == "高", "只改状态不该顺手把优先级降成中"
+
+        c.tool("kanban_update_task", {"task_id": tid, "due_date": ""})
+        assert _task_on_disk(data_dir, tid)["due_date"] == "", "显式传空串才等于清掉截止日"
+    finally:
+        c.close()
+
+
+def test_due_date_is_advertised_in_tool_schemas(mcp):
+    """schema 里没有的字段，客户端不会传（且 additionalProperties=False 会被拒）"""
+    tools = {t["name"]: t for t in mcp.call("tools/list")["result"]["tools"]}
+    for name in ("kanban_add_task", "kanban_update_task"):
+        assert "due_date" in tools[name]["inputSchema"]["properties"], name
+
+
