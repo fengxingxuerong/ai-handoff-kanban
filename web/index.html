@@ -632,6 +632,7 @@
   <div class="header-actions">
     <button class="btn" data-act="openAICmd">🤖 AI 指令</button>
     <button class="btn" data-act="openReport">📊 AI 监管</button>
+    <button class="btn" data-act="openToday" title="跨项目列出依赖已满足、现在就能动手的任务">☀️ 今日</button>
     <button class="btn" data-act="openGlobalSearch" title="全局任务搜索（Ctrl+K）">🔎</button>
     <button class="btn" data-act="openSessionCapture" title="捕获本机 AI 工具会话并提炼入库">📥 捕获</button>
     <button class="btn" data-act="toggleTheme" title="切换深浅色主题" id="theme-btn">🌙</button>
@@ -987,6 +988,17 @@
 </div>
 
 <!-- 完整交接包弹窗 -->
+<div class="modal-mask" id="today-modal">
+  <div class="modal" style="width:min(720px,100%)">
+    <div class="mhead"><h2>☀️ 今日待办（依赖已满足）</h2><button class="btn icon" data-act="closeModal" data-arg="today-modal">✕</button></div>
+    <div class="mbody" id="today-body" style="max-height:60vh;overflow-y:auto">加载中…</div>
+    <div class="mfoot">
+      <span class="hint">点一条直接跳到它的项目</span>
+      <button class="btn" data-act="closeModal" data-arg="today-modal">关闭</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-mask" id="package-modal">
   <div class="modal" style="width:min(760px,100%)">
     <div class="mhead"><h2 id="package-title">📦 完整交接包</h2><button class="btn icon" data-act="closeModal" data-arg="package-modal">✕</button></div>
@@ -1274,6 +1286,8 @@ const ACTIONS = {
   showOverview: () => showOverview(),
   openTrends: () => openTrends(),
   openAllPackage: () => openAllPackage(),
+  openToday: () => openToday(),
+  gotoTask: (arg) => gotoTask(arg),
   // —— 详情页 ——
   openTaskModal: () => openTaskModal(),
   editProject: () => editProject(),
@@ -2733,6 +2747,30 @@ async function copyContextJson() {
     try { await navigator.clipboard.writeText(text); toast("机器可读上下文已复制 ✓ 直接粘给智能体即可接手"); }
     catch (e) { fallbackCopy(text); }
   } catch (e) { toast("获取失败：" + e.message); }
+}
+
+async function openToday() {
+  openModal("today-modal");
+  const box = document.getElementById("today-body");
+  box.innerHTML = "加载中…";
+  try {
+    const r = await api("/api/today?limit=50");
+    if (!r.tasks.length) {
+      box.innerHTML = '<div class="hint">暂时没有待办：任务要么已完成，要么还在等前置完成。</div>';
+      return;
+    }
+    box.innerHTML = r.tasks.map(t => `
+      <div class="tcard" data-act="gotoTask" data-arg="${esc(t.project_id)}" style="margin-bottom:8px;cursor:pointer">
+        <div class="tt">${esc(t.title)}${t.due_date ? ` <span class="due-badge">📅 ${esc(t.due_date)}</span>` : ""}</div>
+        <div class="td">${esc(t.project_name)} · ${esc(t.project_status)}${(t.refs && t.refs.length) ? " · 📍 " + t.refs.map(esc).join("、") : ""}</div>
+        <div class="tfoot"><span class="tag2 pri-${esc(t.priority)}">${esc(t.priority)}</span>${t.status === "阻塞" ? '<span class="agent">阻塞</span>' : ""}</div>
+      </div>`).join("");
+  } catch (e) { box.innerHTML = "加载失败：" + esc(e.message); }
+}
+
+function gotoTask(pid) {
+  closeModal("today-modal");
+  if (pid) openDetail(pid);
 }
 
 (function bindTaskSort() {

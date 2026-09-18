@@ -1218,6 +1218,44 @@ def export_all(redact: int = 0):
     return PlainTextResponse("".join(parts), media_type="text/markdown; charset=utf-8")
 
 
+@app.get("/api/today")
+def today_tasks(limit: int = 30):
+    """跨项目的「现在就能动手」：依赖已满足、自己未完成的任务，按 优先级 → 截止 → 最近更新 排。
+
+    `executable_tasks()` 此前只有 MCP 侧在用 —— 人想回答"今天该干什么"只能逐个项目点开。
+    已完成的项目整跳过；阻塞中的任务会保留并标出（它也是现在就该处理的）。
+    """
+    data = get_projects_data()
+    pri_rank = {"高": 0, "中": 1, "低": 2}
+    out: list[dict] = []
+    projects_seen = 0
+    for p in data.get("projects", []):
+        if p.get("status") == "已完成":
+            continue
+        ready = executable_tasks(p.get("tasks") or [])
+        if not ready:
+            continue
+        projects_seen += 1
+        for t in ready:
+            out.append({
+                "project_id": p["id"], "project_name": p["name"],
+                "project_status": p.get("status", ""),
+                "id": t.get("id"), "title": t.get("title"),
+                "status": t.get("status", "待办"), "priority": t.get("priority", "中"),
+                "due_date": t.get("due_date") or "",
+                "refs": t.get("refs") or [],
+                "updated_at": t.get("updated_at") or "",
+            })
+    # 稳定排序：先按更新时间倒序，再按（优先级、截止）升序
+    out.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+    out.sort(key=lambda x: (pri_rank.get(x.get("priority"), 1), x.get("due_date") or "9999-12-31"))
+    return {
+        "tasks": out[:max(1, min(limit, 200))],
+        "total": len(out),
+        "project_count": projects_seen,
+    }
+
+
 @app.get("/api/export/page/{pid}")
 def export_handoff_page(pid: str, redact: int = 0):
     """自包含接手页：单文件 HTML，离线可用，人和智能体都能读。

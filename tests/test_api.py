@@ -313,3 +313,42 @@ def test_config_accepts_mcp_readonly(app_client):
     assert cfg["ai"]["mcp_readonly"] is True
     status, cfg2 = app_client.put("/api/ai/config", {"mcp_readonly": False})
     assert cfg2["ai"]["mcp_readonly"] is False
+
+
+def test_today_lists_only_unblocked_tasks(server):
+    """跨项目"现在就能动手"：前置没完成的不该出现"""
+    _, p = server.create_project("今日项目", status="进行中")
+    _, t1 = server.post(f"/api/projects/{p['id']}/tasks", {"title": "前置任务", "priority": "高"})
+    _, _t2 = server.post(f"/api/projects/{p['id']}/tasks", {"title": "被阻塞任务", "priority": "高",
+                                                           "depends_on": [t1["id"]]})
+    server.post(f"/api/projects/{p['id']}/tasks", {"title": "已完成的任务", "status": "已完成"})
+
+    status, body = server.get("/api/today")
+    assert status == 200
+    titles = [t["title"] for t in body["tasks"]]
+    assert "前置任务" in titles
+    assert "被阻塞任务" not in titles, "前置没完成，不该出现在今日待办"
+    assert "已完成的任务" not in titles
+    assert body["project_count"] == 1
+
+
+def test_today_skips_finished_projects(server):
+    _, p = server.create_project("已完结项目", status="已完成")
+    server.post(f"/api/projects/{p['id']}/tasks", {"title": "收尾任务"})
+    _, body = server.get("/api/today")
+    assert all(t["project_name"] != "已完结项目" for t in body["tasks"])
+
+
+def test_today_skips_projects_with_nothing_actionable(server):
+    """只剩已完成任务的项目、空项目：整条跳过，不占 project_count 也不报错"""
+    _, spent = server.create_project("只剩已完成任务", status="进行中")
+    server.post(f"/api/projects/{spent['id']}/tasks", {"title": "已经做完的", "status": "已完成"})
+    server.create_project("空项目", status="规划中")
+    _, live = server.create_project("有活干", status="进行中")
+    server.post(f"/api/projects/{live['id']}/tasks", {"title": "唯一可做的"})
+
+    _, body = server.get("/api/today")
+    assert [t["title"] for t in body["tasks"]] == ["唯一可做的"]
+    assert body["project_count"] == 1
+    assert body["total"] == 1
+

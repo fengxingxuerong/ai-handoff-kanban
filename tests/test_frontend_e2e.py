@@ -447,3 +447,19 @@ def test_task_sort_reorders_cards(ui):
     page.select_option("#task-sort", "priority")
     first_after = page.locator("#col-todo .tcard .tt").first.inner_text()
     assert "高优先" in first_after, f"按优先级排序后高优先应在前，实际首张：{first_after}"
+
+
+def test_today_panel_lists_tasks_and_jumps_to_project(ui):
+    """跨项目待办：点开能看到任务，点一条直接跳到它的项目"""
+    page, api, _ = ui
+    p = make_project(api, "今日面板项目")
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "今日可做任务", "status": "待办", "priority": "高"})
+    page.reload(wait_until="domcontentloaded")
+
+    page.click("[data-act='openToday']")
+    page.wait_for_selector("#today-modal.show", timeout=10000)
+    assert "今日可做任务" in page.locator("#today-body").inner_text()
+
+    page.click("[data-act='gotoTask']")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    assert "今日面板项目" in page.locator("#view-detail").inner_text()
