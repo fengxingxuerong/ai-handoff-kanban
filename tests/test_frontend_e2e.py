@@ -703,3 +703,47 @@ def test_closing_command_modal_abandons_pending_actions(ai_ui):
     assert not page.locator("#cmd-exec-row").is_visible(), "重开还挂着上一次的确认按钮"
     names = [x["name"] for x in api.get("/api/projects")[1]["projects"]]
     assert "不该被建出来" not in names
+
+
+def test_custom_tags_are_visible_and_reset_between_projects(ui):
+    """项目自带的自定义标签以前可能"在 selTags 里但界面上没有 chip"，用户看不见也取消不掉；
+    切到另一个项目时上一次的自定义 chip 又留在原地可被点。"""
+    page, api, _ = ui
+    a = make_project(api, "标签甲项目", tags=["自定义甲"])
+    make_project(api, "标签乙项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard:has-text('标签甲项目')", timeout=15000)
+
+    page.click(".pcard:has-text('标签甲项目') [data-act='edit']")
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    active = page.locator("#f-tag-chips .chip-tag.active")
+    assert active.count() == 1 and "自定义甲" in active.first.inner_text(),         f"项目自带的自定义标签必须看得见：{active.all_inner_texts()}"
+    assert page.locator("#f-tag-chips .chip-tag", has_text="自定义甲").count() == 1, "同名 chip 重复了"
+
+    page.click("#proj-modal [data-act='closeModal']")
+    page.click(".pcard:has-text('标签乙项目') [data-act='edit']")
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    assert page.locator("#f-tag-chips .chip-tag.active").count() == 0, "上个项目的标签还高着"
+
+    # 在乙上加一个自定义标签并保存：看得见的就必须是会被存的
+    page.fill("#f-tag-input", "自定义乙")
+    page.press("#f-tag-input", "Enter")
+    assert page.locator("#f-tag-chips .chip-tag.active").all_inner_texts() == ["自定义乙"]
+    page.fill("#f-name", "标签乙项目")
+    page.click("[data-act='saveProject']")
+    page.wait_for_selector("#proj-modal", state="hidden", timeout=10000)
+    page.wait_for_selector(".pcard:has-text('标签乙项目')", timeout=15000)
+
+    tags_a = api.get(f"/api/projects/{a['id']}")[1]["tags"]
+    assert tags_a == ["自定义甲"], f"编辑乙却动了甲的标签：{tags_a}"
+
+
+def test_session_scan_button_clears_loading_state(ui):
+    """扫描到 0 条会话时以前直接 return，跳过收尾 → 按钮永久停在转圈态"""
+    page, api, _ = ui
+    page.click("[data-act='openSessionCapture']")
+    page.wait_for_selector("#session-modal.show", timeout=10000)
+    page.click("[data-act='scanSessions']")
+    # 空结果那条分支以前直接 return、跳过收尾；无论扫到几条，收尾都必须执行
+    page.wait_for_selector("#scan-btn:not(.ai-loading-btn)", timeout=30000)
+    assert page.locator("#session-list").inner_text().strip() != ""

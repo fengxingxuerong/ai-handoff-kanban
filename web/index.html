@@ -881,7 +881,7 @@
   </div>
 </div>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <!-- AI 监管报告面板 -->
 <div class="report-mask" id="report-mask" data-act="closeReport"></div>
@@ -1611,6 +1611,40 @@ function fallbackCopy(text) {
 }
 
 // ============ 项目增删改 ============
+// 标签 chip：预设的写在 HTML 里，项目自带的自定义标签按需创建（同名只留一个）。
+// 关键是"界面上的 chip"与 selTags（保存时的真值）必须始终一一对应 ——
+// 以前自定义 chip 的创建/删除散在输入框事件里，出现过标签在 selTags 里
+// 而界面上没有 chip 的状态：用户看不见它，却会被写进项目。
+function tagChip(t) {
+  const holder = document.getElementById("f-tag-chips");
+  const found = [...holder.querySelectorAll(".chip-tag")].find(c => c.dataset.t === t);
+  if (found) return found;
+  const chip = document.createElement("span");
+  chip.className = "chip-tag";
+  chip.dataset.t = t;
+  chip.textContent = t;
+  chip.addEventListener("click", () => toggleTag(chip, t));
+  holder.appendChild(chip);
+  return chip;
+}
+
+function toggleTag(chip, t) {
+  if (selTags.has(t)) { selTags.delete(t); chip.classList.remove("active"); }
+  else { selTags.add(t); chip.classList.add("active"); }
+}
+
+// 打开弹窗时按"这个项目有什么标签"整体重置。
+// 以前是先 `selTags = new Set()`、再把项目标签塞回 Set，但只有"界面上正好有同名 chip"
+// 时才高亮 —— 项目自带的自定义标签没有 chip，于是出现"标签在 selTags 里、界面上看不见"：
+// 用户既看不到它也没法取消它。同时上一个项目留下的自定义 chip 还挂在原地可被点选。
+function resetTagChips(tags) {
+  selTags = new Set(tags || []);
+  document.querySelectorAll("#f-tag-chips .chip-tag").forEach(c => {
+    c.classList.toggle("active", selTags.has(c.dataset.t));
+  });
+  selTags.forEach(t => tagChip(t).classList.add("active"));
+}
+
 function openProjectModal(id) {
   editProjectId = id || null;
   selTags = new Set();
@@ -1623,7 +1657,7 @@ function openProjectModal(id) {
   document.getElementById("f-bg").value = "";
   document.getElementById("f-handoff").value = "";
   document.getElementById("f-next").value = "";
-  document.querySelectorAll("#f-tag-chips .chip-tag").forEach(c => c.classList.remove("active"));
+  resetTagChips([]);
   if (id) {
     const p = projects.find(x => x.id === id);
     if (p) {
@@ -1635,43 +1669,24 @@ function openProjectModal(id) {
       document.getElementById("f-bg").value = p.background || "";
       document.getElementById("f-handoff").value = p.handoff_note || "";
       document.getElementById("f-next").value = p.next_action || "";
-      (p.tags || []).forEach(t => {
-        selTags.add(t);
-        document.querySelectorAll("#f-tag-chips .chip-tag").forEach(c => { if (c.dataset.t === t) c.classList.add("active"); });
-      });
+      resetTagChips(p.tags);
     }
   }
   openModal("proj-modal");
 }
 
 document.querySelectorAll("#f-tag-chips .chip-tag").forEach(c => {
-  c.addEventListener("click", () => {
-    const t = c.dataset.t;
-    if (selTags.has(t)) { selTags.delete(t); c.classList.remove("active"); }
-    else { selTags.add(t); c.classList.add("active"); }
-  });
+  c.addEventListener("click", () => toggleTag(c, c.dataset.t));
 });
 
 document.getElementById("f-tag-input").addEventListener("keydown", e => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    const v = e.target.value.trim();
-    if (!v || selTags.has(v)) return;
-    selTags.add(v);
-    // 动态加一个 chip
-    const chip = document.createElement("span");
-    chip.className = "chip-tag active";
-    chip.dataset.t = v;
-    chip.textContent = v;
-    chip.addEventListener("click", () => {
-      selTags.delete(v); chip.classList.remove("active");
-      if (!chip.classList.contains("active") && ![...document.querySelectorAll("#f-tag-chips .chip-tag")].some(x => x.dataset.t === v && x.classList.contains("active"))) {
-        chip.remove();
-      }
-    });
-    document.getElementById("f-tag-chips").appendChild(chip);
-    e.target.value = "";
-  }
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const v = e.target.value.trim();
+  if (!v) return;
+  selTags.add(v);
+  tagChip(v).classList.add("active");   // 没有同名 chip 就建一个，保证看得见的=会被存的
+  e.target.value = "";
 });
 
 async function saveProject() {
@@ -3052,7 +3067,7 @@ async function scanSessions() {
       });
     });
   } catch (e) { list.innerHTML = '<div style="color:var(--red);font-size:12px">扫描失败：' + esc(e.message) + "</div>"; }
-  btn.classList.remove("ai-loading-btn");
+  finally { btn.classList.remove("ai-loading-btn"); }   // 空结果那条分支以前直接 return，按钮永久转圈
 }
 
 async function loadSessionPreviewAndPrepare() {

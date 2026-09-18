@@ -99,6 +99,9 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
    由 `runAction()` 统一分发（`tests/test_frontend.py` 会强制这条）。
    历史事故：`onclick="confirmDeleteProject('id','${esc(name)}')"` 里 `&#39;` 会被 HTML 解码回单引号，
    项目名带撇号时按钮直接报 JS 语法错误。动态列表另用 `data-pid` + 局部委托（见 `bindCardEvents`）。
+   **项目弹窗里的标签 chip 必须与 `selTags` 一一对应**（`tagChip()` / `resetTagChips()`）：
+   `saveProject` 保存的是 `[...selTags]`，曾经出现过"标签在 Set 里、界面上没有 chip"，
+   用户看不见也没法取消，以及上一个项目的自定义 chip 留在原地可被点。
    **关闭弹窗也只有一条路**：✕ / 「完成」/ 点遮罩 / Esc 全部走 `closeOneModal(id)`
    （Esc 经 `closeTopModal()` 一次只关最上面一层）。以前它们各自直接摘 `.show`，
    漏掉了 `closeModal` 的动画复位（弹窗只有第一次打开有 pop），Esc 更不清 `pendingActions`
@@ -357,7 +360,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-19）**：`pytest` 408 收集（402 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+**验证基线（2026-09-19）**：`pytest` 412 收集（406 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
 覆盖率 94%（语句 2066 / 缺 134，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
 并行（`-n auto`，已写进 `pytest.ini`）冷跑约 50 秒、热跑约 20 秒。
 

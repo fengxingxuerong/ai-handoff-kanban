@@ -216,3 +216,15 @@ def test_clickable_cards_are_keyboard_reachable():
     assert 'el.dataset.keyact = "1"' in HTML, "任务卡是 createElement 出来的，要单独加"
     assert re.search(r'e\.key !== "Enter" && e\.key !== " ".*?el\.click\(\)', HTML, re.S), \
         "缺 Enter/空格 激活"
+
+
+def test_scan_button_uses_finally_for_its_loading_state():
+    """扫描结果为空时函数是直接 return 的，收尾必须放在 finally 里，
+    否则按钮永久停在转圈态（本机有真实会话，走不到空分支，所以只能静态钉）"""
+    body = HTML[HTML.index("async function scanSessions()"):]
+    body = body[:body.index("\n}\n")]
+    assert "finally {" in body and 'btn.classList.remove("ai-loading-btn")' in body
+
+
+def test_toast_is_announced_to_screen_readers():
+    assert 'id="toast" role="status" aria-live="polite"' in HTML
