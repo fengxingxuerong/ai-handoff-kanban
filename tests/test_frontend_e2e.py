@@ -594,3 +594,48 @@ def test_reminder_banner_does_not_break_viewport_height(ui):
     assert page.evaluate("getComputedStyle(document.documentElement)"
                          ".getPropertyValue('--banner-h')").strip() == "0px"
     assert page.evaluate("document.documentElement.scrollHeight - window.innerHeight") <= 1
+
+
+def test_detail_view_skips_rebuilding_the_hidden_overview(ui):
+    """详情页里每次保存任务/改状态都会调 loadOverview()。
+    以前它无条件把 N 张项目卡全删全建 —— 那正是隐藏中的视图，纯白干。"""
+    page, api, _ = ui
+    make_project(api, "延迟渲染项目")
+    page.reload(wait_until="domcontentloaded")
+    page.click(".pcard:has-text('延迟渲染项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    card = page.locator(".pcard:has-text('延迟渲染项目')")
+    before = card.text_content()
+
+    page.click("[data-act='openTaskModal']")
+    page.fill("#t-title", "在详情里加的任务")
+    page.click("[data-act='saveTask']")
+    page.wait_for_selector("#col-todo .tcard:has-text('在详情里加的任务')", timeout=15000)
+    # 隐藏元素取文本要用 text_content()，inner_text() 会返回空
+    assert card.text_content() == before, "总览还藏着，项目卡却被重建了一遍"
+
+    page.click("[data-act='showOverview']")
+    page.wait_for_selector("#view-detail", state="hidden", timeout=10000)
+    after = page.locator(".pcard:has-text('延迟渲染项目')").text_content()
+    assert after != before, "切回总览时没有补渲染，看到的是旧数据"
+    assert "在详情里加的任务" not in (after or "")   # 卡片只显示统计不显示标题，顺手确认没渲染串
+
+
+def test_offline_changes_appear_when_the_window_is_shown_again(ui):
+    """MCP 服务是另一个进程，桌面端也可能开着第二个窗口：
+    别人改了看板，切回来得看得见，而不是非要手点刷新。"""
+    page, api, _ = ui
+    p = make_project(api, "外部改动项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard:has-text('外部改动项目')", timeout=15000)
+
+    api.put(f"/api/projects/{p['id']}", {"name": "外部改动项目", "status": "进行中",
+                                         "progress": 66, "priority": "高"})
+    assert "66%" not in page.locator(".pcard:has-text('外部改动项目')").text_content(), \
+        "界面已经自己变了，这条用例就没意义了"
+
+    page.evaluate("""() => {
+      Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }""")
+    page.wait_for_selector(".pcard:has-text('66%')", timeout=15000)

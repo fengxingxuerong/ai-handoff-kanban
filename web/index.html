@@ -1209,7 +1209,10 @@ async function loadOverview() {
     }
     renderDash();
     checkReminders(stats);
-    renderOverview();
+    // 总览是隐藏的时候（人在详情页里保存任务、拖卡片、改状态都会调到这里）
+    // 数据要拉新，但把 N 张项目卡全删全建是白干 —— 切回总览时 showOverview 会再调一次，
+    // 那时才真正渲染。真实规模下这是一次点击里最贵的一段 DOM 工作。
+    if (document.getElementById("view-overview").style.display !== "none") renderOverview();
   } catch (e) {
     toast("加载失败：" + e.message);
   }
@@ -1419,6 +1422,28 @@ function showOverview() {
   document.getElementById("view-detail").classList.remove("active");
   loadOverview();
 }
+
+// 看板的数据会被"别人"改掉：MCP 服务是另一个进程，桌面端也可能开着第二个窗口，
+// 或者刚被某个智能体用 kanban_update_task 写过。以前切回窗口看到的还是离开时的样子，
+// 得手动点刷新才知道变了 —— 这里在窗口重新可见/重新获得焦点时补一次拉取。
+(function bindRefreshOnReturn() {
+  let lastAt = 0;
+  const refresh = () => {
+    if (document.hidden) return;
+    const now = Date.now();
+    if (now - lastAt < 4000) return;     // 防抖：最小化恢复/反复切窗不该连打接口
+    lastAt = now;
+    const detail = document.getElementById("view-detail");
+    if (detail.classList.contains("active") && currentPid) {
+      api("/api/projects/" + currentPid)
+        .then(p => { current = p; renderDetail(); })
+        .catch(e => toast("刷新当前项目失败：" + e.message));
+    }
+    loadOverview();
+  };
+  document.addEventListener("visibilitychange", refresh);
+  window.addEventListener("focus", refresh);
+})();
 
 // 列内排序（只影响显示，不动数据顺序 —— 数据顺序由新建/更新的时间决定）
 let taskSortMode = "default";
