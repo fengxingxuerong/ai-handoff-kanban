@@ -859,6 +859,7 @@
       </div>
     </div>
     <div class="mfoot">
+      <button class="btn danger" id="t-delete" style="display:none;margin-right:auto" data-act="deleteTask">🗑 删除任务</button>
       <button class="btn" data-act="closeModal" data-arg="task-modal">取消</button>
       <button class="btn primary" data-act="saveTask">保存</button>
     </div>
@@ -1132,6 +1133,11 @@ const STATUS_COLORS = { "规划中": "gray", "进行中": "blue", "已暂停": "
 const TASK_STATUSES = ["待办", "进行中", "已完成", "阻塞"];
 const STATUS_SET = new Set(["规划中", "进行中", "已暂停", "已完成"]);
 const PRIORITY_SET = new Set(["高", "中", "低"]);
+// 项目状态与任务状态是两套枚举（"待办"/"阻塞"只属于任务），别拿一个去校验另一个
+const TASK_STATUS_SET = new Set(TASK_STATUSES);
+// 优先级会被拼进 class 名（pri-高），所以连 AI 生成的值也不能当可信输入：先过白名单再落地。
+function priCls(v) { return PRIORITY_SET.has(v) ? v : "中"; }
+function taskStCls(v) { return TASK_STATUS_SET.has(v) ? v : "待办"; }
 
 // ============ 工具 ============
 async function api(path, opts) {
@@ -1307,6 +1313,7 @@ const ACTIONS = {
   // —— 表单保存 ——
   saveProject: () => saveProject(),
   saveTask: () => saveTask(),
+  deleteTask: () => deleteTask(),
   saveAISettings: () => saveAISettings(),
   savePackage: (arg, ev, el) => savePackage({ currentTarget: el }),
   saveAgentsMD: (arg, ev, el) => saveAgentsMD({ currentTarget: el }),
@@ -1338,17 +1345,22 @@ const ACTIONS = {
   writeAgentFiles: (arg, ev, el) => writeAgentFiles({ currentTarget: el }),
   copyPackage: () => copyPackage(),
   runSummarize: () => runSummarize(),
-  applySummarize: () => applySummarize(),
 };
 
 function runAction(name, ev, el) {
   const fn = ACTIONS[name];
   if (!fn) { console.warn("未注册的操作：" + name); return; }
-  try {
-    fn(el.dataset.arg, ev, el);
-  } catch (err) {
+  // ACTIONS 里绝大多数实现是 async：try/catch 抓不到 promise rejection，
+  // 失败会表现成"点了没反应"。这里统一兜一层，让任何一条都能被看见。
+  const fail = err => {
     console.error("操作执行失败：" + name, err);
     toast("操作失败：" + (err && err.message ? err.message : err));
+  };
+  try {
+    const r = fn(el.dataset.arg, ev, el);
+    if (r && typeof r.catch === "function") r.catch(fail);
+  } catch (err) {
+    fail(err);
   }
 }
 
@@ -1441,8 +1453,8 @@ function renderDetail() {
   const counts = { "待办": 0, "进行中": 0, "已完成": 0, "阻塞": 0 };
   for (const k of Object.keys(cols)) document.getElementById(cols[k]).innerHTML = "";
   tasks.forEach(t => {
-    const tst = STATUS_SET.has(t.status) ? t.status : "待办";
-    const tpri = PRIORITY_SET.has(t.priority) ? t.priority : "中";
+    const tst = taskStCls(t.status);
+    const tpri = priCls(t.priority);
     counts[tst] = (counts[tst] || 0) + 1;
     const el = document.createElement("div");
     el.className = "tcard";
@@ -1645,6 +1657,7 @@ async function deleteProject() {
 function openTaskModal(taskId) {
   editTaskId = taskId || null;
   document.getElementById("task-modal-title").textContent = taskId ? "编辑任务" : "新建任务";
+  document.getElementById("t-delete").style.display = taskId ? "inline-block" : "none";
   document.getElementById("t-title").value = "";
   document.getElementById("t-desc").value = "";
   document.getElementById("t-status").value = "待办";
@@ -1711,6 +1724,21 @@ async function saveTask() {
   } catch (e) { toast("保存失败：" + e.message); }
 }
 
+async function deleteTask() {
+  if (!editTaskId) return;
+  const t = (current.tasks || []).find(x => x.id === editTaskId);
+  if (!confirm("删除任务「" + (t ? t.title : editTaskId) + "」？它的过程日志会一并删掉，不能撤销。")) return;
+  try {
+    await api("/api/tasks/" + editTaskId, { method: "DELETE" });
+    editTaskId = null;
+    closeModal("task-modal");
+    toast("任务已删除");
+    current = await api("/api/projects/" + currentPid);
+    renderDetail();
+    loadOverview();
+  } catch (e) { toast("删除失败：" + e.message); }
+}
+
 // 键盘：Esc 关弹窗
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") document.querySelectorAll(".modal-mask.show").forEach(m => m.classList.remove("show"));
@@ -1753,7 +1781,7 @@ function renderEndpoints(eps) {
       <div class="field"><label>Base URL</label>
         <input data-i="${i}" data-f="base_url" value="${esc(ep.base_url)}" placeholder="https://.../v1"></div>
       <div class="field"><label>API Keys（每行一个，可多 Key 轮询）</label>
-        <textarea data-i="${i}" data-f="keys" placeholder="sk-... 每行一个">${(ep.api_keys || []).join("\n")}</textarea></div>
+        <textarea data-i="${i}" data-f="keys" placeholder="sk-... 每行一个">${esc((ep.api_keys || []).join("\n"))}</textarea></div>
       <div class="field"><label>模型（逗号分隔，按优先级排序）</label>
         <input data-i="${i}" data-f="models" value="${esc((ep.models || []).join(", "))}"></div>
     </div>`).join("");
@@ -1910,8 +1938,10 @@ function renderActions(actions) {
   const btn = row.querySelector("button");
   btn.textContent = `✅ 确认执行以上 ${actions.length} 个操作`;
   const list = actions.map(a => {
-    const tag = OP_TAG[a.type] || a.type;
-    const cls = a.type.startsWith("delete") ? "delete" : a.type.startsWith("update") ? "update" : "create";
+    // a.type 来自模型返回，未在白名单里时也不能原样进 innerHTML（标签是拼出来的）
+    const type = String(a.type || "");
+    const tag = OP_TAG[type] || esc("未知操作 " + type);
+    const cls = type.startsWith("delete") ? "delete" : type.startsWith("update") ? "update" : "create";
     const desc = describeAction(a);
     return `<div class="op"><span class="op-tag ${cls}">${tag}</span><span>${esc(desc)}</span></div>`;
   }).join("");
@@ -2491,7 +2521,7 @@ function renderSummarizeResult(d) {
   const box = document.getElementById("summarize-result");
   box.style.display = "block";
   const tasks = (d.new_tasks || []).map(t =>
-    `<div class="task-row"><span class="tag2 pri-${t.priority || "中"}">${t.priority || "中"}</span><span>${esc(t.title)}</span></div>`).join("");
+    `<div class="task-row"><span class="tag2 pri-${priCls(t.priority)}">${esc(priCls(t.priority))}</span><span>${esc(t.title)}</span></div>`).join("");
   const nextSec = d.next_action ? `<div class="sec"><span class="lab">🎯 建议下一步</span><div class="body">${esc(d.next_action)}</div></div>` : "";
   const handoffSec = d.handoff_note_updates ? `<div class="sec"><span class="lab">🤝 建议补充进交接说明</span><div class="body">${esc(d.handoff_note_updates)}</div></div>` : "";
   box.innerHTML = `<div class="summ-box">
@@ -2685,9 +2715,9 @@ async function runGlobalSearch(q) {
     if (!list.length) { box.innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:8px">没有匹配的任务</div>'; return; }
     box.innerHTML = list.map(t => `
       <div class="gs-item" data-pid="${esc(t.project_id)}" style="cursor:pointer;background:var(--bg-soft);border:1px solid var(--border);border-radius:9px;padding:9px 12px;display:flex;align-items:center;gap:8px">
-        <span class="badge st-${esc(t.status)}">${esc(t.status)}</span>
+        <span class="badge st-${taskStCls(t.status)}">${esc(taskStCls(t.status))}</span>
         <span style="flex:1">${esc(t.title)}</span>
-        <span class="tag2 pri-${esc(t.priority)}">${esc(t.priority)}</span>
+        <span class="tag2 pri-${priCls(t.priority)}">${esc(priCls(t.priority))}</span>
         ${t.due_date ? `<span class="due-badge due-ok">📅 ${esc(t.due_date.slice(5))}</span>` : ""}
         <span style="font-size:11px;color:var(--text-faint);flex-shrink:0">${esc(t.project_name)}</span>
       </div>`).join("");
@@ -2763,7 +2793,7 @@ async function openToday() {
       <div class="tcard" data-act="gotoTask" data-arg="${esc(t.project_id)}" style="margin-bottom:8px;cursor:pointer">
         <div class="tt">${esc(t.title)}${t.due_date ? ` <span class="due-badge">📅 ${esc(t.due_date)}</span>` : ""}</div>
         <div class="td">${esc(t.project_name)} · ${esc(t.project_status)}${(t.refs && t.refs.length) ? " · 📍 " + t.refs.map(esc).join("、") : ""}</div>
-        <div class="tfoot"><span class="tag2 pri-${esc(t.priority)}">${esc(t.priority)}</span>${t.status === "阻塞" ? '<span class="agent">阻塞</span>' : ""}</div>
+        <div class="tfoot"><span class="tag2 pri-${priCls(t.priority)}">${esc(priCls(t.priority))}</span>${t.status === "阻塞" ? '<span class="agent">阻塞</span>' : ""}</div>
       </div>`).join("");
   } catch (e) { box.innerHTML = "加载失败：" + esc(e.message); }
 }
@@ -2947,7 +2977,7 @@ async function ingestSession() {
     box.style.display = "block";
     const d = r.parsed;
     const tasks = (d.new_tasks || []).map(t =>
-      `<div class="task-row"><span class="tag2 pri-${t.priority || "中"}">${t.priority || "中"}</span><span>${esc(t.title)}</span></div>`).join("");
+      `<div class="task-row"><span class="tag2 pri-${priCls(t.priority)}">${esc(priCls(t.priority))}</span><span>${esc(t.title)}</span></div>`).join("");
     box.innerHTML = `<div class="summ-box">
       <div class="sec"><span class="lab">📌 总结</span><div class="body">${esc(d.summary || "（无）")}</div></div>
       ${tasks ? `<div class="sec"><span class="lab">➕ 建议新增任务（${(d.new_tasks || []).length} 个）</span><div class="tasks">${tasks}</div></div>` : ""}

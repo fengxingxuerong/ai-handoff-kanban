@@ -39,6 +39,22 @@ def test_actions_table_exists():
     assert len(ACTIONS_KEYS) >= 30, f"ACTIONS 条目偏少：{len(ACTIONS_KEYS)}"
 
 
+def test_actions_table_has_no_duplicate_keys():
+    """对象字面量里的同名键是静默覆盖的：注册两遍只算一遍，且不会有任何报错。
+    （2026-09-18 实测 `applySummarize` 就重复了两行。）"""
+    keys = re.findall(r"^\s{2}([A-Za-z_$][\w$]*):", ACTIONS_BLOCK.group(1), re.M)
+    dup = sorted({k for k in keys if keys.count(k) > 1})
+    assert not dup, f"ACTIONS 有重复键，后一份静默顶掉前一份：{dup}"
+
+
+def test_status_and_priority_never_reach_class_names_unsanitized():
+    """状态/优先级会被拼进 class 名（st-进行中 / pri-高），必须走白名单
+    （priCls / taskStCls）或已过白名单的局部变量，否则等于给属性注入开门。"""
+    offenders = re.findall(r'class="[^"]*\$\{\s*(?:t|item|task)\.(?:priority|status)\b', HTML)
+    assert not offenders, f"未过白名单就把任务字段拼进 class 名：{offenders}"
+    assert "function priCls(" in HTML and "function taskStCls(" in HTML, "白名单函数被删了"
+
+
 def test_every_data_act_is_registered():
     """卡片里的 edit/del 由 bindCardEvents 单独处理，其余必须注册"""
     card_only = {"edit", "del"}

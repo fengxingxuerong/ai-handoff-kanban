@@ -443,3 +443,95 @@ def test_today_panel_lists_tasks_and_jumps_to_project(ui):
     page.click("[data-act='gotoTask']")
     page.wait_for_selector("#view-detail.active", timeout=10000)
     assert "今日面板项目" in page.locator("#view-detail").inner_text()
+
+
+def test_task_statuses_land_in_their_own_column(ui):
+    """四列各归各位。
+
+    曾经 renderDetail 拿「项目」状态白名单（规划中/进行中/已暂停/已完成）去筛「任务」状态，
+    于是「阻塞」不在集合里 → 被兜底塞进待办列，阻塞列永远是空的；
+    而套件里此前没有任何用例看过 #col-blocked，所以每次回归都全绿。
+    """
+    page, api, _ = ui
+    p = make_project(api, "四列归位项目")
+    for title, st in [("待办的", "待办"), ("在做的", "进行中"),
+                      ("做完的", "已完成"), ("卡住的", "阻塞")]:
+        api.post(f"/api/projects/{p['id']}/tasks", {"title": title, "status": st})
+    page.reload(wait_until="domcontentloaded")
+
+    page.click(".pcard:has-text('四列归位项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    for col, title in (("col-todo", "待办的"), ("col-doing", "在做的"),
+                       ("col-done", "做完的"), ("col-blocked", "卡住的")):
+        page.wait_for_selector("#" + col + " .tcard", timeout=10000)
+        text = page.locator("#" + col).inner_text()
+        assert title in text, f"「{title}」应落在 #{col}，该列实际内容：{text[:80]}"
+
+
+def test_delete_task_from_task_modal(ui):
+    """任务只有编辑入口、没有删除入口 —— 后端 DELETE /api/tasks/{tid} 早就有了，UI 却点不到"""
+    page, api, _ = ui
+    p = make_project(api, "可删任务项目")
+    tid = api.post(f"/api/projects/{p['id']}/tasks", {"title": "多余的任务"})[1]["id"]
+    page.reload(wait_until="domcontentloaded")
+    page.click(".pcard:has-text('可删任务项目')")
+    page.wait_for_selector("#col-todo .tcard", timeout=10000)
+
+    page.click("#col-todo .tcard")
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    page.wait_for_selector("#t-delete:visible", timeout=10000)
+
+    # 新建态不给删除入口（没有可删的对象，也容易误点）
+    page.click("#task-modal [data-act='closeModal']")
+    page.click("[data-act='openTaskModal']")
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    assert not page.locator("#t-delete").is_visible(), "新建任务时不该出现删除按钮"
+    page.click("#task-modal [data-act='closeModal']")
+
+    page.click("#col-todo .tcard")
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    seen: list[str] = []
+    page.on("dialog", lambda d: (seen.append(d.message), d.accept()))
+    page.click("[data-act='deleteTask']")
+    page.wait_for_selector("#col-todo .tcard", state="detached", timeout=15000)
+    assert seen, "删除任务没有二次确认"
+    assert api.get(f"/api/projects/{p['id']}")[1]["tasks"] == []
+
+
+def test_ai_action_type_cannot_inject_markup(ai_ui):
+    """AI 返回的 op type 会被拼进弹窗标签：不在白名单里也必须只是文字，不能变成节点"""
+    page, api, stub, _ = ai_ui
+    pid = make_project(api, "指令注入靶")["id"]
+    stub.push_json({"actions": [{"type": '"><img id=tag-probe src=x>',
+                                 "project_id": pid, "title": "注入探针"}], "reply": "r"})
+    page.click("[data-act='openAICmd']")
+    page.wait_for_selector("#cmd-input", timeout=10000)
+    page.fill("#cmd-input", "随便下个指令")
+    page.click("#cmd-send-btn")
+    page.wait_for_selector("#cmd-exec-row:visible", timeout=15000)
+    assert page.locator("#tag-probe").count() == 0, "模型返回的 type 被当 HTML 渲染了"
+    text = page.locator("#cmd-chat").inner_text()
+    assert "未知操作" in text, f"没走到未知 type 的渲染分支，用例是空转：{text[:150]}"
+    assert "注入探针" in text, "确认列表里没有这条操作，用例同样是空转"
+
+
+def test_ai_suggested_priority_cannot_inject_markup(ai_ui):
+    """提炼建议里的优先级会拼进 class 名（pri-高）：过白名单后只能是 高/中/低"""
+    page, api, stub, _ = ai_ui
+    make_project(api, "提炼注入靶")
+    stub.push_json({
+        "summary": "s", "next_action": "n",
+        "new_tasks": [{"title": "带毒优先级的任务",
+                       "priority": '"><img id=pri-probe src=x>'}],
+    })
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.locator(".pcard").first.click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.click("[data-act='openSummarize']")
+    page.wait_for_selector("#summarize-text", timeout=10000)
+    page.fill("#summarize-text", "决定用 CI 部署，回滚步骤写进文档，下周一交付。" * 2)
+    page.click("#summarize-btn")
+    page.wait_for_selector("#summarize-result:visible", timeout=20000)
+    assert page.locator("#pri-probe").count() == 0, "AI 给的优先级被当 HTML 渲染了"
+    assert "带毒优先级的任务" in page.locator("#summarize-result").inner_text()
