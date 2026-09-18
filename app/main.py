@@ -236,6 +236,46 @@ def topo_order(tasks: list[dict]) -> list[dict]:
     return out
 
 
+def _break_dep_cycles(tasks: list[dict]) -> None:
+    """就地剪掉依赖里的环：按顺序逐条接受依赖，会把图连成环的那一条直接丢掉。
+
+    写入路径（create_task / update_task）已经在锁内拦环，这里兜的是另外两条入口 ——
+    导入外部 JSON、从历史备份恢复，它们绕过端点校验。环一旦进了存储，
+    `topo_order` 会退回原序、`executable_tasks` 也可能永远等不齐前置，
+    而用户只看到"顺序怎么不对"，查不到原因。
+
+    挂在 `_sanitize()`（每次读都跑）而不是只挂在导入端点上，是为了连手改过的
+    projects.json 与旧备份一起自愈。代价实测过：1000 项目 / 一万任务（4.1MB）下
+    `scripts/bench.py` 的列表接口从 56ms 涨到 63ms（约 +6ms），离 300ms 的存储层
+    改造触发线还很远；常态只有一次 DFS 就返回，不会逐条试。要挪走前先重跑 bench。
+    """
+    ids = {t.get("id") for t in tasks if isinstance(t, dict)}
+    graph: dict[str, list[str]] = {}
+    for t in tasks:
+        if isinstance(t, dict):
+            graph[t.get("id")] = [d for d in (t.get("depends_on") or []) if d in ids]
+    if not has_cycle(graph):
+        return                      # 常态：一次 DFS 就过，不必逐条试
+    # 真有成环（多半来自外部导入/旧备份）：从空图出发按入列顺序逐条接受，
+    # 装得进去就留、会把图连成环就丢。必须从空图开始 —— 拿检测用的那张图当底子，
+    # 后面任务尚未处理的依赖会假装成"已经在图里"，把本该保留的前一条依赖误剪掉。
+    acyclic: dict[str, list[str]] = {tid: [] for tid in graph}
+    for t in tasks:
+        if not isinstance(t, dict):
+            continue
+        tid = t.get("id")
+        accepted: list[str] = []
+        for dep in (t.get("depends_on") or []):
+            if dep not in ids or dep == tid:
+                continue
+            acyclic[tid].append(dep)
+            if has_cycle(acyclic):
+                acyclic[tid].pop()
+            else:
+                accepted.append(dep)
+        t["depends_on"] = accepted
+
+
 def executable_tasks(tasks: list[dict]) -> list[dict]:
     """当前可以动手的任务：自己的状态未完成，且所有前置都已完成"""
     done_ids = {t.get("id") for t in tasks if t.get("status") == "已完成"}
@@ -284,6 +324,7 @@ def _sanitize(data: dict) -> dict:
         for t in tasks:
             if isinstance(t, dict):
                 t["depends_on"] = [d for d in t["depends_on"] if d in ids]
+        _break_dep_cycles(tasks)   # 环只能从导入/恢复进来，但仍放在每次读上：见函数说明
     return data
 
 
@@ -473,16 +514,6 @@ def find_project(pid: str) -> tuple[dict, dict] | None:
     for p in data.get("projects", []):
         if p.get("id") == pid:
             return data, p
-    return None
-
-
-def find_task(tid: str) -> tuple[dict, dict] | None:
-    """只读查找任务，返回 (所属项目, 任务)"""
-    data = get_projects_data()
-    for p in data.get("projects", []):
-        for t in (p.get("tasks") or []):
-            if t.get("id") == tid:
-                return p, t
     return None
 
 
@@ -839,11 +870,6 @@ def delete_project(pid: str):
 @app.post("/api/projects/{pid}/tasks", status_code=201)
 def create_task(pid: str, body: TaskIn):
     now = now_str()
-    found = find_project(pid)
-    if not found:
-        raise HTTPException(404, "项目不存在")
-    existing = [t for t in (found[1].get("tasks") or []) if isinstance(t, dict)]
-    ids = {t.get("id") for t in existing}
     task = {
         "id": uuid.uuid4().hex[:12],
         "title": body.title.strip(), "desc": body.desc,
@@ -851,12 +877,17 @@ def create_task(pid: str, body: TaskIn):
         "agent": body.agent.strip(), "due_date": body.due_date,
         "created_at": now, "updated_at": now, "journal": [],
         "refs": clean_refs(body.refs),
-        "depends_on": clean_deps(body.depends_on, ids),
+        "depends_on": [],          # 依赖在锁内算，见 apply
     }
-    if has_cycle(task_graph(existing + [task])):
-        raise HTTPException(400, "依赖会形成循环，已放弃创建")
 
     def apply(p: dict, _data: dict) -> None:
+        # 取兄弟任务、清洗依赖、判环全部放进同一个临界区。先前是拿锁外快照算好
+        # depends_on 再另起一次锁写入 —— 两个并发请求各自都判得过，
+        # 合起来却能把依赖写成一个环（环一进来 topo_order 就静默退化成原序）。
+        siblings = [t for t in (p.get("tasks") or []) if isinstance(t, dict)]
+        task["depends_on"] = clean_deps(body.depends_on, {t.get("id") for t in siblings})
+        if has_cycle(task_graph(siblings + [task])):
+            raise HTTPException(400, "依赖会形成循环，已放弃创建")
         p.setdefault("tasks", []).insert(0, task)
         p["updated_at"] = now
 
@@ -867,23 +898,18 @@ def create_task(pid: str, body: TaskIn):
 
 @app.put("/api/tasks/{tid}")
 def update_task(tid: str, body: TaskIn):
-    found = find_task(tid)
-    if not found:
-        raise HTTPException(404, "任务不存在")
-    project, _old = found
-    siblings = [t for t in (project.get("tasks") or []) if isinstance(t, dict) and t.get("id") != tid]
-    ids = {t.get("id") for t in siblings}
-    if tid in (body.depends_on or []):
-        raise HTTPException(400, "任务不能依赖自己")
-    deps = clean_deps(body.depends_on, ids)
-
-    # 先模拟一次，确认不会成环再落盘
-    simulated = siblings + [{"id": tid, "depends_on": deps}]
-    if has_cycle(task_graph(simulated)):
-        raise HTTPException(400, "依赖会形成循环，已放弃更新")
-
     def apply(t: dict, p: dict) -> None:
+        # 同 create_task：兄弟任务、自依赖、环判定都必须在锁内做，
+        # 否则两个并发请求能合力把一个环写进依赖图。
         now = now_str()
+        if tid in (body.depends_on or []):
+            raise HTTPException(400, "任务不能依赖自己")
+        siblings = [x for x in (p.get("tasks") or [])
+                    if isinstance(x, dict) and x.get("id") != tid]
+        deps = clean_deps(body.depends_on, {x.get("id") for x in siblings})
+        if has_cycle(task_graph(siblings + [{"id": tid, "depends_on": deps}])):
+            raise HTTPException(400, "依赖会形成循环，已放弃更新")
+
         old_status = t.get("status", "")
         t.update({
             "title": body.title.strip(), "desc": body.desc,
