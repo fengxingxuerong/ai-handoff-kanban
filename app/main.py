@@ -820,6 +820,17 @@ def delete_project(pid: str):
     changed, _ = mutate(worker)
     if not changed:
         raise HTTPException(404, "项目不存在")
+
+    # 记忆单独存在 memories.json，删项目不会顺带带走它：孤儿不会显示出来，
+    # 却永久占着条数上限（约定 11），导出换机时也是一堆挂在已删项目上的记录。
+    def drop_orphans(items: list[dict]):
+        keep = [m for m in items if m.get("pid") != pid]
+        if len(keep) == len(items):
+            return False, None
+        items[:] = keep
+        return True, len(keep)
+
+    _mutate_memories(drop_orphans)
     return {"ok": True}
 
 
@@ -1511,7 +1522,7 @@ def create_backup():
     folder = backups / f"backup_{ts}"
     folder.mkdir(parents=True, exist_ok=True)
     copied = []
-    for name in ("projects.json", "config.json"):
+    for name in ("projects.json", "config.json", "memories.json"):
         src = data_dir() / name
         if src.exists():
             shutil.copy2(src, folder / name)
@@ -1551,6 +1562,8 @@ def export_all_data():
         "version": APP_VERSION,
         "exported_at": now_str(),
         "projects": data.get("projects", []),
+        # 记忆层单独存一个文件，不带出去就等于换机后"决策/坑/约定"全丢
+        "memories": _load_memories(),
     }
 
 
@@ -1576,6 +1589,12 @@ def import_all_data(body: ImportBody):
     if not isinstance(projects, list):
         raise HTTPException(400, "文件里没有 projects 数据")
     projects = [p for p in projects if isinstance(p, dict) and p.get("id") and p.get("name")]
+    # 记忆层：老导出文件里没有这个键 —— 那就**不动**当前记忆，不能因为导入而清空
+    raw_mem = cleaned.get("memories")
+    mem_items = None
+    if isinstance(raw_mem, list):
+        mem_items = [m for m in raw_mem if isinstance(m, dict) and m.get("id") and m.get("text")]
+
     # 导入前自动留一份快照（零删除安全网，随时可从备份回滚）
     try:
         create_backup()
@@ -1588,7 +1607,17 @@ def import_all_data(body: ImportBody):
         data["projects"] = projects
         return True, {"ok": True, "imported": len(projects)}
 
-    return mutate(worker)[1]
+    result = mutate(worker)[1]
+    if mem_items is not None:
+        # 与 projects 分属两个文件，只能各自进临界区替换（中间断电最坏是"项目已换、
+        # 记忆还是旧的"，不会互相写坏）；快照已在上面留好，可回滚。
+        def w(items: list[dict]):
+            items[:] = mem_items
+            return True, None
+
+        _mutate_memories(w)
+        result["memories"] = len(mem_items)
+    return result
 
 
 # ---- LLM 用量统计 ----
@@ -1649,6 +1678,35 @@ def _save_memories(items: list[dict]) -> None:
     os.replace(tmp, f)
 
 
+MAX_MEMORIES = 500             # 记忆是"追加型"存储，按硬性约定 11 必须有上限
+KEEP_MEMORIES_ON_TRIM = 400    # 超限后裁到最近这些条（留出余量，不用每次写都裁）
+
+
+def _mutate_memories(fn):
+    """记忆的「读 → 改 → 写」临界区，与 `mutate()` 用同一套锁。
+
+    原先 add/delete 两个端点各自裸调 `_load_memories()` + `_save_memories()`：
+    两次读-改-写一交叠，后写的那份就把先写的那条整条覆盖掉 —— 记忆是无声色丢失的，
+    而且它存在独立文件里，`mutate()` 对 projects.json 上的锁一点也保护不到它。
+    """
+    with _LOCK, _cross_process_lock():
+        items = _load_memories()
+        changed, result = fn(items)
+        if changed:
+            _save_memories(items)
+        return changed, result
+
+
+def _trim_memories(items: list[dict]) -> None:
+    """就地丢掉超出上限的旧记忆。
+
+    按**入列顺序**保留末尾那些条：记忆是 append 进去的，顺序本身就等于时间序；
+    不去比 `time` 字符串，是因为同一秒内写进多条时排序不稳，裁剪会变成看运气。
+    """
+    if len(items) > MAX_MEMORIES:
+        del items[:-KEEP_MEMORIES_ON_TRIM]
+
+
 class MemoryIn(BaseModel):
     pid: str = ""
     type: str = "事实"
@@ -1680,24 +1738,32 @@ def add_memory(body: MemoryIn):
         "text": body.text.strip(),
         "source": body.source, "time": now_str(),
     }
-    items = _load_memories()
-    # 去重：同项目同文本不重复入
-    if any(m.get("pid") == entry["pid"] and m.get("text") == entry["text"] for m in items):
-        return {"ok": True, "deduped": True, "memory": entry}
-    items.append(entry)
-    _save_memories(items)
-    return {"ok": True, "memory": entry}
+
+    def worker(items: list[dict]):
+        # 去重：同项目同文本不重复入
+        if any(m.get("pid") == entry["pid"] and m.get("text") == entry["text"] for m in items):
+            return False, {"ok": True, "deduped": True, "memory": entry}
+        items.append(entry)
+        _trim_memories(items)
+        return True, {"ok": True, "memory": entry}
+
+    _, result = _mutate_memories(worker)
+    return result
 
 
 @app.delete("/api/memories/{mid}")
 def delete_memory(mid: str):
-    items = _load_memories()
-    before = len(items)
-    items = [m for m in items if m.get("id") != mid]
-    if len(items) == before:
+    def worker(items: list[dict]):
+        keep = [m for m in items if m.get("id") != mid]
+        if len(keep) == len(items):
+            return False, None
+        items[:] = keep
+        return True, {"ok": True}
+
+    changed, result = _mutate_memories(worker)
+    if not changed:
         raise HTTPException(404, "记忆不存在")
-    _save_memories(items)
-    return {"ok": True}
+    return result
 
 
 # ---- 会话捕获：自动发现 AI 工具的本地会话文件 ----
@@ -1955,9 +2021,36 @@ def restore_data(body: RestoreBody):
         return True, restored
 
     mutate(worker)
-    return {"ok": True, "source": body.source,
-            "project_count": len(restored["projects"]),
-            "task_count": sum(len(p.get("tasks") or []) for p in restored["projects"])}
+
+    # 记忆层与 projects.json 分开存，恢复项目而不恢复记忆会让两边对不上
+    # （旧记忆挂在已经不存在的项目上）。备份里没带 memories.json 时保持原样。
+    memory_count = -1
+    mem_src = src.parent / "memories.json"
+    try:
+        same_as_live = mem_src.resolve() == memories_file().resolve()
+    except Exception:
+        same_as_live = False
+    if not same_as_live and mem_src.exists():
+        try:
+            loaded = json.loads(mem_src.read_text(encoding="utf-8"))
+        except Exception:
+            loaded = None
+        if isinstance(loaded, list):
+            payload = [m for m in loaded if isinstance(m, dict) and m.get("id")]
+
+            def wm(items: list[dict]):
+                items[:] = payload
+                return True, None
+
+            _mutate_memories(wm)
+            memory_count = len(payload)
+
+    out = {"ok": True, "source": body.source,
+           "project_count": len(restored["projects"]),
+           "task_count": sum(len(p.get("tasks") or []) for p in restored["projects"])}
+    if memory_count >= 0:
+        out["memory_count"] = memory_count
+    return out
 
 
 # ---- 会话粘贴 AI 提炼 ----
