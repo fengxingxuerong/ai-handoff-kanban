@@ -321,13 +321,21 @@
     box-shadow: var(--shadow); animation: pop .18s ease;
   }
   @keyframes pop { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  /* 遮罩才是滚动容器（.modal-mask 有 overflow-y），长弹窗里标题和按钮条会滚出视野，
+     所以两头钉住；背景必须给实色，否则内容会从下面透过来 */
   .modal .mhead {
     display: flex; align-items: center; justify-content: space-between;
     padding: 16px 20px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 2;
+    background: var(--bg-soft); border-radius: 16px 16px 0 0;
   }
   .modal .mhead h2 { font-size: 15px; }
   .modal .mbody { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
-  .modal .mfoot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+  .modal .mfoot {
+    padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px;
+    position: sticky; bottom: 0; z-index: 2;
+    background: var(--bg-soft); border-radius: 0 0 16px 16px;
+  }
 
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field label { font-size: 12px; color: var(--text-dim); font-weight: 600; }
@@ -812,7 +820,7 @@
 
 <!-- 项目弹窗 -->
 <div class="modal-mask" id="proj-modal">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="proj-modal-title">
     <div class="mhead"><h2 id="proj-modal-title">新建项目</h2><button class="btn icon" data-act="closeModal" data-arg="proj-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><label>项目名称 <span class="req">*</span></label><input id="f-name" placeholder="例如：EduSmart 学生管理系统" data-enter="saveProject"></div>
@@ -856,7 +864,7 @@
 
 <!-- 任务弹窗 -->
 <div class="modal-mask" id="task-modal">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
     <div class="mhead"><h2 id="task-modal-title">新建任务</h2><button class="btn icon" data-act="closeModal" data-arg="task-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><label>任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调" data-enter="saveTask"></div>
@@ -898,7 +906,7 @@
 
 <!-- AI 监管报告面板 -->
 <div class="report-mask" id="report-mask" data-act="closeReport"></div>
-<div class="report-panel" id="report-panel">
+<div class="report-panel" id="report-panel" role="dialog" aria-modal="true" aria-label="AI 监管报告" tabindex="-1">
   <div class="r-head">
     <button class="btn" data-act="closeReport">← 返回</button>
     <h2>📊 AI 监管报告</h2>
@@ -913,7 +921,7 @@
 
 <!-- AI 设置弹窗 -->
 <div class="modal-mask" id="ai-settings-modal">
-  <div class="modal" style="width:min(680px,100%)">
+  <div class="modal" style="width:min(680px,100%)" role="dialog" aria-modal="true" aria-label="AI 设置">
     <div class="mhead"><h2>⚙️ AI 设置</h2><button class="btn icon" data-act="closeModal" data-arg="ai-settings-modal">✕</button></div>
     <div class="mbody">
       <div class="hint" id="app-version">版本加载中…</div>
@@ -965,7 +973,7 @@
 
 <!-- AI 指令弹窗 -->
 <div class="modal-mask" id="ai-cmd-modal">
-  <div class="modal" style="width:min(620px,100%)">
+  <div class="modal" style="width:min(620px,100%)" role="dialog" aria-modal="true" aria-labelledby="package-title">
     <div class="mhead"><h2>🤖 AI 指令</h2><button class="btn icon" data-act="closeModal" data-arg="ai-cmd-modal">✕</button></div>
     <div class="mbody">
       <div class="cmd-chat" id="cmd-chat">
@@ -984,7 +992,7 @@
 
 <!-- AI 交接生成弹窗 -->
 <div class="modal-mask" id="ai-handoff-modal">
-  <div class="modal" style="width:min(680px,100%)">
+  <div class="modal" style="width:min(680px,100%)" role="dialog" aria-modal="true" aria-labelledby="package-title">
     <div class="mhead"><h2>✨ AI 生成交接说明</h2><button class="btn icon" data-act="closeModal" data-arg="ai-handoff-modal">✕</button></div>
     <div class="mbody">
       <div class="row2">
@@ -1008,7 +1016,7 @@
 
 <!-- 健康趋势图弹窗 -->
 <div class="modal-mask" id="trend-modal">
-  <div class="modal" style="width:min(760px,100%)">
+  <div class="modal" style="width:min(760px,100%)" role="dialog" aria-modal="true" aria-labelledby="package-title">
     <div class="mhead"><h2>📈 项目健康分趋势</h2><button class="btn icon" data-act="closeModal" data-arg="trend-modal">✕</button></div>
     <div class="mbody">
       <div id="trend-body"><div class="r-loading"><div class="spinner"></div><div>加载趋势数据…</div></div></div>
@@ -1018,7 +1026,7 @@
 
 <!-- 完整交接包弹窗 -->
 <div class="modal-mask" id="today-modal">
-  <div class="modal" style="width:min(720px,100%)">
+  <div class="modal" style="width:min(720px,100%)" role="dialog" aria-modal="true" aria-labelledby="package-title">
     <div class="mhead"><h2>☀️ 今日待办（依赖已满足）</h2><button class="btn icon" data-act="closeModal" data-arg="today-modal">✕</button></div>
     <div class="mbody" id="today-body" style="max-height:60vh;overflow-y:auto">加载中…</div>
     <div class="mfoot">
@@ -1029,7 +1037,7 @@
 </div>
 
 <div class="modal-mask" id="package-modal">
-  <div class="modal" style="width:min(760px,100%)">
+  <div class="modal" style="width:min(760px,100%)" role="dialog" aria-modal="true" aria-labelledby="package-title">
     <div class="mhead"><h2 id="package-title">📦 完整交接包</h2><button class="btn icon" data-act="closeModal" data-arg="package-modal">✕</button></div>
     <div class="mbody">
       <div class="field" style="flex-direction:row;align-items:center;gap:10px">
@@ -1052,7 +1060,7 @@
 
 <!-- 全局任务搜索弹窗 -->
 <div class="modal-mask" id="global-search-modal">
-  <div class="modal" style="width:min(640px,100%)">
+  <div class="modal" style="width:min(640px,100%)" role="dialog" aria-modal="true" aria-label="全局任务搜索 Ctrl+K 快速唤起">
     <div class="mhead"><h2>🔎 全局任务搜索 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">Ctrl+K 快速唤起</span></h2><button class="btn icon" data-act="closeModal" data-arg="global-search-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><input id="gs-input" placeholder="搜任务标题 / 描述 / 负责人 / 代码位置…" autocomplete="off"></div>
@@ -1063,7 +1071,7 @@
 
 <!-- 会话捕获弹窗 -->
 <div class="modal-mask" id="session-modal">
-  <div class="modal" style="width:min(720px,100%)">
+  <div class="modal" style="width:min(720px,100%)" role="dialog" aria-modal="true" aria-label="会话捕获 自动发现本机 AI 工具的最近会话，提炼入库">
     <div class="mhead"><h2>📥 会话捕获 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">自动发现本机 AI 工具的最近会话，提炼入库</span></h2><button class="btn icon" data-act="closeModal" data-arg="session-modal">✕</button></div>
     <div class="mbody">
       <div style="display:flex;gap:8px;align-items:center">
@@ -1090,7 +1098,7 @@
 
 <!-- AGENTS.md 生成弹窗 -->
 <div class="modal-mask" id="agentsmd-modal">
-  <div class="modal" style="width:min(760px,100%)">
+  <div class="modal" style="width:min(760px,100%)" role="dialog" aria-modal="true" aria-label="生成 AGENTS.md Linux Foundation 标准 · 给 AI 编码代理的项目上下文">
     <div class="mhead"><h2>🤖 生成 AGENTS.md <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">Linux Foundation 标准 · 给 AI 编码代理的项目上下文</span></h2><button class="btn icon" data-act="closeModal" data-arg="agentsmd-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><label>保存路径（默认写入项目代码仓库根目录）</label>
@@ -1128,7 +1136,7 @@
 
 <!-- 会话提炼弹窗 -->
 <div class="modal-mask" id="summarize-modal">
-  <div class="modal" style="width:min(720px,100%)">
+  <div class="modal" style="width:min(720px,100%)" role="dialog" aria-modal="true" aria-label="会话提炼 把与其他 AI 的对话粘进来，自动提炼成任务与交接更新">
     <div class="mhead"><h2>📥 会话提炼 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">把与其他 AI 的对话粘进来，自动提炼成任务与交接更新</span></h2><button class="btn icon" data-act="closeModal" data-arg="summarize-modal">✕</button></div>
     <div class="mbody">
       <div class="field"><label>粘贴对话记录（从某个 AI 工具的聊天里复制过来）</label>
@@ -1207,6 +1215,8 @@ function closeModal(id) {
 // 以前遮罩与 Esc 各自直接摘 .show，跳过了上面那个动画复位（于是弹窗只有第一次
 // 打开有 pop 动画），Esc 也既不关右侧的 AI 监管面板、也不清已解析出的待确认操作。
 function closeOneModal(id) {
+  const m = document.getElementById(id);
+  modalScroll.set(id, m.scrollTop);          // 长弹窗重开时回到上次看到的位置
   closeModal(id);
   if (id === "ai-cmd-modal") {
     // 关掉指令窗口就等于放弃这一批操作，否则下次打开时「确认执行」还指着上次的解析结果
@@ -1214,18 +1224,57 @@ function closeOneModal(id) {
     const row = document.getElementById("cmd-exec-row");
     if (row) row.style.display = "none";
   }
+  backToOpener();
+}
+
+// 最上面一层：弹窗优先，其次是全屏的 AI 监管面板。关闭、Tab 陷阱都以它为准。
+function topLayer() {
+  const shown = document.querySelectorAll(".modal-mask.show");
+  if (shown.length) return shown[shown.length - 1];
+  const panel = document.getElementById("report-panel");
+  return panel && panel.classList.contains("show") ? panel : null;
 }
 
 function closeTopModal() {
-  const shown = document.querySelectorAll(".modal-mask.show");
-  if (shown.length) {
-    // 后插入 DOM 的盖在上面，一次只关最上面那层（Esc 不再把所有弹窗一把全关）
-    closeOneModal(shown[shown.length - 1].id);
-    return true;
-  }
-  const panel = document.getElementById("report-panel");
-  if (panel && panel.classList.contains("show")) { closeReport(); return true; }
-  return false;
+  const top = topLayer();
+  if (!top) return false;
+  if (top.id === "report-panel") { closeReport(); backToOpener(); return true; }
+  closeOneModal(top.id);
+  return true;
+}
+
+// 焦点管理：打开时把焦点送进弹窗（优先第一个输入框），关闭时还给触发它的元素。
+// 没有这一套，键盘和读屏用户关掉弹窗后焦点掉回 body，得从页面顶部重新 Tab 一遍。
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),'
+                + 'select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+const modalScroll = new Map();
+let modalOpener = null;
+
+function visibleFocusables(layer) {
+  return [...layer.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
+}
+
+function focusInto(layer) {
+  const items = visibleFocusables(layer);
+  const input = items.find(el => /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && el.type !== "checkbox");
+  (input || items[0] || layer).focus({ preventScroll: true });
+}
+
+function backToOpener() {
+  if (topLayer() || !modalOpener || !modalOpener.isConnected) return;
+  modalOpener.focus({ preventScroll: true });
+  modalOpener = null;
+}
+
+function trapTab(e) {
+  const layer = topLayer();
+  if (!layer) return;
+  const items = visibleFocusables(layer);
+  if (!items.length) return;
+  const first = items[0], last = items[items.length - 1];
+  const out = !layer.contains(document.activeElement);
+  if ((e.shiftKey && (document.activeElement === first || out))) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 }
 
 function openModal(id) {
@@ -1233,7 +1282,10 @@ function openModal(id) {
   // closeModal 为了收尾把动画关了；重开前复位回来，否则 pop 动画只有第一次有
   const box = m.querySelector(".modal");
   if (box) box.style.animation = "";
+  if (!m.classList.contains("show")) modalOpener = document.activeElement;
   m.classList.add("show");
+  m.scrollTop = modalScroll.get(id) || 0;
+  focusInto(m);
 }
 
 document.querySelectorAll(".modal-mask").forEach(m => {
@@ -1444,6 +1496,7 @@ document.addEventListener("click", e => {
 });
 
 document.addEventListener("keydown", e => {
+  if (e.key === "Tab") { trapTab(e); return; }
   if (e.key !== "Enter") return;
   const el = e.target.closest("[data-enter]");
   if (el) runAction(el.dataset.enter, e, el);
@@ -1872,12 +1925,6 @@ document.addEventListener("keydown", e => {
   if (el && el.dataset && el.dataset.keyact && el.click) { e.preventDefault(); el.click(); }
 });
 
-// 右侧 AI 监管面板：点空白处也能关（与弹窗一致）
-(function bindReportMaskClose() {
-  const mask = document.getElementById("report-mask");
-  if (mask) mask.addEventListener("click", e => { if (e.target === mask) closeReport(); });
-})();
-
 // ============ AI 设置 ============
 let aiConfig = null;
 let pendingActions = [];
@@ -1965,6 +2012,9 @@ async function openReport(rid) {
   const panel = document.getElementById("report-panel");
   document.getElementById("report-mask").classList.add("show");
   panel.classList.add("show");
+  const rb = panel.querySelector(".r-body");
+  if (rb) rb.scrollTop = modalScroll.get("report-panel") || 0;
+  focusInto(panel);
   document.getElementById("report-body").innerHTML = '<div class="r-loading"><div class="spinner"></div><div>AI 正在分析全部项目，请稍候…</div></div>';
   document.getElementById("report-meta").textContent = rid ? "历史报告" : "生成中…";
   try {
@@ -1982,8 +2032,11 @@ async function openReport(rid) {
 }
 
 function closeReport() {
+  const panel = document.getElementById("report-panel");
+  const rb = panel.querySelector(".r-body");
+  modalScroll.set("report-panel", rb ? rb.scrollTop : 0);
   document.getElementById("report-mask").classList.remove("show");
-  document.getElementById("report-panel").classList.remove("show");
+  panel.classList.remove("show");
 }
 
 function healthClass(h) {
@@ -2143,6 +2196,9 @@ async function executeActions() {
   btn.classList.remove("ai-loading-btn");
   document.getElementById("cmd-exec-row").style.display = "none";
   cmdAddMsg("ai", `✅ 执行完成：成功 ${ok} 个，失败 ${fail} 个`);
+  // 约定：过程留在聊天气泡里，但**结果一律再播报一次 toast** —— 弹窗会被关掉，
+  // 而 toast 是全站唯一的 aria-live 区域；少了这句，键盘/读屏用户根本不知道写进去了没有。
+  toast(fail ? "已执行：成功 " + ok + " 个，失败 " + fail + " 个" : "已执行 " + ok + " 个操作 ✓");
   loadOverview();
   if (document.getElementById("view-detail").classList.contains("active") && currentPid) {
     current = await api("/api/projects/" + currentPid);

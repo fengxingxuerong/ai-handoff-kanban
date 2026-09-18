@@ -243,3 +243,38 @@ def test_toast_gives_long_messages_time_to_be_read():
 def test_detail_view_has_loading_and_error_state():
     assert 'id="detail-state"' in HTML and "function setDetailState(" in HTML
     assert 'data-act="retryDetail"' in HTML, "失败态要能原地重试"
+
+
+# ---------------- 弹窗语义、焦点与滚动 ----------------
+
+def test_every_modal_is_a_labeled_dialog():
+    """12 个弹窗都要能被读屏认出来；有标题 id 的用 aria-labelledby，没有的用 aria-label"""
+    masks = re.findall(r'<div class="modal-mask" id="([^"]+)">\s*<div class="modal"[^>]*>', HTML)
+    assert len(masks) == 12, f"弹窗数量变了（{len(masks)}），确认是否有新弹窗漏加语义"
+    for mid in masks:
+        block = HTML[HTML.index(f'<div class="modal-mask" id="{mid}">'):]
+        tag = block.split("\n", 2)[1] if 'id="%s">' % mid in block else ""
+        modal_tag = re.search(r'<div class="modal"[^>]*>', block).group(0)
+        assert 'role="dialog"' in modal_tag and 'aria-modal="true"' in modal_tag, mid
+        assert "aria-labelledby=" in modal_tag or re.search(r'aria-label="[^"]+"', modal_tag), mid
+
+
+def test_modal_head_and_foot_are_sticky():
+    """长弹窗（AI 设置、交接包）里标题和按钮条会滚出视野，两头必须钉住且有实色背景"""
+    for sel, edge in ((".mhead", "top: 0"), (".mfoot", "bottom: 0")):
+        rule = re.search(r"\.modal " + re.escape(sel) + r" \{[^}]*\}", HTML).group(0)
+        assert "position: sticky" in rule and edge in rule, f"{sel} 没有钉住"
+        assert "background: var(--bg-soft)" in rule, f"{sel} 透明背景会让滚过的内容透出来"
+
+
+def test_focus_is_trapped_and_returned():
+    assert "function trapTab(" in HTML and "trapTab(e)" in HTML
+    assert "function focusInto(" in HTML and "backToOpener()" in HTML, "缺焦点进出管理"
+    assert "modalScroll" in HTML, "缺弹窗滚动位置记忆"
+
+
+def test_action_results_are_announced_outside_the_modal():
+    """执行结果只写在聊天气泡里 = 关掉弹窗就没人知道成没成，读屏也收不到"""
+    body = HTML[HTML.index("async function executeActions"):]
+    body = body[:body.index("\n}\n")]
+    assert "cmdAddMsg(" in body and "toast(" in body, "结果没有同时播报到 aria-live 区域"

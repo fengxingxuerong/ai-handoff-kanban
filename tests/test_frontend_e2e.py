@@ -841,3 +841,53 @@ def test_overview_failure_shows_retry_not_a_blank_grid(ui_lenient):
     page.wait_for_selector("#grid [data-act='loadOverview']", timeout=15000)
     assert "加载失败" in page.locator("#grid").inner_text()
     page.unroute("**/api/projects")
+
+
+def test_modal_focus_trap_and_return(ui):
+    page, api, _ = ui
+    make_project(api, "焦点项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+
+    opener = page.locator("header [data-act='openProjectModal']")
+    opener.click()
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    # 打开后焦点在弹窗内（优先第一个输入框）
+    assert page.evaluate("() => document.getElementById('proj-modal').contains(document.activeElement)")
+    assert page.evaluate("() => document.activeElement.id") == "f-name"
+
+    # Tab 一整圈不许跑出弹窗
+    for _ in range(25):
+        page.keyboard.press("Tab")
+    assert page.evaluate("() => document.getElementById('proj-modal').contains(document.activeElement)"), \
+        "焦点从最后一个控件跑出去了"
+    page.keyboard.press("Shift+Tab")
+    assert page.evaluate("() => document.getElementById('proj-modal').contains(document.activeElement)")
+
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#proj-modal", state="hidden", timeout=10000)
+    # 用参数传元素：别在 evaluate 的字符串里再套引号，转义极易写坏
+    assert page.evaluate("(el) => document.activeElement === el", opener.element_handle()), "关闭后焦点没还给触发它的按钮"
+
+
+def test_long_modal_reopens_at_its_previous_scroll(ui):
+    page, api, _ = ui
+    page.click("header [data-act='openAISettings']")
+    page.wait_for_selector("#ai-settings-modal.show", timeout=10000)
+    mask = page.locator("#ai-settings-modal")
+    page.evaluate("() => { const m = document.getElementById('ai-settings-modal');"
+                  "m.scrollTop = m.scrollHeight; }")
+    scrolled = mask.evaluate("e => e.scrollTop")
+    assert scrolled > 40, f"这个弹窗不够长，测不出滚动记忆（scrollTop={scrolled}）"
+
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#ai-settings-modal", state="hidden", timeout=10000)
+    page.click("header [data-act='openAISettings']")
+    page.wait_for_selector("#ai-settings-modal.show", timeout=10000)
+    assert mask.evaluate("e => e.scrollTop") >= scrolled - 5, "重开回到了顶部，滚动位置没记住"
+
+    # 钉住的标题在滚到底时仍然在视口里
+    head_top = page.locator("#ai-settings-modal .mhead").bounding_box()["y"]
+    mask_box = mask.bounding_box()
+    assert head_top >= mask_box["y"] - 1 and head_top <= mask_box["y"] + 60, \
+        f"标题滚出视野了（head y={head_top}, mask y={mask_box['y']}）"

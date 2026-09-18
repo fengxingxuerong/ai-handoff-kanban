@@ -137,6 +137,16 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
     不限源 = 任意本机文件（`config.json` 里的 Key、`.env`、别的项目源码）都能被搬到外部模型，
     直接掀翻第 9 条。
 
+13. **弹窗是一套固定的 a11y 契约**，新增弹窗必须一起给齐（`test_frontend.py` 会数数量）：
+    `.modal` 上 `role="dialog" aria-modal="true"` + 标签（有 `<h2 id>` 用 `aria-labelledby`，
+    否则 `aria-label`）；打开时焦点送进弹窗（优先第一个输入框）、关闭时还给触发元素
+    （`focusInto` / `backToOpener`）；Tab 不许跑出最上面那层（`trapTab`；滚动容器是遮罩本身）；
+    滚动位置按 id 记在 `modalScroll`，长弹窗（AI 设置 / 交接包）重开不回首顶；
+    `.mhead`/`.mfoot` 是 sticky 且带实色背景，否则滚起来标题下透出内容、按钮条会飘走。
+14. **反馈分工**：AI 指令窗里的**过程**留在聊天气泡（那是转录，有历史价值），
+    但**结果**必须再走一次 `toast()` —— toast 是全站唯一的 `aria-live` 区域，
+    而且弹窗会被关掉。少了这句，"确认执行"到底成没成，键盘/读屏用户无从得知。
+
 ## MCP 服务（让代理直接读写看板）
 
 `scripts/mcp_server.py`：stdio 传输、手写 JSON-RPC 2.0、零第三方依赖。
@@ -217,8 +227,6 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
    只在 warn/over 时说话）与界面交接包弹窗下的计量条。**不要**把提示塞进
    `_build_handoff_markdown()` 本体（会被复制进仓库、也会污染全项目合并包）。
    界面上的阈值是 JS 里另写的一份常量，改 `context_budget` 的默认阈值要同步改 `PKG_BUDGET`。
-
-
 ## 多智能体入口文件（别退化成 N 份副本）
 
 `app/main.py` 的 `AGENT_ENTRY_TARGETS` + `build_agent_entries()` 把一份正文投影成各工具要求的入口：
@@ -365,7 +373,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-19）**：`pytest` 420 收集（414 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+**验证基线（2026-09-19）**：`pytest` 426 收集（420 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
 覆盖率 94%（语句 2066 / 缺 134，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
 并行（`-n auto`，已写进 `pytest.ini`）冷跑约 50 秒、热跑约 20 秒。
 
