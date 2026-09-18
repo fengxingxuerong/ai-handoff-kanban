@@ -275,7 +275,8 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    - **favicon 的 404 是浏览器自发的**，监听器里要过滤掉，否则每条用例都会因为它变红；
    - 夹具已经把页面打开了，用 API 造完数据要 `page.reload()` 才看得见；
      卡片按**更新时间倒序**，别用 `.first` 猜是哪张 —— 用 `.pcard:has-text('名字')` 定位。
-4. **覆盖率门槛写在 `pytest.ini`**（`fail_under = 90`，实测 93%，余量 3 个点）。
+4. **覆盖率门槛写在 `pytest.ini`**（`fail_under = 90`；当前实测值见文末「验证基线」，
+   不在这里重复一个会漂的数字）。
    剩下的未覆盖行基本是 `_is_forbidden_target` 的异常分支、`Path.resolve()` 失败、
    `_scheduler_loop` 的常驻循环等难以稳定触发的路径 —— **别为了数字构造畸形环境硬凑**。
    `test_coverage_gaps.py` 里记着"哪些逻辑真但一直没测到"，新增这类补测往那放。
@@ -284,7 +285,11 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    （2026-09-16 凌晨实际踩到：一条调度用例在 00:01 那天红了）。
 6. **隐藏元素取文本要用 `text_content()`**：`inner_text()` 只返回"渲染出来"的文本，
    弹窗/折叠区里的文字（如设置面板里的版本号）拿不到，会误判成"没渲染"。
-7. **用例不许写真实数据目录**（`%USERPROFILE%\.ai-kanban`）。
+7. **故意制造网络失败的用例别用 `ui` 夹具**：`ui` 把任何 `console.error` 都判失败，
+   而 `page.route(...abort())` 或打一个不存在的 id 必然记一条 "Failed to load resource"。
+   这类"验证失败态"的用例用 `ui_lenient` —— 它只放过资源加载错误，
+   `pageerror`（真正的 JS 异常）照旧一律判红。**别为了绕开红点把 `ui` 改掉。**
+8. **用例不许写真实数据目录**（`%USERPROFILE%\.ai-kanban`）。
    `conftest.py` 有 autouse 夹具在**环境变量层**把 `KANBAN_DATA_DIR` 指到临时目录 ——
    因为 `app/llm.py` 是**自己**按这个变量解析数据目录的，不认 `main.data_dir()` 的 monkeypatch。
    历史事故（2026-09-17 实测复现）：`test_llm_gateway.py` 直接调 `llm.chat()`，
@@ -293,10 +298,10 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    新增直连 `app/llm.py` 的用例时**不要**去掉这层隔离；确实需要真实配置的用例自己
    `monkeypatch.delenv("KANBAN_DATA_DIR")`（如 test_ai.py 的 live 用例）。
    `tests/test_isolation.py` 守着这条。
-7. **并行是默认行为**：`pytest.ini` 的 addopts 带 `-n auto`（实测 135s → 41s）。
+9. **并行是默认行为**：`pytest.ini` 的 addopts 带 `-n auto`（实测 135s → 41s）。
    慢用例都是真子进程（uvicorn / MCP stdio）与真浏览器，彼此独立，叠起来就是净赚。
    定位单个问题用串行更易读：`pytest -o addopts="-q" tests/test_x.py`。
-8. **受管环境可能禁止批量删除**（杀软 / 沙箱 / 企业终端 —— 2026-09-16 在本机实际踩到）：
+10. **受管环境可能禁止批量删除**（杀软 / 沙箱 / 企业终端 —— 2026-09-16 在本机实际踩到）：
    pytest 收尾清理 `%TEMP%\pytest-of-*`、以及 pytest-cov 重建 `.coverage`，都会一次删几百个条目，
    被安全策略直接掐掉进程。现象是**跑到 100% 却没有 summary**、或某个用例报 `SystemExit: 1`，
    **不是用例失败、也不是代码问题**。能用的姿势：
@@ -307,7 +312,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
      用 autouse fixture 设 `GIT_CEILING_DIRECTORIES=tmp_path`，把向上查找钉住，用例从此与位置无关。
    - 覆盖率数据换名：`COVERAGE_FILE=.cov_x`，且指向**不存在**的新文件
    - 真要全量：交给 CI（没有这层限制）
-9. **分批跑覆盖率必须 combine**：分两批各带 `--cov=app` + 各自的 `COVERAGE_FILE`，
+11. **分批跑覆盖率必须 combine**：分两批各带 `--cov=app` + 各自的 `COVERAGE_FILE`，
    再 `coverage combine .c1 .c2 && coverage report`。
    直接用 `coverage run -m pytest -n auto` 会丢掉 xdist worker 的数据，数字会假低。
 
@@ -360,7 +365,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-19）**：`pytest` 412 收集（406 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+**验证基线（2026-09-19）**：`pytest` 420 收集（414 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
 覆盖率 94%（语句 2066 / 缺 134，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
 并行（`-n auto`，已写进 `pytest.ini`）冷跑约 50 秒、热跑约 20 秒。
 

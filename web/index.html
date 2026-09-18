@@ -220,8 +220,12 @@
   .empty .big { font-size: 44px; margin-bottom: 14px; }
 
   /* ---------- 详情视图 ---------- */
-  #view-detail { display: none; height: calc(100vh - 60px - var(--banner-h)); }
+  #view-detail { display: none; height: calc(100vh - 60px - var(--banner-h)); position: relative; }
   #view-detail.active { display: block; }
+  /* 详情页此前没有加载/失败态：慢的时候像点死了，失败时只闪一条 toast，界面还停在旧项目上 */
+  #detail-state { position: absolute; inset: 0; z-index: 6; display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; background: var(--bg);
+    font-size: 13px; color: var(--text-dim); text-align: center; padding: 0 24px; }
   .detail-scroll { height: 100%; overflow-y: auto; padding: 18px 22px 60px; }
   .d-head {
     display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
@@ -354,6 +358,7 @@
     background: var(--card); border: 1px solid var(--border); color: var(--text);
     padding: 10px 20px; border-radius: 10px; font-size: 13px;
     box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: all .25s; z-index: 200;
+    max-width: min(760px, calc(100vw - 40px)); white-space: pre-wrap; word-break: break-word;
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
@@ -680,6 +685,7 @@
 
 <!-- 详情视图 -->
 <div id="view-detail">
+  <div id="detail-state"></div>
   <div class="detail-scroll">
     <div class="d-head">
       <button class="btn" data-act="showOverview">← 返回总览</button>
@@ -720,8 +726,15 @@
 
         <div class="panel">
           <h3 style="justify-content:space-between">🧠 项目记忆
-            <button class="btn small" data-act="addMemory">＋ 添加</button>
+            <button class="btn small" data-act="toggleMemoryForm">＋ 记一条</button>
           </h3>
+          <div id="memory-form" style="display:none;gap:8px;margin-bottom:8px">
+            <select id="memory-type" style="width:84px;flex-shrink:0">
+              <option>事实</option><option>决策</option><option>坑</option><option>约定</option>
+            </select>
+            <input id="memory-text" placeholder="例：导出必须流式写入，整份读会 OOM" style="flex:1" data-enter="saveMemory">
+            <button class="btn small primary" data-act="saveMemory">存</button>
+          </div>
           <div id="memory-body" style="max-height:260px;overflow-y:auto"></div>
         </div>
 
@@ -802,7 +815,7 @@
   <div class="modal">
     <div class="mhead"><h2 id="proj-modal-title">新建项目</h2><button class="btn icon" data-act="closeModal" data-arg="proj-modal">✕</button></div>
     <div class="mbody">
-      <div class="field"><label>项目名称 <span class="req">*</span></label><input id="f-name" placeholder="例如：EduSmart 学生管理系统"></div>
+      <div class="field"><label>项目名称 <span class="req">*</span></label><input id="f-name" placeholder="例如：EduSmart 学生管理系统" data-enter="saveProject"></div>
       <div class="row3">
         <div class="field"><label>状态</label><select id="f-status">
           <option>规划中</option><option>进行中</option><option>已暂停</option><option>已完成</option>
@@ -846,9 +859,9 @@
   <div class="modal">
     <div class="mhead"><h2 id="task-modal-title">新建任务</h2><button class="btn icon" data-act="closeModal" data-arg="task-modal">✕</button></div>
     <div class="mbody">
-      <div class="field"><label>任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调"></div>
+      <div class="field"><label>任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调" data-enter="saveTask"></div>
       <div class="field"><label>任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、验收标准……"></textarea></div>
-      <div class="field"><label>相关代码位置（可选，逗号分隔）</label><input id="t-refs" placeholder="如 app/main.py:120, tests/test_api.py —— 接手的人不用再翻一遍找在哪改"></div>
+      <div class="field"><label>相关代码位置（可选，逗号分隔）</label><input id="t-refs" placeholder="如 app/main.py:120, tests/test_api.py —— 接手的人不用再翻一遍找在哪改" data-enter="saveTask"></div>
       <div class="field"><label>前置任务（可选，按住 Ctrl 多选）</label><select id="t-deps" multiple size="4"></select>
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了前置，交接包与 AGENTS.md 会按依赖排好顺序，AI 也能直接问「现在该做哪个」</div>
       </div>
@@ -859,7 +872,7 @@
         <div class="field"><label>优先级</label><select id="t-priority">
           <option>高</option><option>中</option><option>低</option>
         </select></div>
-        <div class="field"><label>负责 AI（可选）</label><input id="t-agent" placeholder="如 cline / 豆包"></div>
+        <div class="field"><label>负责 AI（可选）</label><input id="t-agent" placeholder="如 cline / 豆包" data-enter="saveTask"></div>
       </div>
       <div class="field"><label>截止日期（可选）</label><input type="date" id="t-due">
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了截止日期，仪表盘会统计临期/逾期，任务卡上也会标出来</div>
@@ -1176,7 +1189,9 @@ function toast(msg) {
   el.textContent = msg;
   el.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+  // 保存路径、失败原因常常很长，固定 2.2 秒读不完就消失了：按时长放宽，上限 7 秒
+  const ms = Math.min(7000, 2200 + Math.max(0, String(msg).length - 24) * 60);
+  toastTimer = setTimeout(() => el.classList.remove("show"), ms);
 }
 
 function esc(s) {
@@ -1244,6 +1259,12 @@ async function loadOverview() {
     if (document.getElementById("view-overview").style.display !== "none") renderOverview();
   } catch (e) {
     toast("加载失败：" + e.message);
+    const grid = document.getElementById("grid");
+    if (grid && !grid.childElementCount) {          // 首屏就失败时不该留一个空白网格
+      grid.innerHTML = '<div style="grid-column:1/-1;padding:40px 10px;text-align:center;color:var(--text-dim)">'
+        + "项目列表加载失败：" + esc(e.message)
+        + ' <button class="btn" data-act="loadOverview">重试</button></div>';
+    }
   }
 }
 
@@ -1371,9 +1392,12 @@ const ACTIONS = {
   exportData: () => exportData(),
   importData: () => importData(),
   openGlobalSearch: () => openGlobalSearch(),
+  retryDetail: (arg) => openDetail(arg),
+  loadOverview: () => loadOverview(),
   toggleTheme: () => toggleTheme(),
   copyContextJson: () => copyContextJson(),
-  addMemory: () => addMemory(),
+  toggleMemoryForm: () => toggleMemoryForm(),
+  saveMemory: () => saveMemory(),
   deleteMemory: (arg, ev, el) => deleteMemory(el.dataset.mid),
   appendJournal: () => appendJournal(),
   openSessionCapture: () => openSessionCapture(),
@@ -1436,14 +1460,28 @@ if (searchInput) {
 }
 
 // ============ 详情 ============
+function setDetailState(mode, err, pid) {
+  const box = document.getElementById("detail-state");
+  if (!mode) { box.style.display = "none"; box.innerHTML = ""; return; }
+  box.innerHTML = mode === "loading"
+    ? "加载中…"
+    : "<div>打开失败：" + esc(err || "未知错误") + "</div>"
+      + '<button class="btn" data-act="retryDetail" data-arg="' + esc(pid || "") + '">重试</button>';
+  box.style.display = "flex";
+}
+
 async function openDetail(pid) {
+  currentPid = pid;
+  document.getElementById("view-overview").style.display = "none";
+  document.getElementById("view-detail").classList.add("active");
+  setDetailState("loading");
   try {
     current = await api("/api/projects/" + pid);
-    currentPid = pid;
-    document.getElementById("view-overview").style.display = "none";
-    document.getElementById("view-detail").classList.add("active");
+    setDetailState(null);
     renderDetail();
-  } catch (e) { toast("打开失败：" + e.message); }
+  } catch (e) {
+    setDetailState("error", e.message, pid);   // 停在原地让人能重试，而不是闪一条 toast
+  }
 }
 
 function showOverview() {
@@ -2829,6 +2867,11 @@ async function restoreData(source) {
 let gsTimer = null;
 
 async function openGlobalSearch() {
+  const stuck = [...document.querySelectorAll(".modal-mask.show")].filter(m => m.id !== "global-search-modal");
+  if (stuck.length) {           // 有窗口开着时 Ctrl+K 是"往回退一层"，不是上架搜索浮层
+    closeOneModal(stuck[stuck.length - 1].id);
+    return;
+  }
   document.getElementById("gs-input").value = "";
   document.getElementById("gs-results").innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:8px">输入关键词搜索所有项目的任务…</div>';
   openModal("global-search-modal");
@@ -2981,15 +3024,26 @@ async function renderMemories(pid) {
   } catch (e) { box.innerHTML = '<div style="font-size:12px;color:var(--red)">加载失败</div>'; }
 }
 
-async function addMemory() {
+function toggleMemoryForm() {
+  const f = document.getElementById("memory-form");
+  const open = f.style.display === "flex";
+  f.style.display = open ? "none" : "flex";
+  if (!open) document.getElementById("memory-text").focus();
+}
+
+// 以前是连着两个 prompt()（先问内容再问类型）：全站唯一的非弹窗录入，
+// 输入框不能编辑、类型打错一个字就静默归成"事实"。改成与过程日志同一种内联表单。
+async function saveMemory() {
   if (!currentPid) return;
-  const text = prompt("添加一条项目记忆（决策 / 坑 / 约定 / 关键事实）：");
-  if (!text || !text.trim()) return;
-  const type = prompt("类型（决策 / 坑 / 约定 / 事实）：", "事实") || "事实";
+  const input = document.getElementById("memory-text");
+  const text = (input.value || "").trim();
+  if (!text) { toast("先写一条内容"); input.focus(); return; }
+  const type = document.getElementById("memory-type").value;
   try {
-    await api("/api/memories", { method: "POST", body: JSON.stringify({
-      pid: currentPid, type: type.trim(), text: text.trim(), source: "手动" }) });
-    toast("记忆已添加 ✓");
+    const r = await api("/api/memories", { method: "POST", body: JSON.stringify({
+      pid: currentPid, type, text, source: "手动" }) });
+    input.value = "";
+    toast(r.deduped ? "这条记忆已经有了 ✓" : "记忆已记下 ✓");
     renderMemories(currentPid);
   } catch (e) { toast("添加失败：" + e.message); }
 }

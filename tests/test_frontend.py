@@ -228,3 +228,18 @@ def test_scan_button_uses_finally_for_its_loading_state():
 
 def test_toast_is_announced_to_screen_readers():
     assert 'id="toast" role="status" aria-live="polite"' in HTML
+
+
+def test_no_browser_prompt_dialogs_left():
+    """prompt() 是不能编辑、不校验、也套不上主题的录入方式，全站已经清零"""
+    assert not re.search(r"=\s*prompt\(|await\s*prompt\(", HTML), "又有人用 prompt() 收输入"
+
+
+def test_toast_gives_long_messages_time_to_be_read():
+    assert re.search(r"Math\.min\(7000, 2200 \+", HTML), "toast 还是固定 2.2 秒"
+    assert "max-width: min(760px" in HTML and "word-break" in HTML, "长路径会把 toast 撑出屏幕"
+
+
+def test_detail_view_has_loading_and_error_state():
+    assert 'id="detail-state"' in HTML and "function setDetailState(" in HTML
+    assert 'data-act="retryDetail"' in HTML, "失败态要能原地重试"

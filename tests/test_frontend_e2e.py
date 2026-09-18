@@ -57,6 +57,23 @@ def ui(fresh_server, browser):
     assert not errors, "前端出现 JS 报错：\n" + "\n".join(errors)
 
 
+@pytest.fixture
+def ui_lenient(fresh_server, browser):
+    """与 ui 同款，但只放过 "Failed to load resource" 这一条 console.error。
+    验证失败态时要故意 abort 请求 / 打一个不存在的项目，浏览器必然记一条资源错误；
+    pageerror 仍然一律判失败 —— 放松的只是网络噪声，不是 JS 异常。"""
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+    page = ctx.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
+    page.on("console", lambda m: errors.append(f"console.error: {m.text}")
+            if m.type == "error" and "Failed to load resource" not in m.text else None)
+    page.goto(fresh_server.base + "/", wait_until="domcontentloaded")
+    yield page, fresh_server, errors
+    ctx.close()
+    assert not errors, "前端出现 JS 报错：" + " ｜ ".join(errors)
+
+
 def make_project(api, name, **kw):
     body = {"name": name, "status": "进行中", "progress": 10, "priority": "高"}
     body.update(kw)
@@ -747,3 +764,80 @@ def test_session_scan_button_clears_loading_state(ui):
     # 空结果那条分支以前直接 return、跳过收尾；无论扫到几条，收尾都必须执行
     page.wait_for_selector("#scan-btn:not(.ai-loading-btn)", timeout=30000)
     assert page.locator("#session-list").inner_text().strip() != ""
+
+
+def test_enter_key_submits_the_two_forms(ui):
+    page, api, _ = ui
+    page.click("[data-act='openProjectModal']")
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    page.fill("#f-name", "回车建的项目")
+    page.press("#f-name", "Enter")
+    page.wait_for_selector("#proj-modal", state="hidden", timeout=15000)
+    names = [p["name"] for p in api.get("/api/projects")[1]["projects"]]
+    assert "回车建的项目" in names
+
+    page.click(".pcard:has-text('回车建的项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.click("[data-act='openTaskModal']")
+    page.fill("#t-title", "回车加的任务")
+    page.press("#t-title", "Enter")
+    page.wait_for_selector("#task-modal", state="hidden", timeout=15000)
+    page.wait_for_selector("#col-todo .tcard:has-text('回车加的任务')", timeout=15000)
+
+
+def test_memory_inline_form_replaces_prompt(ui):
+    page, api, _ = ui
+    p = make_project(api, "记忆表单项目")
+    page.reload(wait_until="domcontentloaded")
+    page.click(".pcard:has-text('记忆表单项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+
+    page.click("[data-act='toggleMemoryForm']")
+    page.wait_for_selector("#memory-form", state="visible", timeout=10000)
+    page.select_option("#memory-type", "坑")
+    page.fill("#memory-text", "大文件导出必须流式写")
+    page.press("#memory-text", "Enter")            # Enter 直接存（复用 data-enter 机制）
+    page.wait_for_selector(".memory-item:has-text('大文件导出必须流式写')", timeout=15000)
+    mems = api.get("/api/memories?pid=" + p["id"])[1]["memories"]
+    assert [m["type"] for m in mems] == ["坑"] and mems[0]["source"] == "手动"
+
+    page.click("[data-act='saveMemory']")          # 空内容不该发请求
+    assert "先写一条内容" in page.locator("#toast").text_content()
+
+
+def test_ctrl_k_steps_back_instead_of_stacking(ui):
+    page, api, _ = ui
+    make_project(api, "CtrlK 项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+
+    page.click("[data-act='openProjectModal']")
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    page.keyboard.press("Control+k")
+    page.wait_for_selector("#proj-modal", state="hidden", timeout=10000)
+    assert not page.locator("#global-search-modal").is_visible(), "搜索浮层被架在弹窗之上"
+
+    page.keyboard.press("Control+k")
+    page.wait_for_selector("#global-search-modal.show", timeout=10000)
+
+
+def test_detail_error_state_offers_retry(ui_lenient):
+    page, api, _ = ui_lenient
+    make_project(api, "失败重试项目")
+    page.reload(wait_until="domcontentloaded")
+    page.evaluate("() => openDetail('不存在的项目id')")
+    page.wait_for_selector("#detail-state", state="visible", timeout=10000)
+    assert "打开失败" in page.locator("#detail-state").inner_text()
+    assert page.locator("#detail-state [data-act='retryDetail']").count() == 1
+
+    page.evaluate("() => setDetailState(null)")     # 成功路径要把遮罩收掉
+    page.wait_for_selector("#detail-state", state="hidden", timeout=10000)
+
+
+def test_overview_failure_shows_retry_not_a_blank_grid(ui_lenient):
+    page, api, _ = ui_lenient
+    page.route("**/api/projects", lambda r: r.abort())
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("#grid [data-act='loadOverview']", timeout=15000)
+    assert "加载失败" in page.locator("#grid").inner_text()
+    page.unroute("**/api/projects")
