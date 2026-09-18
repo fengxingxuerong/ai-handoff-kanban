@@ -143,10 +143,3 @@ def test_task_sort_control_exists():
     assert 'id="task-sort"' in HTML
     assert "function sortTasks(" in HTML
     assert "bindTaskSort" in HTML, "切换排序要用 addEventListener，不能写内联 onchange"
-
-
-def test_task_sort_control_exists():
-    """任务只能靠创建顺序翻找是真实痛点：必须能按优先级/截止/最近更新重排"""
-    assert 'id="task-sort"' in HTML
-    assert "function sortTasks(" in HTML
-    assert "bindTaskSort" in HTML, "切换排序要用 addEventListener，不能写内联 onchange"
