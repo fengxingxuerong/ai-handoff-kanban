@@ -99,6 +99,13 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
    由 `runAction()` 统一分发（`tests/test_frontend.py` 会强制这条）。
    历史事故：`onclick="confirmDeleteProject('id','${esc(name)}')"` 里 `&#39;` 会被 HTML 解码回单引号，
    项目名带撇号时按钮直接报 JS 语法错误。动态列表另用 `data-pid` + 局部委托（见 `bindCardEvents`）。
+   **关闭弹窗也只有一条路**：✕ / 「完成」/ 点遮罩 / Esc 全部走 `closeOneModal(id)`
+   （Esc 经 `closeTopModal()` 一次只关最上面一层）。以前它们各自直接摘 `.show`，
+   漏掉了 `closeModal` 的动画复位（弹窗只有第一次打开有 pop），Esc 更不清 `pendingActions`
+   —— 重开指令窗口后点「确认执行」会执行上一次的解析结果。
+   `test_frontend.py` 用「全文只有 4 处 `classList.remove("show")`」钉住这条，新增绕过点会红。
+   **可点的卡片（`.pcard`/`.tcard`/`.gs-item`/`.sess-item`）都要带 `tabindex="0"` +
+   `data-keyact="1"`**：它们全是 `div`，没这两个属性键盘就用不了（全局 keydown 负责 Enter/空格）。
 4. **kimi 系模型只允许 temperature=1**。`app/llm.py` 的 `chat()` 已按模型名自动适配，
    并对 400 Temperature 错误自动用 1 重试兜底。新增模型时若报该错，优先在 `_model_temp` 加适配，不要绕过网关直调。
 5. **杀 exe 进程树必须 `taskkill /F /T /PID`**。PyInstaller -F 单文件会拉起子进程跑实际服务，
@@ -350,7 +357,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-18）**：`pytest` 403 收集（397 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+**验证基线（2026-09-19）**：`pytest` 408 收集（402 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
 覆盖率 94%（语句 2066 / 缺 134，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
 并行（`-n auto`，已写进 `pytest.ini`）冷跑约 50 秒、热跑约 20 秒。
 

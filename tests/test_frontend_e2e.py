@@ -639,3 +639,67 @@ def test_offline_changes_appear_when_the_window_is_shown_again(ui):
       document.dispatchEvent(new Event('visibilitychange'));
     }""")
     page.wait_for_selector(".pcard:has-text('66%')", timeout=15000)
+
+
+def test_modal_reopens_with_animation_and_esc_closes_it(ui):
+    page, api, _ = ui
+    make_project(api, "关闭路径项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+
+    page.click("[data-act='openProjectModal']")
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    box = page.locator("#proj-modal .modal")
+    assert box.evaluate("e => e.style.animation") == "", "打开时被留下了 animation:none"
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#proj-modal", state="hidden", timeout=10000)
+
+    page.click("[data-act='openProjectModal']")
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    assert page.locator("#proj-modal").is_visible()
+
+    # 点遮罩空白处关闭（点在弹窗本体上不该关）
+    page.locator("#proj-modal .modal").click(position={"x": 5, "y": 5})
+    assert page.locator("#proj-modal").is_visible(), "点弹窗内部不该关掉"
+    page.locator("#proj-modal").click(position={"x": 5, "y": 5})
+    page.wait_for_selector("#proj-modal", state="hidden", timeout=10000)
+
+
+def test_enter_key_opens_the_focused_card(ui):
+    page, api, _ = ui
+    p = make_project(api, "键盘打开项目")
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "键盘打开任务"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard:has-text('键盘打开项目')", timeout=15000)
+
+    page.locator(".pcard:has-text('键盘打开项目')").focus()
+    page.keyboard.press("Enter")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.wait_for_selector("#col-todo .tcard", timeout=10000)
+
+    page.locator("#col-todo .tcard").focus()
+    page.keyboard.press("Enter")
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    assert page.input_value("#t-title") == "键盘打开任务"
+
+
+def test_closing_command_modal_abandons_pending_actions(ai_ui):
+    """关掉指令窗口=放弃这一批操作。以前 Esc 直接摘 .show，
+    pendingActions 还留着，重开窗口点「确认执行」就会执行上一次的解析结果。"""
+    page, api, stub, _ = ai_ui
+    make_project(api, "放弃操作项目")
+    stub.push_json({"actions": [{"type": "create_project", "name": "不该被建出来"}], "reply": "r"})
+    page.click("[data-act='openAICmd']")
+    page.wait_for_selector("#cmd-input", timeout=10000)
+    page.fill("#cmd-input", "随便建个项目")
+    page.click("#cmd-send-btn")
+    page.wait_for_selector("#cmd-exec-row:visible", timeout=15000)
+
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#ai-cmd-modal", state="hidden", timeout=10000)
+
+    page.click("[data-act='openAICmd']")
+    page.wait_for_selector("#ai-cmd-modal.show", timeout=10000)
+    assert not page.locator("#cmd-exec-row").is_visible(), "重开还挂着上一次的确认按钮"
+    names = [x["name"] for x in api.get("/api/projects")[1]["projects"]]
+    assert "不该被建出来" not in names

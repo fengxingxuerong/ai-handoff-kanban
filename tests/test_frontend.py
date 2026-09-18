@@ -193,3 +193,26 @@ def test_keyboard_focus_ring_is_defined():
     assert ":focus-visible" in HTML
     for sel in (".btn", ".pcard", ".tcard", ".gs-item", ".sess-item"):
         assert re.search(r"[^{}]*" + re.escape(sel) + r":focus-visible", HTML), f"{sel} 缺焦点环"
+
+
+# ---------------- 关闭路径与键盘可达性 ----------------
+
+def test_all_modal_close_paths_share_one_implementation():
+    """✕、「完成」、点遮罩、Esc 以前是四套写法各漏一半：遮罩与 Esc 直接摘 .show，
+    跳过了 closeModal 的动画复位（于是弹窗只有第一次打开有 pop），也不清待确认操作。"""
+    assert "closeOneModal(m.id)" in HTML, "点遮罩没走统一关闭"
+    assert "closeOneModal(arg)" in HTML, "✕/完成 按钮没走统一关闭"
+    assert re.search(r'e\.key === "Escape"\) \{ closeTopModal\(\)', HTML), "Esc 没走统一关闭"
+    assert '.modal-mask.show").forEach' not in HTML, "还留着「一次关全部」的旧写法"
+    # 直接摘 show 的地方只该剩：toast、closeModal 本体、报告面板与它的遮罩
+    assert len(re.findall(r'classList\.remove\("show"\)', HTML)) == 4, \
+        "又多了一处绕过统一关闭的写法"
+    assert 'box.style.animation = ""' in HTML, "重开弹窗要把动画复位回来"
+
+
+def test_clickable_cards_are_keyboard_reachable():
+    """卡片都是 div，鼠标能用键盘不能用；至少要能 Tab 到、Enter/空格能触发"""
+    assert 'tabindex="0" role="button" data-keyact="1"' in HTML
+    assert 'el.dataset.keyact = "1"' in HTML, "任务卡是 createElement 出来的，要单独加"
+    assert re.search(r'e\.key !== "Enter" && e\.key !== " ".*?el\.click\(\)', HTML, re.S), \
+        "缺 Enter/空格 激活"

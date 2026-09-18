@@ -1188,12 +1188,41 @@ function closeModal(id) {
   document.getElementById(id).querySelector(".modal").style.animation = "none";
 }
 
+// 关闭只留这一条路径：右上角 ✕、底部「完成」、点遮罩、按 Esc 都走它。
+// 以前遮罩与 Esc 各自直接摘 .show，跳过了上面那个动画复位（于是弹窗只有第一次
+// 打开有 pop 动画），Esc 也既不关右侧的 AI 监管面板、也不清已解析出的待确认操作。
+function closeOneModal(id) {
+  closeModal(id);
+  if (id === "ai-cmd-modal") {
+    // 关掉指令窗口就等于放弃这一批操作，否则下次打开时「确认执行」还指着上次的解析结果
+    pendingActions = [];
+    const row = document.getElementById("cmd-exec-row");
+    if (row) row.style.display = "none";
+  }
+}
+
+function closeTopModal() {
+  const shown = document.querySelectorAll(".modal-mask.show");
+  if (shown.length) {
+    // 后插入 DOM 的盖在上面，一次只关最上面那层（Esc 不再把所有弹窗一把全关）
+    closeOneModal(shown[shown.length - 1].id);
+    return true;
+  }
+  const panel = document.getElementById("report-panel");
+  if (panel && panel.classList.contains("show")) { closeReport(); return true; }
+  return false;
+}
+
 function openModal(id) {
-  document.getElementById(id).classList.add("show");
+  const m = document.getElementById(id);
+  // closeModal 为了收尾把动画关了；重开前复位回来，否则 pop 动画只有第一次有
+  const box = m.querySelector(".modal");
+  if (box) box.style.animation = "";
+  m.classList.add("show");
 }
 
 document.querySelectorAll(".modal-mask").forEach(m => {
-  m.addEventListener("click", e => { if (e.target === m) m.classList.remove("show"); });
+  m.addEventListener("click", e => { if (e.target === m) closeOneModal(m.id); });
 });
 
 // ============ 总览 ============
@@ -1248,7 +1277,7 @@ function cardHTML(p) {
   const rd = (stats && stats.readiness || []).find(x => x.id === p.id);
   const prog = Math.max(0, Math.min(100, Number(p.progress) || 0));
   const rdBadge = rd ? `<span class="rd-badge rd-${rd.score >= 80 ? "hi" : rd.score >= 50 ? "mid" : "lo"}" title="交接就绪度 ${rd.score}/100">就绪 ${rd.score}</span>` : "";
-  return `<div class="pcard" data-pid="${esc(p.id)}">
+  return `<div class="pcard" data-pid="${esc(p.id)}" tabindex="0" role="button" data-keyact="1">
     <div class="top">
       <div>
         <div class="name">${esc(p.name)}${rdBadge}</div>
@@ -1327,7 +1356,7 @@ const ACTIONS = {
   openAIHandoff: () => openAIHandoff(),
   applySuggestion: (arg, ev, el) => applySuggestion(el),
   // —— 弹窗通用 ——
-  closeModal: arg => closeModal(arg),
+  closeModal: arg => closeOneModal(arg),
   closeReport: () => closeReport(),
   // —— 表单保存 ——
   saveProject: () => saveProject(),
@@ -1500,6 +1529,8 @@ function renderDetail() {
     const el = document.createElement("div");
     el.className = "tcard";
     el.draggable = true;
+    el.tabIndex = 0;
+    el.dataset.keyact = "1";            // 键盘 Enter/空格 也能打开（见全局 keydown）
     el.onclick = () => openTaskModal(t.id);
     el.ondragstart = (e) => {
       e.dataTransfer.setData("text/plain", t.id);
@@ -1780,10 +1811,19 @@ async function deleteTask() {
   } catch (e) { toast("删除失败：" + e.message); }
 }
 
-// 键盘：Esc 关弹窗
+// 键盘：Esc 逐层关最上面的浮层；Enter / 空格 打开被聚焦的卡片
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") document.querySelectorAll(".modal-mask.show").forEach(m => m.classList.remove("show"));
+  if (e.key === "Escape") { closeTopModal(); return; }
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const el = document.activeElement;
+  if (el && el.dataset && el.dataset.keyact && el.click) { e.preventDefault(); el.click(); }
 });
+
+// 右侧 AI 监管面板：点空白处也能关（与弹窗一致）
+(function bindReportMaskClose() {
+  const mask = document.getElementById("report-mask");
+  if (mask) mask.addEventListener("click", e => { if (e.target === mask) closeReport(); });
+})();
 
 // ============ AI 设置 ============
 let aiConfig = null;
@@ -2788,7 +2828,7 @@ async function runGlobalSearch(q) {
     const list = r.results || [];
     if (!list.length) { box.innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:8px">没有匹配的任务</div>'; return; }
     box.innerHTML = list.map(t => `
-      <div class="gs-item" data-pid="${esc(t.project_id)}" style="cursor:pointer;background:var(--bg-soft);border:1px solid var(--border);border-radius:9px;padding:9px 12px;display:flex;align-items:center;gap:8px">
+      <div class="gs-item" tabindex="0" role="button" data-keyact="1" data-pid="${esc(t.project_id)}" style="cursor:pointer;background:var(--bg-soft);border:1px solid var(--border);border-radius:9px;padding:9px 12px;display:flex;align-items:center;gap:8px">
         <span class="badge st-${taskStCls(t.status)}">${esc(taskStCls(t.status))}</span>
         <span style="flex:1">${esc(t.title)}</span>
         <span class="tag2 pri-${priCls(t.priority)}">${esc(priCls(t.priority))}</span>
@@ -2998,7 +3038,7 @@ async function scanSessions() {
       return;
     }
     list.innerHTML = items.map((s, i) => `
-      <div class="sess-item" data-i="${i}">
+      <div class="sess-item" tabindex="0" role="button" data-keyact="1" data-i="${i}">
         <span class="s-src">${esc(s.source)}</span>
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.path)}">${esc(s.path.split(/[\\\\/]/).slice(-2).join("/"))}</span>
         <span style="color:var(--text-faint);flex-shrink:0">${esc(s.mtime)} · ${s.size_kb}KB</span>
