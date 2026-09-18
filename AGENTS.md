@@ -28,7 +28,7 @@
 | `scripts/test_all_llm.py` | LLM 端点全量实测：端点×Key×模型 健康矩阵 |
 | `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
-| `scripts/mcp_server.py` | MCP 服务（stdio）：13 个工具，代理可列项目/拉接手包(context)/读写任务/生成交接物 |
+| `scripts/mcp_server.py` | MCP 服务（stdio）：代理可列项目/拉接手包(context)/读写任务/记过程与记忆/生成交接物。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/additionalProperties 真的校验 |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
@@ -132,8 +132,16 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 `scripts/mcp_server.py`：stdio 传输、手写 JSON-RPC 2.0、零第三方依赖。
 
 - **实现方式**：直接 import `app.main` 复用业务函数（含字段白名单与 `mutate()` 单临界区），
-  **不要再写一套读写逻辑**，否则两套校验会漂移。新增工具 = 加 `TOOLS` 条目 + `HANDLERS` 注册，
-  `test_mcp_server.py` 会校验 schema 完整性。
+  **不要再写一套读写逻辑**，否则两套校验会漂移。新增工具要同时动三处：`TOOLS` 条目、
+  `HANDLERS` 注册、`TOOL_KIND` 登记读写属性与标题 —— 漏第三处会被
+  `test_mcp_server.py::test_every_tool_is_registered_with_a_kind` 拦下。
+- **读写属性与只读模式**：`TOOL_KIND` 决定 `annotations`（`readOnlyHint`/`destructiveHint`/
+  `idempotentHint`，客户端据此免确认或弹警告）；打开只读模式后 `visible_tools()` 会把写工具与
+  生成类（会花真实配额）**直接从 `tools/list` 摘掉**，只在调用时拒绝是不够的 —— 客户端看得见
+  就会去调，反复拿到错误像是服务坏了。调用侧 `_ensure_writable()` 保留，作为第二道闸。
+- **入参真的校验**：`_validate_args()` 按各工具 `inputSchema` 执行 required / enum /
+  additionalProperties / 数值范围。此前这些声明只是装饰，字段名拼错会静默被忽略，
+  智能体看到的是"我改了但没生效"。
 - **协议兼容**：2026-07-28 起 MCP 改为无状态（无 initialize 握手、结果带 `resultType`），
   旧版（2025-xx）仍走握手。本服务两者都支持，`server/discover` 也实现了。
 - **stdout 只能有 JSON-RPC**：日志一律 `print(..., file=sys.stderr)`。往 stdout 写一个字都会污染协议。
@@ -332,9 +340,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-18）**：`pytest` 375 收集（369 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-覆盖率 93%（语句 2052 / 缺 134，门槛 90，余量 3 个点）。并行（`-n auto`，已写进 `pytest.ini`）
-冷跑约 50 秒、热跑约 20 秒。
+**验证基线（2026-09-18）**：`pytest` 385 收集（379 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+覆盖率 93%（语句 2052 / 缺 134，门槛 90，余量 3 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
+并行（`-n auto`，已写进 `pytest.ini`）冷跑约 50 秒、热跑约 20 秒。
 
 > 1.1.0 一次加了会话捕获 / 过程轨迹 / 记忆层 / 用量追踪 / 提醒 / 只读模式六个面，
 > 语句数 1630 → 1943，覆盖率一度掉到 92%（余量 2 点）。补了 16 条新面用例后回到 93%。

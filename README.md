@@ -98,7 +98,7 @@ Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读�
 }
 ```
 
-提供的工具（13 个）：
+提供的工具（17 个）：
 
 | 工具 | 用途 |
 | --- | --- |
@@ -108,10 +108,18 @@ Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读�
 | `kanban_create_project` / `kanban_update_project` | 建项目 / 改进度·下一步·交接说明 |
 | `kanban_add_task` / `kanban_update_task` / `kanban_delete_task` | 任务增改删 |
 | `kanban_next_task` | 下一个该做的任务（依赖已满足里挑优先级最高的） |
+| `kanban_today` | 跨项目的「现在就能动手」清单，与界面 ☀️ 今日 同一份判定 |
+| `kanban_search_tasks` | 跨项目搜任务（标题/描述/负责人），返回任务 id 可直接接着改 |
 | `kanban_stats` | 全局统计与就绪度偏低的项目 |
 | `kanban_handoff` | 导出完整交接包（Markdown） |
 | `kanban_agents_md` | 生成 AGENTS.md 正文 |
-| `kanban_context` | **机器可读接手包**：背景/交接说明/代码现实/现在就能动手的任务/就绪度缺口，换取会话时先调这个 |
+| `kanban_log_progress` | 给任务追加一条过程记录（做了什么 / 改了什么决策 / 踩了什么坑） |
+| `kanban_memory_add` | 往项目记忆层记一条决策 / 坑 / 约定，交接包与 AI 监管会自动召回 |
+| `kanban_context` | **机器可读接手包**：背景/交接说明/代码现实/现在就能动手的任务/项目记忆/就绪度缺口，换取会话时先调这个 |
+
+每个工具都带 `annotations`（`readOnlyHint` / `destructiveHint` / `idempotentHint`），客户端据此
+对读操作免确认、对删除弹警告。打开 **MCP 只读模式**后，写工具与生成类工具会直接从
+`tools/list` 里消失（调用侧的拒绝闸门同时保留，两道闸都在）。
 
 工具返回里会带上本机直链（`http://127.0.0.1:18320/api/context/<id>`），
 同机智能体可以直接 curl 取最新数据，不必依赖粘贴快照。

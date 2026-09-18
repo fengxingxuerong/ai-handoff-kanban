@@ -453,3 +453,147 @@ def test_due_date_is_advertised_in_tool_schemas(mcp):
         assert "due_date" in tools[name]["inputSchema"]["properties"], name
 
 
+
+# ---------------- 读写属性声明（客户端靠它决定要不要二次确认） ----------------
+
+def _mcp_server_mod():
+    """在进程内 import mcp_server 拿目录元数据（它自带 __main__ 守卫，不会起服务）"""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import mcp_server
+    return mcp_server
+
+
+def test_every_tool_is_registered_with_a_kind():
+    """TOOL_KIND 漏登记时注解会退化成"写"（保守但不诚实），所以直接要求全部登记。"""
+    m = _mcp_server_mod()
+    names = {t["name"] for t in m.TOOLS}
+    assert names == set(m.TOOL_KIND), (
+        f"工具目录与读写登记表不一致：{names ^ set(m.TOOL_KIND)}")
+    assert names == set(m.HANDLERS), "有工具没实现，或有实现没声明"
+
+
+def test_annotations_match_the_declared_kind(mcp):
+    m = _mcp_server_mod()
+    tools = {t["name"]: t for t in mcp.call("tools/list")["result"]["tools"]}
+    for name, tool in tools.items():
+        kind = m.TOOL_KIND[name][0]
+        assert tool["annotations"] == m.ANNOTATIONS[kind], name
+        assert tool["title"], f"{name} 没有人类可读标题"
+    assert tools["kanban_list_projects"]["annotations"]["readOnlyHint"] is True
+    assert tools["kanban_delete_task"]["annotations"]["destructiveHint"] is True, \
+        "删除必须标成破坏性，客户端才会弹二次确认"
+
+
+def test_readonly_mode_hides_write_tools_from_the_catalog(tmp_path):
+    """只读模式过去只在**调用时**拒绝：客户端看得见工具还是会去调，一次次拿到错误，
+    像服务坏了。目录里直接不给看才是正解（调用侧那道闸保留不动）。"""
+    data_dir = tmp_path / "kanban-ro"
+    data_dir.mkdir(parents=True)
+    (data_dir / "config.json").write_text(
+        json.dumps({"ai": {"mcp_readonly": True, "endpoints": [], "active_model": ""}}),
+        encoding="utf-8")
+    c = McpClient(data_dir)
+    try:
+        names = {t["name"] for t in c.call("tools/list")["result"]["tools"]}
+        assert "kanban_list_projects" in names and "kanban_stats" in names
+        assert "kanban_add_task" not in names, "写工具还挂在只读目录里"
+        assert "kanban_delete_task" not in names
+        assert "kanban_agents_md" not in names, "生成类会花真实配额，只读模式一并摘掉"
+        text, is_err = c.tool("kanban_add_task", {"project_id": "x", "title": "偷偷写"})
+        assert is_err and "只读" in text, text
+        text, is_err = c.tool("kanban_stats", {})
+        assert not is_err, text
+    finally:
+        c.close()
+
+
+# ---------------- 入参校验：声明了就得真的执行 ----------------
+
+def test_misspelled_argument_is_rejected_not_ignored(mcp):
+    """过去 required/enum/additionalProperties 只是装饰：字段名拼错照样"调用成功"，
+    模型看到的是"我明明改了却没改"。"""
+    text, is_err = mcp.tool("kanban_stats", {"porject_id": "abc"})
+    assert is_err, "拼错的参数被静默忽略了"
+    assert "porject_id" in text and "可用参数" in text, f"错误信息得能指路：{text}"
+
+    proj, _ = mcp.tool("kanban_create_project", {"name": "校验靶项目"})
+    pid = proj.split("[")[-1].split("]")[0]
+    text, is_err = mcp.tool("kanban_add_task", {"project_id": pid, "titel": "标题字段拼错"})
+    # 必填项缺失先报，报的正是被拼错的那个字段名 —— 足够指路
+    assert is_err and "title" in text, text
+
+
+def test_missing_required_argument_is_rejected(mcp):
+    text, is_err = mcp.tool("kanban_get_project", {})
+    assert is_err and "project_id" in text, text
+    text, is_err = mcp.tool("kanban_get_project", {"project_id": "   "})
+    assert is_err and "project_id" in text, "空白字符串也算没传"
+
+
+def test_enum_and_range_are_enforced(mcp):
+    proj, _ = mcp.tool("kanban_create_project", {"name": "枚举靶项目"})
+    pid = proj.split("[")[-1].split("]")[0]
+    text, is_err = mcp.tool("kanban_update_project", {"project_id": pid, "status": "摸鱼中"})
+    assert is_err and "摸鱼中" in text, f"非法枚举值应被拒且回显原值：{text}"
+    text, is_err = mcp.tool("kanban_update_project", {"project_id": pid, "progress": 180})
+    assert is_err and "100" in text, text
+
+
+# ---------------- 与 HTTP 对齐的四个新工具 ----------------
+
+def test_today_tool_lists_actionable_tasks(mcp):
+    proj, _ = mcp.tool("kanban_create_project", {"name": "今日工具项目", "status": "进行中"})
+    pid = proj.split("[")[-1].split("]")[0]
+    t1, _ = mcp.tool("kanban_add_task", {"project_id": pid, "title": "前置", "priority": "高"})
+    tid1 = t1.split("[")[-1].split("]")[0]
+    mcp.tool("kanban_add_task", {"project_id": pid, "title": "被挡住", "depends_on": [tid1]})
+
+    text, is_err = mcp.tool("kanban_today", {})
+    assert not is_err, text
+    assert "前置" in text and "今日工具项目" in text
+    assert "被挡住" not in text, "前置没完成的不该出现在今日待办里"
+
+
+def test_search_tool_returns_task_ids(mcp):
+    proj, _ = mcp.tool("kanban_create_project", {"name": "搜索靶项目"})
+    pid = proj.split("[")[-1].split("]")[0]
+    t, _ = mcp.tool("kanban_add_task", {"project_id": pid, "title": "重采样音频"})
+    tid = t.split("[")[-1].split("]")[0]
+    text, is_err = mcp.tool("kanban_search_tasks", {"query": "重采样"})
+    assert not is_err, text
+    assert tid in text and "搜索靶项目" in text, "拿到 id 才能接着调 update"
+
+
+def test_log_progress_tool_appends_journal(tmp_path):
+    """智能体干完一段活，得能自己把过程记录写进任务（界面同一条路是 /api/tasks/{tid}/journal）"""
+    data_dir = tmp_path / "kanban-journal"
+    c = McpClient(data_dir)
+    try:
+        proj, _ = c.tool("kanban_create_project", {"name": "过程记录靶"})
+        pid = proj.split("[")[-1].split("]")[0]
+        task, _ = c.tool("kanban_add_task", {"project_id": pid, "title": "要记一笔的任务"})
+        tid = task.split("[")[-1].split("]")[0]
+
+        text, is_err = c.tool("kanban_log_progress",
+                             {"task_id": tid, "text": "定位到是采样率不匹配"})
+        assert not is_err, text
+
+        data = json.loads((data_dir / "projects.json").read_text(encoding="utf-8"))
+        stored = [x for p in data["projects"] for x in (p.get("tasks") or []) if x.get("id") == tid][0]
+        assert any("采样率不匹配" in e.get("text", "") for e in stored.get("journal") or []),             f"过程记录没落盘：{stored.get('journal')}"
+
+        text, is_err = c.tool("kanban_log_progress", {"task_id": "不存在的任务", "text": "x"})
+        assert is_err and "找不到任务" in text, text
+    finally:
+        c.close()
+
+
+def test_memory_add_tool_writes_into_memory_layer(mcp):
+    """记忆层此前只有界面能写，智能体发现了坑却记不进来"""
+    proj, _ = mcp.tool("kanban_create_project", {"name": "记忆靶项目"})
+    pid = proj.split("[")[-1].split("]")[0]
+    text, is_err = mcp.tool("kanban_memory_add",
+                            {"project_id": pid, "type": "坑", "text": "8k 采样要重采样"})
+    assert not is_err, text
+    ctx, _ = mcp.tool("kanban_context", {"project_id": pid})
+    assert "8k 采样要重采样" in ctx, f"记忆没被接手包召回：{ctx}"

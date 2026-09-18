@@ -343,6 +343,10 @@ def t_context(args: dict) -> str:
         parts.append("交接说明（务必先读）：" + ctx["project"]["handoff_note"])
     if ctx["project"].get("next_action"):
         parts.append("下一步行动：" + ctx["project"]["next_action"])
+    mems = [m for m in kanban._load_memories() if m.get("pid") == pid]
+    if mems:
+        parts.append("项目记忆（决策/坑/约定，接手时自动带上）：")
+        parts += [f"  - [{m.get('type')}] {m.get('text')}" for m in mems[-8:]]
     if ctx["start_here"]:
         parts.append("现在就能动手的任务：")
         parts += [f"  - {t['title']}（{t.get('priority','中')}）{' @' + '、'.join(t['refs']) if t.get('refs') else ''}"
@@ -361,6 +365,61 @@ def t_context(args: dict) -> str:
     parts.append(f"实时上下文（本机服务，活数据）：{local_url('/api/context/' + pid)}")
     parts.append("—— 来自 AI 交接看板 MCP（可继续用 kanban_* 工具读写任务）")
     return "\n".join(parts)
+
+
+def t_today(args: dict) -> str:
+    """跨项目的「现在就能动手」（与 HTTP 的 /api/today 同一份判定）"""
+    r = kanban.today_tasks(limit=int(args.get("limit") or 30))
+    tasks = r["tasks"]
+    if not tasks:
+        return "没有可以立刻动手的任务：要么都已完成，要么还在等前置。"
+    lines = [f"现在就能动手：{len(tasks)} 条，来自 {r['project_count']} 个项目（全量 {r['total']} 条）"]
+    for t in tasks:
+        due = f" 📅{t['due_date']}" if t.get("due_date") else ""
+        refs = " 📍" + "、".join(t["refs"]) if t.get("refs") else ""
+        mark = "（阻塞中，先解）" if t.get("status") == "阻塞" else ""
+        lines.append(f"  [{t['priority']}]{mark} {t['title']} —— {t['project_name']}{due}{refs}")
+    return "\n".join(lines)
+
+
+def t_search_tasks(args: dict) -> str:
+    """全局任务搜索（与 Ctrl+K 走同一个接口）"""
+    r = kanban.search_tasks(q=args.get("query") or "", limit=int(args.get("limit") or 30))
+    hits = r["results"]
+    if not hits:
+        return f"没有匹配「{args.get('query')}」的任务。"
+    lines = [f"匹配 {len(hits)} 条任务："]
+    for t in hits:
+        # 注意：搜索接口用的是 task_id（today 用的是 id），这里按它自己的字段取
+        lines.append(f"  [{t.get('task_id')}] {t['title']} —— {t['project_name']}（{t['status']}/{t['priority']}）")
+    return "\n".join(lines)
+
+
+def t_log_progress(args: dict) -> str:
+    """给任务追加一条过程记录（做了什么 / 改了什么决策 / 踩了什么坑）"""
+    _ensure_writable()
+    tid = args.get("task_id") or ""
+    project, task = _task_by_id(tid)
+    if not task:
+        raise ValueError(f"找不到任务：{tid}")
+    entry = kanban.add_task_journal(tid, kanban.JournalIn(text=args.get("text") or ""))
+    return f"已记录到任务 [{tid}]（{task.get('title')}）：{entry.get('text')}"
+
+
+def t_memory_add(args: dict) -> str:
+    """往项目记忆层写一条决策/坑/约定 —— 交接包与 AI 监管会自动召回它"""
+    _ensure_writable()
+    res = kanban.add_memory(kanban.MemoryIn(
+        pid=args.get("project_id") or "",
+        type=args.get("type") or "事实",
+        text=args.get("text") or "",
+        source="MCP",
+    ))
+    mem = res["memory"]
+    if res.get("deduped"):
+        return f"这条记忆已存在（同项目同文本不重复入），未写入。"
+    where = mem.get("pid") or "（未指定项目）"
+    return f"已记下 [{mem['type']}] 到 {where}：{mem['text']}"
 
 
 TOOLS: list[dict] = [
@@ -521,6 +580,57 @@ TOOLS: list[dict] = [
             "required": ["project_id"], "additionalProperties": False,
         },
     },
+    {
+        "name": "kanban_today",
+        "description": "今天该干什么：跨项目列出所有「依赖已满足、现在就能动手」的任务，按优先级/截止日期排序。开始一天工作时先调这个，别逐个项目点开。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200,
+                          "description": "最多返回多少条，默认 30"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "kanban_search_tasks",
+        "description": "跨项目按关键词搜任务（标题/描述/负责人），返回任务 id 与所属项目，拿到 id 就能直接 kanban_update_task。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "关键词"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200,
+                          "description": "最多返回多少条，默认 30"},
+            },
+            "required": ["query"], "additionalProperties": False,
+        },
+    },
+    {
+        "name": "kanban_log_progress",
+        "description": "给任务追加一条过程记录：做了什么、改了什么决策、踩了什么坑。交接包会带上最近几条，接手的人不用重新问一遍。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string"},
+                "text": {"type": "string", "maxLength": 2000,
+                         "description": "一条过程记录，具体一点（决定/原因/影响）"},
+            },
+            "required": ["task_id", "text"], "additionalProperties": False,
+        },
+    },
+    {
+        "name": "kanban_memory_add",
+        "description": "往项目记忆层记一条长期有效的事实：决策/坑/约定。与任务不同，记忆会在交接包、AGENTS.md 和 AI 监管里自动召回。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "留空表示跨项目的通用记忆"},
+                "type": {"type": "string", "enum": ["决策", "坑", "约定", "事实"]},
+                "text": {"type": "string", "maxLength": 2000},
+            },
+            "required": ["text"], "additionalProperties": False,
+        },
+    },
 ]
 
 HANDLERS = {
@@ -537,7 +647,105 @@ HANDLERS = {
     "kanban_handoff": t_handoff,
     "kanban_agents_md": t_agents_md,
     "kanban_context": t_context,
+    "kanban_today": t_today,
+    "kanban_search_tasks": t_search_tasks,
+    "kanban_log_progress": t_log_progress,
+    "kanban_memory_add": t_memory_add,
 }
+
+
+# ---------------- 读写属性与参数校验 ----------------
+
+# 每个工具是读还是写，客户端要靠它决定要不要二次确认；也用来在只读模式下摘掉写工具。
+# generate 类只生成文本、不动看板数据，但会花真实模型配额。
+TOOL_KIND = {
+    "kanban_list_projects": ("read", "项目总览"),
+    "kanban_get_project": ("read", "查看项目"),
+    "kanban_find_project": ("read", "按名字找项目"),
+    "kanban_stats": ("read", "看板统计"),
+    "kanban_handoff": ("read", "导出交接包"),
+    "kanban_context": ("read", "机器可读接手包"),
+    "kanban_today": ("read", "今日待办"),
+    "kanban_search_tasks": ("read", "搜索任务"),
+    "kanban_next_task": ("read", "现在该做哪个"),
+    "kanban_agents_md": ("generate", "生成 AGENTS.md"),
+    "kanban_create_project": ("write", "新建项目"),
+    "kanban_update_project": ("write", "更新项目"),
+    "kanban_add_task": ("write", "新建任务"),
+    "kanban_update_task": ("write", "更新任务"),
+    "kanban_log_progress": ("write", "追加过程记录"),
+    "kanban_memory_add": ("write", "记录项目记忆"),
+    "kanban_delete_task": ("destructive", "删除任务"),
+}
+
+ANNOTATIONS = {
+    "read":        {"readOnlyHint": True,  "destructiveHint": False, "idempotentHint": True},
+    "write":       {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
+    "destructive": {"readOnlyHint": False, "destructiveHint": True,  "idempotentHint": True},
+    "generate":    {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
+}
+
+TOOL_BY_NAME: dict[str, dict] = {}
+for _t in TOOLS:
+    # 漏登记的默认按"写"处理（宁可多一次确认，也不能把删除当只读）。
+    # tests/test_mcp_server.py 会要求每个工具都在 TOOL_KIND 里登记。
+    _kind, _title = TOOL_KIND.get(_t["name"], ("write", _t["name"]))
+    _t["title"] = _title
+    _t["annotations"] = dict(ANNOTATIONS[_kind])
+    TOOL_BY_NAME[_t["name"]] = _t
+
+
+def _readonly_on() -> bool:
+    return bool(kanban.llm.load_config().get("ai", {}).get("mcp_readonly"))
+
+
+def visible_tools() -> list[dict]:
+    """只读模式下把写工具从目录里直接摘掉。
+
+    只在调用时才拒绝是不够的：客户端看得见工具就会去调，然后一次次拿到"只读模式"错误，
+    白烧轮次还像是服务坏了。目录里不给看才是正解（对标 Linear 的只读端点）。
+    调用侧的 `_ensure_writable()` 保留不动，作为绕过目录时的第二道闸。
+    """
+    if not _readonly_on():
+        return TOOLS
+    return [t for t in TOOLS if TOOL_KIND.get(t["name"], ("write",))[0] == "read"]
+
+
+def _validate_args(schema: dict, args: dict) -> None:
+    """按工具自己声明的 inputSchema 校验入参。
+
+    此前 required / enum / additionalProperties 只是写给客户端看的装饰：字段名拼错会被
+    静默忽略、工具照跑，结果就是"我明明改了却没改"。声明既然写了就得真的执行。
+    """
+    props = schema.get("properties") or {}
+    for key in schema.get("required") or []:
+        v = args.get(key)
+        if v is None or (isinstance(v, str) and not v.strip()):
+            raise ValueError(f"缺少必填参数：{key}")
+    if schema.get("additionalProperties") is False:
+        unknown = sorted(k for k in args if k not in props)
+        if unknown:
+            raise ValueError("不认识的参数：" + "、".join(unknown)
+                             + "；可用参数：" + ("、".join(sorted(props)) or "（无）"))
+    for key, spec in props.items():
+        if key not in args or args[key] is None:
+            continue
+        val = args[key]
+        typ = spec.get("type")
+        if typ == "string" and not isinstance(val, str):
+            raise ValueError(f"{key} 必须是字符串")
+        if typ == "integer":
+            if isinstance(val, bool) or not isinstance(val, int):
+                raise ValueError(f"{key} 必须是整数")
+            if "minimum" in spec and val < spec["minimum"]:
+                raise ValueError(f"{key} 不能小于 {spec['minimum']}")
+            if "maximum" in spec and val > spec["maximum"]:
+                raise ValueError(f"{key} 不能大于 {spec['maximum']}")
+        if typ == "array" and not isinstance(val, list):
+            raise ValueError(f"{key} 必须是数组")
+        enum = spec.get("enum")
+        if enum and val not in enum:
+            raise ValueError(f"{key} 只能是 {'/'.join(enum)}，收到「{val}」")
 
 
 # ---------------- JSON-RPC / MCP ----------------
@@ -588,11 +796,11 @@ def handle(msg: dict) -> dict | None:
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
             "protocolVersion": DEFAULT_VERSION,
             "capabilities": {"tools": {"listChanged": False}},
-            "tools": TOOLS,
+            "tools": visible_tools(),
         })
 
     if method == "tools/list":
-        return _ok(mid, {"tools": TOOLS, "ttlMs": 60000, "cacheScope": "public"})
+        return _ok(mid, {"tools": visible_tools(), "ttlMs": 60000, "cacheScope": "public"})
 
     if method == "tools/call":
         name = params.get("name") or ""
@@ -609,6 +817,7 @@ def handle(msg: dict) -> dict | None:
                 "isError": True,
             })
         try:
+            _validate_args(TOOL_BY_NAME[name].get("inputSchema") or {}, args)
             text = handler(args)
             return _ok(mid, {"content": [{"type": "text", "text": text}], "isError": False})
         except Exception as e:
