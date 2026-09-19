@@ -138,6 +138,33 @@ def test_local_link_port_follows_kanban_port_env(mcp):
     assert f"127.0.0.1:{port}" in resp["result"]["instructions"]
 
 
+def test_stdio_is_utf8_even_when_the_client_sets_nothing(tmp_path):
+    """客户端不会替你设 PYTHONIOENCODING，而 MCP 的 stdio 规范就是 UTF-8。
+
+    中文 Windows 上子进程的三条标准流默认跟随控制台码页（cp936）：
+    出方向 `ensure_ascii=False` 的中文工具描述被编成 GBK，客户端按 UTF-8 解 → 解码异常，
+    整个工具目录等于没发布；入方向的中文标题被按 GBK 解 → 静默写进看板一堆乱码。
+    所以服务自己必须把标准流钉成 UTF-8，这条用例**故意**把变量从环境里摘掉。
+    """
+    data_dir = tmp_path / "kanban-mcp-utf8"
+    data_dir.mkdir(parents=True)
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONIOENCODING"}
+    env["KANBAN_DATA_DIR"] = str(data_dir)
+    env["KANBAN_NO_SCHEDULER"] = "1"
+    req = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+           "params": {"name": "kanban_create_project",
+                      "arguments": {"name": "入方向中文标题测试", "status": "进行中"}}}
+    p = subprocess.run([sys.executable, str(SERVER)],
+                       input=(json.dumps(req, ensure_ascii=False) + "\n").encode("utf-8"),
+                       capture_output=True, cwd=str(ROOT), env=env, timeout=90)
+    assert p.returncode == 0
+    out = p.stdout.decode("utf-8")          # 不解得动就是出方向被编成了码页字节
+    assert "入方向中文标题测试" in out, "响应里的中文丢了"
+    stored = json.loads((data_dir / "projects.json").read_text(encoding="utf-8"))
+    assert [x["name"] for x in stored["projects"]] == ["入方向中文标题测试"], \
+        f"写进盘上的标题被解错了：{stored}"
+
+
 def test_notification_gets_no_reply(mcp):
     """通知不能回包：先发通知、再发请求，第一个读到的必须是对请求的响应"""
     mcp.call("notifications/initialized", notify=True)

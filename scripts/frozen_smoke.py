@@ -24,6 +24,13 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# 输出里有 ✓ 和中文：重定向到文件时 Python 用系统 ANSI 码页（本机 cp936），
+# 打第一个 ✓ 就 UnicodeEncodeError 崩掉 —— 门禁脚本必须能被重定向与管道。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:  # noqa: BLE001  被替换掉的 stdout 可能没有 reconfigure
+    pass
+
 EXE = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "dist" / "AI交接看板.exe"
 PORT = sys.argv[2] if len(sys.argv) > 2 else "18395"
 BASE = f"http://127.0.0.1:{PORT}"

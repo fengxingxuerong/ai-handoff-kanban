@@ -15,6 +15,7 @@
 | --- | --- |
 | `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程 |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
+| `app/filelock.py` | 跨进程文件锁（msvcrt/fcntl 一份实现，`main` 与 `llm` 共用）。两边不能互相 import，所以锁不放在任何一边里 |
 | `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
 | `tests/` | pytest 套件（用例数见文末「验证基线」，此处不写死）+ 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测数字只写在文末基线那一处）。含真实浏览器点击测试 `test_frontend_e2e.py` |
@@ -164,7 +165,11 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
   智能体看到的是"我改了但没生效"。
 - **协议兼容**：2026-07-28 起 MCP 改为无状态（无 initialize 握手、结果带 `resultType`），
   旧版（2025-xx）仍走握手。本服务两者都支持，`server/discover` 也实现了。
-- **stdout 只能有 JSON-RPC**：日志一律 `print(..., file=sys.stderr)`。往 stdout 写一个字都会污染协议。
+- **stdout 只能有 JSON-RPC，而且必须是 UTF-8**：日志一律 `print(..., file=sys.stderr)`。
+  往 stdout 写一个字都会污染协议。三条标准流在服务启动时自己 `reconfigure(encoding="utf-8")` ——
+  MCP 规范就是 UTF-8，而中文 Windows 上子进程默认跟随控制台码页（cp936）：不钉的话
+  出方向工具目录里的中文把客户端解崩（整个服务等于没发布），入方向中文标题**静默变成乱码入库**。
+  别改成"要求客户端设 `PYTHONIOENCODING`"，客户端不会替你设（钉子：`test_stdio_is_utf8_even_when_the_client_sets_nothing`）。
 - **跨进程写安全**：`mutate()` 里除线程锁外还有 `_cross_process_lock()`（Windows 用 `msvcrt.locking`，
   其他平台 `fcntl.flock`）。桌面应用与 MCP 服务是两个进程、同一份 JSON，**少了这把锁就是丢更新**。
 - 短命进程不要后台线程：MCP 服务启动前设 `KANBAN_NO_SCHEDULER=1`。
@@ -227,6 +232,35 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
    只在 warn/over 时说话）与界面交接包弹窗下的计量条。**不要**把提示塞进
    `_build_handoff_markdown()` 本体（会被复制进仓库、也会污染全项目合并包）。
    界面上的阈值是 JS 里另写的一份常量，改 `context_budget` 的默认阈值要同步改 `PKG_BUDGET`。
+8. **`_sanitize()` 还负责两条"读读看就自愈"的不变式**：
+   - **同一项目内任务 id 唯一**（`_dedupe_ids`，项目级同理）。重复 id 不是显示问题：
+     所有按 id 找的逻辑都是 first-match，于是 PUT 只改第一条、DELETE 一次删掉同 id 的几条、
+     `topo_order` 少输出一条（交接包丢任务），而 `{t["id"]: t}` 是 last-wins，
+     结果真环能以 `has_cycle=False` 入库 —— 直接违反约定 6。
+     后来的那条**确定性改名**（`t1~2`）而不是发新 uuid：这一步挂在每次读上，
+     随机化会让同一条数据在两次读之间换身份，界面拿旧 id 点进去就 404。
+     没有 id 的条目**不补**（导入端点明写并测过"缺 id 或缺名直接丢"）。
+   - **`due_date` 归一成 `YYYY-MM-DD`**（只在本来就有值时归一，不给老数据凭空加键）。
+     它处处按字符串比较，`2026-9-5` 会排在 `2026-08-01` 之后，于是"今天该干什么"与逾期
+     判断一起看错，而且错得看不出来。规范形状先看形状放过 —— 挂在每次读上，
+     一万条任务逐条 `strptime` 实测给列表接口加约 20ms。
+9. **脱敏（`redact_text`）的边界要说清在哪一侧**：
+   - 导出类：`?redact=1` 由用户勾，覆盖交接包 / 全项目包 / 接手页 / AGENTS.md。
+   - **送进模型之前**：会话提炼（`_summarize_inner`）与监管·指令的项目简报
+     （`_projects_brief` 里的背景 / 下一步 / 过程记录 / 记忆四处自由文本）。
+     前者的输入是别人的对话日志（里面躺着贴进去的 Key 很常见），后者是**整板内容被动随
+     一次分析请求外出** —— 这两条不是"用户主动把某段文本交给模型"，所以必须默认收口。
+     id / 标题 / 状态原样保留，否则模型回传的建议对不上项目。
+     而 `ai_generate_handoff` 那类"用户点名让润色自己写的交接说明"的出口**不脱敏**：
+     润色结果就是要写回去的原文，盖成星号等于毁内容。
+   - 反向闸门：模型看到的文本带着 `MASK_MARK`，就可能把掩码当原文抄回来，
+     所以 `apply-suggestions` 遇到带掩码的值**拒绝落地并回报 `skipped_masked`**；
+     界面也不许在 `applied=0` 时宣布"已应用 ✓"。
+10. **`usage.jsonl` 的追加与裁剪共用一把跨进程锁**（`llm._usage_locked` → `app/filelock.py`）。
+    桌面 exe 与 MCP 是两条进程写同一份账，只有线程锁时 `_trim_usage` 的
+    「整读 → 重写 → os.replace」会把读走之后别人刚追加的行一起替换掉（实测吞行），
+    表现为 `/api/usage` 长期偏小且无声。
+
 ## 多智能体入口文件（别退化成 N 份副本）
 
 `app/main.py` 的 `AGENT_ENTRY_TARGETS` + `build_agent_entries()` 把一份正文投影成各工具要求的入口：
@@ -242,19 +276,28 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 **硬性约定**：`CLAUDE.md` 永远只写桥接，**不要把正文复制进去** —— 复制就意味着两份内容会漂移。
 新增工具支持时改 `AGENT_ENTRY_TARGETS` 一处即可，`test_agent_files.py` 会校验路径集合。
 
-## 性能基线（2026-09-14 实测，本机）
+## 性能基线（2026-09-19 复测，本机，`scripts/bench.py` 中位数 / 20 轮）
 
 数据层是「整份 JSON 读改写」，延迟随项目数线性增长。`scripts/bench.py` 可复现：
 
 | 数据集 | GET /api/projects | GET /api/stats | GET /api/projects/{pid} | GET /api/export-all | POST 新建任务 |
 | --- | --- | --- | --- | --- | --- |
-| 1000 项目 / 4.1 MB | 49 ms | 62 ms | 26 ms | 37 ms | 26 ms |
-| 1000 项目 / 4.14 MB（2026-09-18 复测，中位数） | 63 ms | 78 ms | 40 ms | 158 ms | 40 ms |
-| 5000 项目 / 20.7 MB | 242 ms | 322 ms | 128 ms | 177 ms | 124 ms |
+| 1000 项目 / 4.1 MB（1.0.0 时代） | 49 ms | 62 ms | 26 ms | 37 ms | 26 ms |
+| 1000 项目 / 4.14 MB（2026-09-18） | 63 ms | 78 ms | 40 ms | 158 ms | 40 ms |
+| 1000 项目 / 4.14 MB（本次，含规模优化） | 60 ms | 77 ms | 39 ms | **74 ms** | 42 ms |
+| 5000 项目 / 20.74 MB（本次） | 369 ms | 456 ms | 260 ms | 423 ms | 256 ms |
+| 5000 项目 / 20.7 MB（旧值，**已证伪**） | 242 ms | 322 ms | 128 ms | 177 ms | 124 ms |
 
-第一行是 1.0.0 时代量的，第二行是 1.1.0（记忆层/用量/过程轨迹/git 都进了读取路径）之后再没复测过、
-今天补上的一行；其中能归因的部分：`_sanitize()` 新加的依赖剪环扫描实测约 +6ms
-（见该函数说明里的两次对照测量）。5000 那行是旧数据，需要时重量。
+5000 那一行旧值低估了一倍上下（export-all 差 7 倍），别再引用。`/api/projects` 交叉 300ms
+那条线的实测位置在 **约 4400 个项目**；常态量级实测：30 个项目四个读接口中位数 2.7–4.0ms、
+80 个项目 4.8–7.7ms（每项目 10 任务）。
+
+这一轮的改动都不是"加功能"，是把**只在规模下才成立的浪费**去掉。`export-all` 158→74ms
+是两处叠加：逐项目重复读 memories.json 改成一次读+分桶，以及 `topo_order` 不再是
+"每层重扫一遍全列表"（后者同时也是 `_build_handoff_markdown` 的成本）。
+`topo_order` / `executable_tasks` 的复杂度钉子见 `tests/test_scale.py`，
+按**全量遍历遍数**判定，不用耗时断言 —— 后者在 `-n auto` 下会假红（实测同一份代码
+空载 0.33ms、跑批时超 4ms 预算）。
 
 **结论：先不加缓存。** 这是本机单人看板，真实规模是几十个项目（≈个位数毫秒），
 加 mtime 缓存会引入失效风险却换不来可感知收益。等到「列表接口 > 300ms」成为日常体验问题时
@@ -323,6 +366,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 11. **分批跑覆盖率必须 combine**：分两批各带 `--cov=app` + 各自的 `COVERAGE_FILE`，
    再 `coverage combine .c1 .c2 && coverage report`。
    直接用 `coverage run -m pytest -n auto` 会丢掉 xdist worker 的数据，数字会假低。
+12. **规模/复杂度钉子放在 `tests/test_scale.py`，并且只断言"遍历遍数"不断言耗时**。
+    语义类用例都在个位数数据上跑，所以"逐个项目多读一次盘""每个依赖重建一次 id 集合"
+    这类只在规模下暴露的问题以前一条都没测到。耗时预算在本机就不成立：同一段代码
+    空载 0.33ms、`-n auto` 跑批时超 4ms，只会造出假红 ——
+    用 `_Counting` 列表数全量遍历的遍数（旧实现 1201 遍 / 新实现 4 遍）是确定的数。
+    读盘次数同理：monkeypatch `_load_memories` 计数，比测延迟可靠。
 
 ## 容易踩的坑
 
@@ -379,12 +428,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-19）**：`pytest` 434 收集（428 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-覆盖率 93%（语句 2076 / 缺 135，门槛 90，余量 3 个点；只统计 `app/`，`scripts/` 不进覆盖率。
-93% 与前一版 94% 之间只是 93.50% 这条四舍五入边界的两侧，别把它当退步）。
+**验证基线（2026-09-19 收口）**：`pytest` 463 收集（457 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+覆盖率 94%（语句 2189 / 缺 137，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
 门禁脚本：`release_regression --no-ai` 18/0、`delivery_drill`（自起隔离实例）19/0、
 `scenario_test` 33/33、`live_check --mcp` 12/12、`frozen_smoke` 8/0。
 并行（`-n auto`，已写进 `pytest.ini`）冷跑约 50 秒、热跑约 20 秒。
+⚠️ 全量跑常常**打完覆盖率表就没有 summary 行**（见「测试约定 10」），判绿只认退出码。
 
 > 1.1.0 一次加了会话捕获 / 过程轨迹 / 记忆层 / 用量追踪 / 提醒 / 只读模式六个面，
 > 语句数 1630 → 1943，覆盖率一度掉到 92%（余量 2 点）。补了 16 条新面用例后回到 93%。
@@ -396,7 +445,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 **下一步（按价值排序）**：
 
-1. **`app/main.py` 拆分** —— 2581 行单模块（接口/数据层/AI/git/入口文件生成全在一起）。
+1. **`app/main.py` 拆分** —— 2971 行单模块（接口/数据层/AI/git/入口文件生成全在一起）。
    拆的时候守住「写操作必须走 `mutate()`」这条，别顺手把临界区拆散。
 2. **存储层**：仍是整份 JSON 读改写。触发条件是「列表接口日常 > 300ms」，
    那时直接换分片或 SQLite，**不要加缓存糊**（理由见「性能基线」）。
@@ -406,6 +455,15 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 4. 剩下的未覆盖行（数目以「验证基线」为准，不在这里写死）基本是异常分支（`Path.resolve()` 失败、
    系统目录判定异常、各类 500 兜底）。
    要补就得构造畸形环境，收益递减 —— 别为了数字硬凑。
+5. **审出来但当下故意没做的三条**（各自都需要一次"用户能不能接受"的判断，别顺手改）：
+   - **备份目录里跟着复制了 `config.json`**（`/api/backup` 留 10 份，导入时也会自动备份一次）。
+     都在 `.ai-kanban` 内、不违反「密钥不进项目目录」，但"整目录拷走换机"会带走多份明文凭据。
+     改法是备份只存掩码后的端点 + 调度/会话源 —— 代价是**恢复后 Key 要重填**，所以要用户点头。
+   - **journal 是列表接口最先撞线的维度**：1000 项目 × 10 任务下，journal 从 0 条加到 20 条/任务，
+     文件 4.67MB → 81MB，`_load_data` 57ms → 336ms（与项目数无关）。
+     收口办法是把 `MAX_JOURNAL` 50→20、`MAX_JOURNAL_TEXT` 500→200 —— **会看不到既有过程记录**。
+   - **`_projects_brief` 有两份实现且语义已分叉**（`main` 那份给 LLM、任务 `[:40]` 截断；
+     MCP 那份重抄了 `/api/projects` 的计数与就绪度）。合并会同时改两处工具输出，收益不值这个风险。
 
 **不要再做的事**（已经想清楚、别回头做）：
 

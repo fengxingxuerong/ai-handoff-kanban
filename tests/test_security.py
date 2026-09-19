@@ -147,6 +147,16 @@ def test_save_export_refuses_to_clobber_existing_file(app_client, tmp_path):
     assert target.read_text(encoding="utf-8") == "生成的内容"
 
 
+def test_save_export_requires_absolute_path(app_client, tmp_path, monkeypatch):
+    """相对路径是按**服务进程当前目录**解析的：源码态是仓库根、打包态是 exe 目录。
+    于是 "AGENTS.md" 会写到应用自己身上，而系统目录黑名单一点也拦不到。"""
+    monkeypatch.chdir(tmp_path)
+    status, res = app_client.post("/api/export/save", {
+        "filename": "AGENTS.md", "content": "生成的内容", "path": "AGENTS.md"})
+    assert status == 400, f"相对路径被接受了：{status} {res}"
+    assert not (tmp_path / "AGENTS.md").exists(), "拒绝之前就已经落盘了"
+
+
 def test_save_export_creates_missing_parents(app_client, tmp_path):
     target = tmp_path / "深层" / "子目录" / "交接包.md"
     status, res = app_client.post("/api/export/save", {

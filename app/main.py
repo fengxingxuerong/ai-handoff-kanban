@@ -6,6 +6,7 @@ AI 交接看板 - FastAPI 后端
 """
 from __future__ import annotations
 
+import heapq
 import json
 import os
 import re
@@ -26,6 +27,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from pydantic import BaseModel, Field, field_validator
 
 from . import llm
+from .filelock import blocking_lock
 from .handoff_page import build_handoff_page
 from .readiness import readiness_items, readiness_score
 from .version import APP_VERSION, BUILD_TIME
@@ -220,19 +222,39 @@ def has_cycle(graph: dict[str, list[str]]) -> bool:
 
 
 def topo_order(tasks: list[dict]) -> list[dict]:
-    """按依赖给出可执行顺序；有环时退回原始顺序（不该发生，写入时已拦）"""
-    graph = task_graph(tasks)
+    """按依赖给出可执行顺序；有环时剩下的退回原始顺序（不该发生，写入时已拦）。
+
+    分层与层内顺序与旧实现逐字一致（层内按原列表顺序），改的只是算法：
+    原来每排完一层就重扫整个列表，链长 N 就是 N² 次比较（实测 400 长的链 29ms）；
+    这里按 Kahn 记"还差几个前置"，前置满足时给后继 -1，归零进下一层。
+    键用 `id(task)` 而不是任务 id：调用方可能传进没经过 `_sanitize` 的列表。
+    """
     by_id = {t.get("id"): t for t in tasks}
-    done, out = set(), []
-    while len(out) < len(tasks):
-        ready = [t for t in tasks
-                 if t.get("id") not in done
-                 and all(d in done or d not in by_id for d in (t.get("depends_on") or []))]
-        if not ready:                      # 有环，剩下的按原序补上
-            out.extend(t for t in tasks if t.get("id") not in done)
-            break
-        out.extend(ready)
-        done.update(t.get("id") for t in ready)
+    rank = {id(t): i for i, t in enumerate(tasks)}      # 层内保持原顺序
+    waiting: dict[int, int] = {}
+    dependents: dict[object, list] = {}
+    for t in tasks:
+        deps = [d for d in (t.get("depends_on") or []) if d in by_id]
+        # 依赖里指向"不存在的前置"按已满足处理（与旧实现同口径：数据清洗后不该有这种）；
+        # 指向自己的那条留在 waiting 里，永远满足不了 → 走有环兜底，同样与旧实现一致。
+        waiting[id(t)] = len(deps)
+        for d in deps:
+            dependents.setdefault(d, []).append(t)
+    current = [t for t in tasks if waiting[id(t)] == 0]
+    out: list[dict] = []
+    while current:
+        out.extend(current)
+        nxt: list[dict] = []
+        for t in current:
+            for d in dependents.get(t.get("id"), ()):
+                waiting[id(d)] -= 1
+                if waiting[id(d)] == 0:
+                    nxt.append(d)
+        nxt.sort(key=lambda x: rank[id(x)])
+        current = nxt
+    if len(out) < len(tasks):                     # 有环：剩下的按原序补上
+        placed = {id(t) for t in out}
+        out.extend(t for t in tasks if id(t) not in placed)
     return out
 
 
@@ -279,9 +301,73 @@ def _break_dep_cycles(tasks: list[dict]) -> None:
 def executable_tasks(tasks: list[dict]) -> list[dict]:
     """当前可以动手的任务：自己的状态未完成，且所有前置都已完成"""
     done_ids = {t.get("id") for t in tasks if t.get("status") == "已完成"}
+    known_ids = {t.get("id") for t in tasks}      # 只算一次：原来这个集合是在下面按任务逐个重建的
     return [t for t in tasks
             if t.get("status") != "已完成"
-            and all(d in done_ids for d in (t.get("depends_on") or []) if d in {x.get("id") for x in tasks})]
+            and all(d in done_ids or d not in known_ids
+                    for d in (t.get("depends_on") or []))]
+
+
+def _dedupe_ids(items: list) -> None:
+    """就地消除重复 id：保留第一条，后来的换成**确定性**的新 id（`t1~2`、`t1~3`…）。
+
+    全部"按 id 找"的逻辑都是 first-match，所以重复 id 不是显示问题而是静默的数据问题：
+    PUT 只改第一条（余份永远读不到新值）、DELETE 会把同 id 的几条**一起删掉**、
+    `topo_order` 输入 4 条只输出 3 条（交接包丢任务）；而 `by_id = {t["id"]: t}` 是
+    last-wins，于是依赖图和任务列表指向两条不同任务，真环能以 has_cycle=False 入库
+    —— 直接违反「不许有环」这条不变式。
+
+    新 id 必须由原 id 推出来、**不能是随机 uuid**：这一步挂在每次读上，
+    随机化会让同一条数据在两次读之间换身份 —— 界面拿旧 id 点进去就 404，
+    测试里"读一次拿 id、再删它"也会随机失败。内容一条都不能丢，
+    id 本来就是 uuid，用户界面靠标题定位，数据里也没有跨项目引用它。
+
+    **没有 id 的条目不补**：导入端点有一条明写并测过的规则 —— 缺 id 或缺名的项目直接丢，
+    在这里替它编一个 id 等于把那份残缺数据放回世界。
+    """
+    seen: set = set()
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        tid = it.get("id")
+        if not tid:
+            continue
+        if tid not in seen:
+            seen.add(tid)
+            continue
+        n = 2
+        while f"{tid}~{n}" in seen:
+            n += 1
+        it["id"] = f"{tid}~{n}"
+        seen.add(it["id"])
+
+
+_DUE_CANONICAL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _clean_due_date(v) -> str:
+    """归一截止日期：认 `2026-09-05` / `2026/9/5` / `2026.09.05`，认不出来就清空。
+
+    写入端点自己会校验，这里兜的是导入与手改的 projects.json。
+    不归一的话它是**按字符串**比较的：`2026-9-5` 排在 `2026-08-01` 之后（'9' > '0'），
+    于是 /api/today 的顺序、临期与逾期判断一起看错，而且错得看不出来。
+    清空与 `TaskIn._clean_due` 同口径 —— 留着解析不出的原值只会让下游各自猜。
+
+    长得就已经是规范形式的先看形状放过：这一步挂在每次读上，
+    一万条任务逐条 `strptime` 实测给列表接口加了约 20ms（1000 项目数据集）。
+    形状对但日期不存在（`2026-13-45`）的会留到 `_due_state` 里解析失败、按"未设截止"处理。
+    """
+    s = str(v or "").strip()
+    if not s:
+        return ""
+    if _DUE_CANONICAL_RE.match(s):
+        return s
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return ""
 
 
 def _sanitize(data: dict) -> dict:
@@ -292,6 +378,7 @@ def _sanitize(data: dict) -> dict:
     if not isinstance(projects, list):
         data["projects"] = []
         return data
+    _dedupe_ids(projects)
     for p in projects:
         if not isinstance(p, dict):
             continue
@@ -308,6 +395,7 @@ def _sanitize(data: dict) -> dict:
         tasks = p.get("tasks")
         if not isinstance(tasks, list):
             p["tasks"] = tasks = []
+        _dedupe_ids(tasks)     # 必须排在依赖清洗前面：见函数说明
         for t in tasks:
             if not isinstance(t, dict):
                 continue
@@ -317,6 +405,9 @@ def _sanitize(data: dict) -> dict:
                 t["priority"] = "中"
             t["refs"] = clean_refs(t.get("refs"))      # 老数据没有这个字段，顺带补齐
             t["journal"] = clean_journal(t.get("journal"))   # 过程轨迹也收一道，防导入的脏数据撑大文件
+            if t.get("due_date"):
+                # 只在本来就有值时归一：不给老数据凭空加键（导出体积与前端判断都按"有没有"走）
+                t["due_date"] = _clean_due_date(t["due_date"])
             if not isinstance(t.get("depends_on"), list):
                 t["depends_on"] = []
         # 顺手清掉指向已删除任务的依赖（否则任务永远"等一个不存在的东西"）
@@ -404,7 +495,10 @@ def now_str() -> str:
 def _cross_process_lock(timeout: float = 15.0):
     """跨进程写锁。同线程可重入 —— Windows 的字节锁按**句柄**生效，
     `mutate()` 持锁期间 `_load_data()` 的自愈写盘若再开一个句柄抢同一把锁，
-    同进程也会互相冲突，然后一路等到 15 秒超时报错。"""
+    同进程也会互相冲突，然后一路等到 15 秒超时报错。
+
+    锁本身在 `app/filelock.py` —— llm 也要一把同样的锁，而它不能 import main（会成环）。
+    """
     depth = getattr(_LOCK_DEPTH, "n", 0)
     if depth:
         _LOCK_DEPTH.n = depth + 1
@@ -414,43 +508,12 @@ def _cross_process_lock(timeout: float = 15.0):
             _LOCK_DEPTH.n = depth
         return
 
-    path = data_dir() / "projects.lock"
-    fh = open(path, "a+b")
     _LOCK_DEPTH.n = 1
     try:
-        deadline = time.time() + timeout
-        while True:
-            try:
-                fh.seek(0)
-                if os.name == "nt":
-                    import msvcrt
-
-                    msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except OSError:
-                if time.time() >= deadline:
-                    raise TimeoutError(f"等待数据文件锁超时（{timeout}s）：{path}")
-                time.sleep(0.05)
-        yield
+        with blocking_lock(data_dir() / "projects.lock", timeout=timeout, what="数据文件"):
+            yield
     finally:
         _LOCK_DEPTH.n = 0
-        try:
-            fh.seek(0)
-            if os.name == "nt":
-                import msvcrt
-
-                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-        except Exception:
-            pass
-        fh.close()
 
 
 def get_projects_data() -> dict:
@@ -730,10 +793,30 @@ def project_context(pid: str):
 
 # ---- 交接内容脱敏（对标 handoff skill 的 redact） ----
 
+MASK_MARK = "********"      # 脱敏掩码；「建议回传里带掩码就别落盘」那条判断认它
+
 _REDACT_PATTERNS = [
-    (r"(?i)\b(sk|rc|nvapi|ghp|gho|github_pat|AKIA|xoxb|xoxp)[-_][A-Za-z0-9_-]{6,}", r"\1-********"),
-    (r"(?i)(api[_-]?key|token|secret|password|passwd|pwd|授权码)\s*[:=]\s*([\"']?)[^\s\"']{4,}", r"\1\2= ********"),
-    (r"(?i)\bBearer\s+[A-Za-z0-9._-]{8,}", "Bearer ********"),
+    # 前缀型 Key：OpenAI / Anthropic / NVIDIA / GitHub 全系 / GitLab / AWS（含临时凭据 ASIA）/
+    # Slack / npm / PyPI / Docker Hub / HuggingFace / Sonar
+    (r"(?i)\b(sk|rc|nvapi|ghp|gho|ghu|ghs|ghr|github_pat|glpat|xoxb|xoxp|xapp"
+     r"|npm_|pypi|dckr_pat|hf|sgpat)[-_][A-Za-z0-9_-]{6,}", r"\1-" + MASK_MARK),
+    # AWS 访问密钥是前缀直接跟 16 位大写字母数字，**没有分隔符**，套不进上面那条
+    (r"\b(AKIA|ASIA)[0-9A-Z]{16}\b", r"\1-" + MASK_MARK),
+    # JWT：三段 base64url，段段有点分着，正常中文/代码里不会出现
+    (r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}", "JWT." + MASK_MARK),
+    (r"(?i)\bBearer\s+[A-Za-z0-9._-]{8,}", "Bearer " + MASK_MARK),
+    # 私钥整块（PEM）：正文本来就是 base64，逐条规则都命中不了，只能按块盖掉
+    (r"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----(.*?)(-----END [A-Z ]*PRIVATE KEY-----|$)",
+     "-----" + MASK_MARK + "-----"),
+    # key: value 形态。**JSON 里键名是带引号的**（`"api_key": "xxx"`），
+    # 原来那条 `key\s*[:=]` 卡在引号上匹配不到，于是最常见的 JSON 配置反而没脱敏。
+    # 另外替换必须原样保留分隔符 —— 老写法把 `:` 统一换成 `=`，脱敏顺手改了别人的格式。
+    (r"(?i)\b(api[_-]?key|apikey|access[_-]?token|auth[_-]?token|refresh[_-]?token|token"
+     r"|secret|password|passwd|pwd|授权码|密钥)([\"']?)(\s*[:=]\s*)([\"']?)[^\s\"']{4,}",
+     r"\1\2\3\4" + MASK_MARK),
+    # 连接串 postgres://user:pass@host —— 盖掉口令，主机名留着（排查问题要用）
+    # 必须排在邮箱规则前面：否则邮箱规则先把 `pass@host.com` 吃掉，口令就漏在协议头里
+    (r"(?i)\b([a-z][a-z0-9+.-]*://[^/\s:@]+:)[^@\s]+(@)", r"\1" + MASK_MARK + r"\2"),
     (r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "****@****"),
 ]
 
@@ -1052,7 +1135,9 @@ def _budget_note(text: str) -> str:
     return f"\n\n—— 本包约 {b['lines']} 行 / {b['kb']} KB，{hint}。"
 
 
-def _build_handoff_markdown(p: dict) -> str:
+def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None) -> str:
+    """`memory_rows` = 这个项目的记忆列表。批量导出（export-all）必须一次读盘后传进来：
+    逐个项目各自 `_load_memories()` 会让 memories.json 的读取次数等于项目数。"""
     lines = []
     lines.append(f"# {p['name']} · 项目交接摘要")
     lines.append("")
@@ -1109,7 +1194,8 @@ def _build_handoff_markdown(p: dict) -> str:
                 for e in j[-3:]:
                     lines.append(f"- [{e.get('time', '')}] {e.get('text', '')}")
                 lines.append("")
-        mems = [m for m in _load_memories() if m.get("pid") == p.get("id")]
+        mems = memory_rows if memory_rows is not None else \
+            [m for m in _load_memories() if m.get("pid") == p.get("id")]
         if mems:
             lines.append("### 已沉淀记忆（结构化要点）")
             lines.append("")
@@ -1272,6 +1358,11 @@ def save_export(body: SaveExportBody):
     content = body.content or ""
     if body.path and body.path.strip():
         target = Path(body.path.strip())
+        # 必须给绝对路径：相对路径是按**服务进程的当前目录**解析的（源码态是仓库根、
+        # 打包态是 exe 所在目录），于是 "AGENTS.md" 这种输入会写到应用自己身上，
+        # 而 _forbidden_roots 那套黑名单也完全拦不到。
+        if not target.is_absolute():
+            raise HTTPException(400, "请填写绝对路径（含盘符），例如 D:\\work\\demo\\AGENTS.md")
         suffix = target.suffix.lower()
         if suffix not in (".md", ".txt", ".markdown", ".agentsmd"):
             raise HTTPException(400, "仅支持保存为 .md / .txt / .markdown / .agentsmd 文件")
@@ -1305,10 +1396,11 @@ def save_export(body: SaveExportBody):
 def export_all(redact: int = 0):
     data = get_projects_data()
     projects = data.get("projects", [])
+    mems_by_pid = _memories_by_pid()
     head = f"# AI 交接看板 · 全项目交接包\n\n> 共 {len(projects)} 个项目 · 导出时间 {now_str()}\n"
     parts = [head]
     for p in projects:
-        md = _build_handoff_markdown(p)
+        md = _build_handoff_markdown(p, mems_by_pid.get(p.get("id"), []))
         parts.append("\n\n---\n\n" + (redact_text(md) if redact else md))
     return PlainTextResponse("".join(parts), media_type="text/markdown; charset=utf-8")
 
@@ -1344,9 +1436,13 @@ def today_tasks(limit: int = 30):
     # 稳定排序：先按更新时间倒序，再按（优先级、截止）升序
     out.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
     out.sort(key=lambda x: (pri_rank.get(x.get("priority"), 1), x.get("due_date") or "9999-12-31"))
+    shown = max(1, min(limit, 200))
     return {
-        "tasks": out[:max(1, min(limit, 200))],
+        "tasks": out[:shown],
         "total": len(out),
+        # 截断要说出来：以前只回 total，前端一个数都不显示，
+        # 第 51 条开始的任务对用户就是"不存在"。
+        "truncated": len(out) > shown,
         "project_count": projects_seen,
     }
 
@@ -1741,6 +1837,21 @@ def _load_memories() -> list[dict]:
         return []
 
 
+def _memories_by_pid() -> dict[str, list[dict]]:
+    """memories.json **读一次**，按项目分好桶。
+
+    交接摘要与 AI 简报都要按项目取记忆；以前是在项目循环里逐个
+    `_load_memories()`，于是这份文件的读取次数等于项目数 —— 实测 1000 项目 +
+    500 条记忆时 `/api/export-all` 从 139ms 涨到 911ms。这不是缓存（没有失效问题），
+    只是把"每次读一遍"改成"每次读一遍**整份**"。
+    """
+    bucket: dict[str, list[dict]] = {}
+    for m in _load_memories():
+        if isinstance(m, dict):
+            bucket.setdefault(m.get("pid"), []).append(m)
+    return bucket
+
+
 def _save_memories(items: list[dict]) -> None:
     f = memories_file()
     tmp = f.with_suffix(".json.tmp")
@@ -1853,6 +1964,40 @@ def session_sources() -> list[dict]:
     return defaults + [c for c in custom if isinstance(c, dict) and c.get("path")]
 
 
+def _walk_bounded(root: Path, budget: int = 2000, max_depth: int = 3):
+    """懒走目录，最多吐 budget 个文件、深 max_depth 层。
+
+    自定义会话源常被随手指到很宽的目录（甚至整块盘）。原来写的是
+    `[f for f in root.rglob("*") if f.is_file()][:200]` —— 切片在推导式**之后**，
+    等于先把整棵树物化进内存才想起来只要 200 个，一个宽路径就能挂住整个请求。
+    """
+    base_depth = len(root.parts)
+    seen = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        if len(Path(dirpath).parts) - base_depth >= max_depth:
+            dirnames[:] = []            # 不再往下走
+        for name in filenames:
+            seen += 1
+            if seen > budget:
+                return
+            yield Path(dirpath) / name
+
+
+def _newest_files(paths, n: int = 8) -> list[Path]:
+    """按修改时间取最近 n 个。
+
+    单个文件 stat 失败（扫描过程中被删/被占用）跳过就行，不能像原来那样
+    把它留给 `sorted(key=f.stat)` —— 那会让整次 /api/sessions/scan 直接 500。
+    """
+    scored = []
+    for f in paths:
+        try:
+            scored.append((f.stat().st_mtime, f))
+        except OSError:
+            continue
+    return [f for _, f in heapq.nlargest(n, scored, key=lambda x: x[0])]
+
+
 @app.get("/api/sessions/scan")
 def scan_sessions():
     """扫描各 AI 工具会话目录，返回最近活跃的会话文件（按修改时间倒序）"""
@@ -1862,20 +2007,16 @@ def scan_sessions():
         if not root.exists():
             continue
         stype = src.get("type", "text")
-        files: list[Path] = []
         try:
             if stype == "claude_jsonl":
-                files = list(root.glob("*/*.jsonl"))
+                files = _newest_files(root.glob("*/*.jsonl"))
             elif stype == "cline":
-                for d in root.glob("*"):
-                    if d.is_dir() and (d / "ui_messages.json").exists():
-                        files.append(d / "ui_messages.json")
+                files = _newest_files(d / "ui_messages.json" for d in root.glob("*") if d.is_dir())
             else:
-                files = [f for f in root.rglob("*") if f.is_file()][:200]
+                files = _newest_files(_walk_bounded(root))
         except Exception:
             continue
-        recent = sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)[:8]
-        for f in recent:
+        for f in files:
             try:
                 stat = f.stat()
             except OSError:
@@ -1892,6 +2033,23 @@ def scan_sessions():
     return {"sessions": out[:20]}
 
 
+def _read_tail_text(f: Path, limit_bytes: int = 1 << 20) -> str:
+    """只读文件末尾 limit_bytes 字节。
+
+    会话文件动辄几百 MB，而提取逻辑本来就是"尾部优先"：整份 `read_text()`
+    等于把内存和一次几秒的 IO 搭进去，只为拿最后 12000 字。
+    """
+    try:
+        size = f.stat().st_size
+        with open(f, "rb") as fh:
+            if size > limit_bytes:
+                fh.seek(-limit_bytes, os.SEEK_END)
+            data = fh.read()
+    except OSError:
+        return ""
+    return data.decode("utf-8", "replace")
+
+
 def _extract_session_text(path: str, max_chars: int = 12000) -> str:
     """从会话文件提取对话文本（尾部优先）。支持 Claude Code JSONL / cline JSON / 纯文本"""
     f = Path(path)
@@ -1900,7 +2058,7 @@ def _extract_session_text(path: str, max_chars: int = 12000) -> str:
     texts: list[str] = []
     if f.suffix.lower() == ".jsonl":
         try:
-            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = _read_tail_text(f).splitlines()
         except Exception:
             lines = []
         for line in lines[-200:]:
@@ -1921,7 +2079,7 @@ def _extract_session_text(path: str, max_chars: int = 12000) -> str:
                 texts.append(f"{tag}：{content.strip()[:600]}")
     elif f.suffix.lower() == ".json":
         try:
-            data = json.loads(f.read_text(encoding="utf-8", errors="replace"))
+            data = json.loads(_read_tail_text(f))
         except Exception:
             data = None
         if isinstance(data, list):
@@ -1934,8 +2092,7 @@ def _extract_session_text(path: str, max_chars: int = 12000) -> str:
                     role = "用户" if "user" in say else "助手"
                     texts.append(f"{role}：{str(txt)[:600]}")
     if not texts:
-        raw = f.read_text(encoding="utf-8", errors="replace")
-        texts = [raw[-6000:]]
+        texts = [_read_tail_text(f)[-6000:]]
     return "\n\n".join(texts)[-max_chars:]
 
 
@@ -2136,6 +2293,9 @@ def _summarize_inner(pid: str, text: str) -> dict:
     found = find_project(pid)
     if not found:
         raise HTTPException(404, "项目不存在")
+    # 送出去之前先脱敏：会话日志里最常出现的就是别人贴进来的 Key / 连接串，
+    # 而"提炼"这件事必须把整段对话发到模型那边去 —— 一次调用就等于把凭据发出去了。
+    text = redact_text(text or "")
     p = found[1]
     existing = [t["title"] for t in p.get("tasks", [])]
     sys_msg = (
@@ -2325,15 +2485,18 @@ def next_tasks(pid: str):
     tasks = p.get("tasks") or []
     by_id = {t.get("id"): t for t in tasks}
     ready = executable_tasks(tasks)
+    # 按 id 判，不要写 `t not in ready`：那是对整份字典做相等比较，
+    # 每个任务比一遍全列表，400 个任务就是几万次字典对比
+    ready_ids = {t.get("id") for t in ready}
     return {
         "project": p.get("name", ""),
         "next": [{"id": t["id"], "title": t.get("title"), "priority": t.get("priority"),
                   "refs": t.get("refs") or []} for t in ready],
         "blocked": [{"id": t["id"], "title": t.get("title"),
                      "waiting_for": [by_id[d].get("title", d)
-                                     for d in (t.get("depends_on") or []) if d in by_id
-                                     and by_id[d].get("status") != "已完成"]}
-                    for t in tasks if t not in ready and t.get("status") != "已完成"],
+                                     for d in (t.get("depends_on") or [])
+                                     if d in by_id and by_id[d].get("status") != "已完成"]}
+                    for t in tasks if t.get("id") not in ready_ids and t.get("status") != "已完成"],
     }
 
 
@@ -2373,7 +2536,13 @@ def _git_line_for_handoff(p: dict) -> str:
 
 
 def _projects_brief(projects: list[dict]) -> list[dict]:
-    """给 LLM 的精简项目数据（含代码现状，便于发现"看板说有进展、代码其实没动"）"""
+    """给 LLM 的精简项目数据（含代码现状，便于发现"看板说有进展、代码其实没动"）
+
+    自由文本（背景 / 下一步 / 过程记录 / 记忆）过一道脱敏再送出去：这些是要离开本机
+    到模型那边的内容，而用户从会话里抄进看板的凭据很常见。
+    id / 标题 / 状态 / 分支名原样保留 —— 模型要把它们回传用来对齐项目与任务。
+    """
+    mems_by_pid = _memories_by_pid()
     brief = []
     for p in projects:
         item = {
@@ -2383,16 +2552,18 @@ def _projects_brief(projects: list[dict]) -> list[dict]:
             "progress": p.get("progress", 0),
             "priority": p.get("priority", ""),
             "tags": p.get("tags", []),
-            "next_action": (p.get("next_action") or "")[:300],
-            "background": (p.get("background") or "")[:300],
+            "next_action": redact_text((p.get("next_action") or ""))[:300],
+            "background": redact_text((p.get("background") or ""))[:300],
             "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", ""),
                        **({"due_date": t["due_date"]} if t.get("due_date") else {}),
                        **({"refs": t["refs"]} if t.get("refs") else {}),
-                       **({"recent_journal": [(e.get("time", ""), (e.get("text") or "")[:80])
-                                              for e in (t.get("journal") or [])[-1:]]} if t.get("journal") else {})}
+                       **({"recent_journal": [(e.get("time", ""),
+                                               redact_text((e.get("text") or ""))[:80])
+                                              for e in (t.get("journal") or [])[-1:]]}
+                          if t.get("journal") else {})}
                       for t in (p.get("tasks") or [])[:40]],
-            "memories": [m for m in _load_memories()
-                         if m.get("pid") == p["id"]][-10:],
+            "memories": [{**m, "text": redact_text(m.get("text") or "")}
+                         for m in mems_by_pid.get(p["id"], [])][-10:],
         }
         snap = git_snapshot(p.get("repo_path", ""), limit=1)
         if snap.get("ok"):
@@ -2651,9 +2822,15 @@ def ai_apply_suggestions(body: list[SuggestionUpdate]):
     allowed_field = ("next_action", "handoff_note", "background", "priority", "status")
 
     def worker(data: dict):
-        ok = 0
+        ok, masked = 0, 0
         for u in body:
             if u.field not in allowed_field:
+                continue
+            if MASK_MARK in (u.value or ""):
+                # 送给模型的背景是脱敏过的，它可能把 `********` 当成原文抄回来。
+                # 照写就是把用户真内容换成一串星号（而且看不出丢过什么）——
+                # 宁可不落地，也要把这个数报出去，让用户去原处看一眼。
+                masked += 1
                 continue
             for p in data.get("projects", []):
                 if p.get("id") == u.project_id:
@@ -2663,10 +2840,10 @@ def ai_apply_suggestions(body: list[SuggestionUpdate]):
                     break
         # 直接写字段可能带进非法状态/优先级，交给统一规范化收口
         _sanitize(data)
-        return ok > 0, ok
+        return ok > 0, {"applied": ok, "skipped_masked": masked}
 
-    _, ok = mutate(worker)
-    return {"applied": ok}
+    _, result = mutate(worker)
+    return result
 
 
 # ---- 交接文档智能生成 ----

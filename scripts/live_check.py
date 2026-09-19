@@ -23,6 +23,13 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# 输出里有 ✓ 和中文：重定向到文件时 Python 用系统 ANSI 码页（本机 cp936），
+# 打第一个 ✓ 就 UnicodeEncodeError 崩掉 —— 门禁脚本必须能被重定向与管道。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:  # noqa: BLE001  被替换掉的 stdout 可能没有 reconfigure
+    pass
+
 BASE = "http://127.0.0.1:18320"
 WANT_MCP = "--mcp" in sys.argv
 for arg in sys.argv[1:]:
@@ -103,7 +110,10 @@ def main() -> int:
             capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT), timeout=60)
         line = (proc.stdout or "").strip().splitlines()
         tools = json.loads(line[0])["result"]["tools"] if line else []
-        check(f"MCP 工具目录可读（{len(tools)} 个工具）", len(tools) >= 10, f"stderr={proc.stderr[:120]}")
+        # `or ""` 不是摆设：读线程一旦解码失败，CompletedProcess.stdout/stderr 就是 None，
+        # 于是"失败原因"本身先把体检脚本崩掉，反而看不到真问题（2026-09-19 撞到过）
+        check(f"MCP 工具目录可读（{len(tools)} 个工具）", len(tools) >= 10,
+              f"stderr={(proc.stderr or '')[:120]} / rc={proc.returncode}")
 
     failed = [r for r in rows if not r[1]]
     print(f"\n结果：{len(rows) - len(failed)} 通过 / {len(failed)} 失败")

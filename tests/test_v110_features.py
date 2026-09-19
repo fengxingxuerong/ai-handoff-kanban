@@ -183,6 +183,53 @@ def test_extract_session_text_missing_file(tmp_path):
     assert ei.value.status_code == 404
 
 
+def test_extract_session_text_never_reads_the_whole_file(tmp_path, monkeypatch):
+    """会话文件动辄几百 MB：提取只能读尾部，整份 read_text 等于把内存搭进去。
+
+    断言方式是把 `Path.read_text` 换成"一调就炸" —— 老实现三条分支全用它，
+    所以这条用例天然把"有没有改成按需读"钉住。
+    """
+    from pathlib import Path as _P
+
+    def boom(self, *a, **kw):
+        raise AssertionError("不该整份读文件")
+
+    monkeypatch.setattr(_P, "read_text", boom)
+    f = tmp_path / "big.jsonl"
+    lines = [json.dumps({"type": "user", "message": {"role": "user", "content": f"第 {i} 轮"}})
+             for i in range(300)]
+    f.write_text("\n".join(lines), encoding="utf-8")
+    text = _extract_session_text(str(f))
+    assert "第 299 轮" in text, "尾部内容要拿到"
+    assert "第 0 轮" not in text, "从头读起就说明读超了"
+
+
+def test_walk_bounded_caps_entries_and_depth(tmp_path):
+    """自定义会话源被指到很宽的目录时，扫描必须自带预算与深度上限"""
+    from app.main import _walk_bounded
+
+    for d in range(6):
+        cur = tmp_path.joinpath(*[f"l{i}" for i in range(d)]) if d else tmp_path
+        cur.mkdir(parents=True, exist_ok=True)
+        for i in range(3):
+            (cur / f"f{i}.txt").write_text("x", encoding="utf-8")
+    found = list(_walk_bounded(tmp_path, budget=5, max_depth=2))
+    assert len(found) <= 5, f"预算 5 却吐了 {len(found)} 个"
+    deep = [f for f in found if len(f.relative_to(tmp_path).parts) > 2]
+    assert not deep, f"深度上限 2 却扫到了 {deep[:2]}"
+
+
+def test_newest_files_tolerates_vanished_file(tmp_path):
+    """扫描期间文件被删/被占用：跳过它，而不是让整次 /api/sessions/scan 500"""
+    from app.main import _newest_files
+
+    live = tmp_path / "live.jsonl"
+    live.write_text("x", encoding="utf-8")
+    gone = tmp_path / "gone.jsonl"
+    got = _newest_files([gone, live], n=8)
+    assert got == [live], f"应当只返回还在的那个，实际 {got}"
+
+
 def test_ingest_session_applies_extracted_results(ai_client):
     """完整链路：会话文件 → 提炼 → 返回待确认的结果（不直接落库）"""
     from pathlib import Path

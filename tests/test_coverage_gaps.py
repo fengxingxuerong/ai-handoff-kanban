@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -236,6 +237,92 @@ def test_temperature_retry_still_failing(no_sleep):
         assert "temp=1 重试仍失败" in str(e.value), str(e.value)
     finally:
         stub.stop()
+
+
+def _usage_lines() -> list[dict]:
+    import app.llm as llm
+
+    f = llm._usage_file()
+    if not f.exists():
+        return []
+    return [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+def test_temperature_retry_counts_as_one_success(no_sleep, tmp_path, monkeypatch):
+    """400→换 temperature 重试并成功，只能记一条 ok=True。
+
+    原来一进 HTTPError 分支就记一条 ok=False，重试成功再记一条 ok=True：
+    同一次成功调用同时贡献成功与失败，/api/usage 的失败率因此虚高（实测 1 成功 = 2 条）。
+    """
+    monkeypatch.setenv("KANBAN_DATA_DIR", str(tmp_path))
+    from llm_stub import StubLLM
+
+    stub = StubLLM().start()
+    try:
+        stub.push_status_body(400, "invalid temperature value: only 1 is allowed")
+        stub.push_text("重试成功")
+        cfg = {"ai": {"endpoints": [stub.endpoint("端点甲")], "active_model": "stub-model"}}
+        _chat(cfg)
+    finally:
+        stub.stop()
+    rows = _usage_lines()
+    assert len(rows) == 1, f"一次成功调用记了 {len(rows)} 条用量：{rows}"
+    assert rows[0]["ok"] is True and rows[0]["endpoint"] == "端点甲"
+
+
+def test_genuine_failure_still_records_one_failure(no_sleep, tmp_path, monkeypatch):
+    """把失败记账挪到分支末尾之后，真失败（Key 无效）仍必须留下恰好一条 ok=False"""
+    import app.llm as llm
+
+    monkeypatch.setenv("KANBAN_DATA_DIR", str(tmp_path))
+    from llm_stub import StubLLM
+
+    stub = StubLLM().start()
+    try:
+        stub.status_for_key["sk-bad"] = 401
+        ep = stub.endpoint("端点甲", keys=["sk-bad"])
+        cfg = {"ai": {"endpoints": [ep], "active_model": "stub-model"}}
+        with pytest.raises(llm.LLMError):
+            _chat(cfg)
+    finally:
+        stub.stop()
+    rows = _usage_lines()
+    assert len(rows) == 1 and rows[0]["ok"] is False, f"Key 失效应记一条失败：{rows}"
+
+
+def test_usage_append_and_trim_do_not_lose_concurrent_lines(tmp_path, monkeypatch):
+    """usage.jsonl 的写入要跨进程互斥。
+
+    桌面 exe 与 MCP 服务是两条进程写同一份账。原来 `_USAGE_LOCK` 只是线程锁，
+    `_trim_usage` 的「整读 → 重写 → os.replace」会把读走之后另一个进程追加的那行抹掉。
+    这条用例用真子进程当"另一个写者"：主进程持锁期间它必须写不进去，放锁后才落盘。
+    """
+    import subprocess
+    import sys
+    import time
+
+    from app import llm
+
+    monkeypatch.setenv("KANBAN_DATA_DIR", str(tmp_path))
+    root = str(Path(llm.__file__).resolve().parent.parent)
+    child = (
+        "import sys; sys.path.insert(0, r'%s');"
+        "from app import llm;"
+        "llm._record_usage('并发追加', '甲', 'm', None, 0.1, True);"
+        "print('written')" % root
+    )
+    with llm._usage_locked(timeout=30.0):
+        p = subprocess.Popen([sys.executable, "-c", child], cwd=root, env=dict(os.environ),
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        time.sleep(2.0)
+        assert p.poll() is None, "持锁期间第二个进程竟然写完了 —— 锁没跨进程生效"
+        lines_during = _usage_lines()
+        assert not any(r.get("feature") == "并发追加" for r in lines_during)
+    out, err = p.communicate(timeout=60)
+    assert "written" in out, f"子进程没跑完：{err[:300]}"
+    after = _usage_lines()
+    assert any(r.get("feature") == "并发追加" for r in after), \
+        f"放锁之后那条追加应当存活，实际 {len(after)} 条"
 
 
 def test_gateway_classifies_http_errors(no_sleep):

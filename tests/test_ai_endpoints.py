@@ -159,6 +159,22 @@ def test_apply_suggestions_sanitizes_illegal_status(ai):
     assert detail["status"] == "规划中"
 
 
+def test_apply_suggestions_refuses_to_write_the_mask(ai):
+    """送给模型的背景是脱敏过的，模型可能把 `********` 当原文抄回来。
+
+    照写等于用一串星号覆盖用户真写过的下一步 —— 而且是"看起来成功了"的覆盖。
+    """
+    pid = first_project(ai)["id"]
+    ai.post("/api/ai/apply-suggestions", [{"project_id": pid, "field": "next_action", "value": "原来的下一步"}])
+    status, body = ai.post("/api/ai/apply-suggestions", [
+        {"project_id": pid, "field": "next_action", "value": "接着做，密钥是 sk-******** 那一把"},
+    ])
+    assert status == 200
+    assert body["applied"] == 0 and body["skipped_masked"] == 1, body
+    _, detail = ai.get(f"/api/projects/{pid}")
+    assert detail["next_action"] == "原来的下一步", "带掩码的建议不该落盘"
+
+
 # ---------------- 失败路径 ----------------
 
 def test_analyze_with_garbage_content_returns_500(ai):

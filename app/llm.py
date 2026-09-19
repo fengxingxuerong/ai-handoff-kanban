@@ -3,7 +3,13 @@
 LLM 网关：多端点 + 多 Key 轮询 + 失败自动切换
 - 端点来自本机配置 ~/.ai-kanban/config.json（可在应用设置界面修改）
 - 调用策略：优先 active 端点，失败按序切换其他启用端点；同端点内多 Key 轮询
-- 429 滑动窗口限流 / 5xx / 超时 视为该 Key 或端点不可用，自动切换
+- 429 限流 / 401·403 Key 失效 / 402 余额不足 / 404·410 模型下线 / 5xx / 超时
+  都算这次尝试失败，换下一个 Key，Key 用尽换下一个端点；全部失败抛 LLMError
+
+**没有"滑动窗口限流"，也没有失败冷却**：失败就是当场换下一个，不记状态。
+代价是端点×Key 全挂时最坏要各等一次超时（每端点 60s 默认），
+`test_connection` 同理会把矩阵跑满 —— 这是有意的：单机单用户，宁可慢一次，
+也不要在网关里藏一个"刚才失败过所以这轮不试"的自适应状态（那种状态最难测）。
 """
 from __future__ import annotations
 
@@ -13,7 +19,10 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
+
+from .filelock import blocking_lock
 
 DEFAULT_TIMEOUT = 60
 MAX_TOKENS = 3000
@@ -191,8 +200,24 @@ MAX_USAGE_LINES = 5000
 KEEP_ON_TRIM = 2000
 
 
+@contextmanager
+def _usage_locked(timeout: float = 10.0):
+    """usage.jsonl 的**跨进程**互斥。
+
+    `_USAGE_LOCK` 只是线程锁，而真实写入方是两条进程：桌面 exe 里的 uvicorn，和
+    MCP stdio 服务（它 import 的是同一份代码，但各有各的锁）。追加方与裁剪方不互斥时，
+    `_trim_usage` 的「整读 → 重写 → os.replace」会把"读走之后别人刚追加的那一行"
+    连文件一起替换掉 —— 实测裁剪一次正好吞掉并发写入的一条，账本从此长期偏小。
+    """
+    with blocking_lock(_usage_file().with_suffix(".lock"), timeout=timeout, what="用量账本"):
+        yield
+
+
 def _trim_usage(f: Path) -> None:
-    """滚动裁剪 usage.jsonl，只保留最近 KEEP_ON_TRIM 条"""
+    """滚动裁剪 usage.jsonl，只保留最近 KEEP_ON_TRIM 条。
+
+    必须只在**超过**上限时才改写文件：常态是纯追加，一次读+一次 replace 是白付的写放大。
+    """
     try:
         lines = f.read_text(encoding="utf-8").splitlines()
     except Exception:
@@ -215,7 +240,7 @@ def _record_usage(feature: str, endpoint: str, model: str, usage: dict | None, d
             "duration_s": round(duration, 2),
             "ok": ok,
         }
-        with _USAGE_LOCK:
+        with _USAGE_LOCK, _usage_locked():
             f = _usage_file()
             with open(f, "a", encoding="utf-8") as fp:
                 fp.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -261,14 +286,16 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
                 _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t0, True)
                 return content, ep["name"]
             except urllib.error.HTTPError as e:
-                _record_usage(feature or "未标注", ep["name"], model, None, time.time() - t0, False)
                 code = e.code
                 body = ""
                 try:
                     body = e.read().decode("utf-8", "replace")[:300]
                 except Exception:
                     pass
-                # 模型不支持低 temperature（如 kimi 只允许 1）：用 1 重试一次
+                # 模型不支持低 temperature（如 kimi 只允许 1）：用 1 重试一次。
+                # 失败记账挪到分支末尾 —— 原来一进 except 就记一条 ok=False，
+                # 重试成功又记一条 ok=True，于是"一次成功调用"在 /api/usage 里
+                # 同时贡献成功与失败（实测 failed 虚高一倍），失败率就成了假数字。
                 if code == 400 and "emperature" in body and temp != 1:
                     try:
                         t1 = time.time()
@@ -276,9 +303,11 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
                         _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t1, True)
                         return content, ep["name"]
                     except Exception as e2:
+                        _record_usage(feature or "未标注", ep["name"], model, None, time.time() - t0, False)
                         errors.append(f"{ep['name']}/{model}: temp=1 重试仍失败 {type(e2).__name__}")
                         time.sleep(0.4)
                         continue
+                _record_usage(feature or "未标注", ep["name"], model, None, time.time() - t0, False)
                 if code == 429:
                     errors.append(f"{ep['name']}/{model}: 限流(429)")
                 elif code in (401, 403):

@@ -2089,10 +2089,18 @@ async function applySuggestion(btn) {
   if (!pid || !txt) return;
   if (!confirm("把这条建议写入该项目的「下一步行动」？")) return;
   try {
-    await api("/api/ai/apply-suggestions", {
+    const r = await api("/api/ai/apply-suggestions", {
       method: "POST",
       body: JSON.stringify([{ project_id: pid, field: "next_action", value: txt }]),
     });
+    // 服务端可能一条都没写（项目已被删；或内容里带着脱敏掩码，写进去就是拿星号覆盖真内容）。
+    // 原来这里不看返回值直接宣布"已应用 ✓"，于是点了个按钮、什么也没发生、界面还说成功了。
+    if (!r || !r.applied) {
+      toast(r && r.skipped_masked
+        ? "未写入：这条建议里带着脱敏掩码，请到项目里核对原文后手动补"
+        : "未写入：没找到对应项目（可能已被删除）");
+      return;
+    }
     btn.classList.add("done");
     btn.textContent = "已应用 ✓";
     toast("建议已写入项目下一步行动 ✓");
@@ -3039,7 +3047,8 @@ async function openToday() {
         <div class="tt">${esc(t.title)}${t.due_date ? ` <span class="due-badge">📅 ${esc(t.due_date)}</span>` : ""}</div>
         <div class="td">${esc(t.project_name)} · ${esc(t.project_status)}${(t.refs && t.refs.length) ? " · 📍 " + t.refs.map(esc).join("、") : ""}</div>
         <div class="tfoot"><span class="tag2 pri-${priCls(t.priority)}">${esc(priCls(t.priority))}</span>${t.status === "阻塞" ? '<span class="agent">阻塞</span>' : ""}</div>
-      </div>`).join("");
+      </div>`).join("")
+      + (r.truncated ? `<div class="hint">这里只有前 ${r.tasks.length} 条，共 ${r.total} 条可以动手 —— 剩下的请到各项目详情里看。</div>` : "");
   } catch (e) { box.innerHTML = "加载失败：" + esc(e.message); }
 }
 

@@ -31,6 +31,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 本机有代理，显式绕过
+# 输出里有 ✓ 和中文：重定向到文件时 Python 用系统 ANSI 码页（本机 cp936），
+# 打第一个 ✓ 就 UnicodeEncodeError 崩掉 —— 门禁脚本必须能被重定向与管道。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:  # noqa: BLE001  被替换掉的 stdout 可能没有 reconfigure
+    pass
+
 
 ROWS: list[dict] = []
 ISSUES: list[dict] = []
@@ -811,14 +818,19 @@ def run_all(api: Http, mcp: Mcp, data_dir: Path, repo_dir: Path, stub: StubLLM, 
                                                 "path": r"C:\Windows\System32\evil.md"})
         st2, r2 = api.post("/api/export/save", {"filename": "x.exe", "content": "x",
                                                 "path": str(Path(tempfile.gettempdir()) / "x.exe")})
+        st4, r4 = api.post("/api/export/save", {"filename": "AGENTS.md", "content": "x",
+                                                "path": "AGENTS.md"})
         safe = Path(tempfile.gettempdir()) / "kanban_scenario_ok.md"
+        # 先清掉上一轮的产物：这个路径是固定的，留着的话第二次跑必然撞 409（覆盖闸门），
+        # 于是"防误覆盖"这条场景本身变成"看上一次跑没跑过" —— 门禁必须可重入。
+        safe.unlink(missing_ok=True)
         st3, r3 = api.post("/api/export/save", {"filename": "ok.md", "content": "# ok", "path": str(safe)})
-        return expect(f"系统目录 {st1}；非 md 后缀 {st2}；临时目录 {st3} 且文件存在={safe.exists()}",
-                      st1 == 400 and st2 == 400 and st3 == 200 and safe.exists())
+        return expect(f"系统目录 {st1}；非 md 后缀 {st2}；相对路径 {st4}；临时目录 {st3} 且文件存在={safe.exists()}",
+                      st1 == 400 and st2 == 400 and st3 == 200 and st4 == 400 and safe.exists())
 
     check("B8", "防误覆盖系统文件：路径限制",
-          "写 C:\\Windows\\System32、写 .exe、写临时目录",
-          "系统目录 400、非法后缀 400、正常路径成功", b8)
+          "写 C:\\Windows\\System32、写 .exe、写相对路径、写临时目录",
+          "系统目录/非法后缀/相对路径都 400，临时目录正常写入", b8)
 
     def b9():
         st1, _ = api.get("/api/health", headers={"Origin": "http://evil.example.com"})

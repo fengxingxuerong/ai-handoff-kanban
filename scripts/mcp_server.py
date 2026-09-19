@@ -33,6 +33,17 @@ sys.path.insert(0, str(HERE.parent))
 
 os.environ.setdefault("KANBAN_NO_SCHEDULER", "1")   # 短命进程不起后台调度线程
 
+# MCP 的 stdio 传输按规范就是 UTF-8，而中文 Windows 上子进程的三条标准流默认跟随控制台
+# 码页（cp936）。不钉死的话两头都坏：出方向 `ensure_ascii=False` 的中文工具描述被编成
+# GBK，客户端按 UTF-8 解 → 解码异常，工具目录等于没发布；入方向客户端发来的中文任务标题
+# 被按 GBK 解 → 静默写进看板一堆乱码。**协议规范优先于宿主环境**，所以在这里自己收口，
+# 而不是要求每个客户端都记得设 PYTHONIOENCODING。
+for _stream in (sys.stdin, sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except Exception:  # noqa: BLE001  被替换过的流可能没有 reconfigure
+        pass
+
 from app import main as kanban  # noqa: E402
 
 SERVER_NAME = "ai-kanban"
@@ -263,7 +274,9 @@ def t_next_task(args: dict) -> str:
         raise ValueError(f"找不到项目：{pid}")
     tasks = p.get("tasks") or []
     ready = kanban.executable_tasks(tasks)
-    blocked = [t for t in tasks if t not in ready and t.get("status") != "已完成"]
+    # 按 id 比：`t not in ready` 是整份字典的相等比较，任务一多就是几万次全字段对比
+    ready_ids = {t.get("id") for t in ready}
+    blocked = [t for t in tasks if t.get("id") not in ready_ids and t.get("status") != "已完成"]
     if not tasks:
         return f"「{p.get('name')}」还没有任务。"
     lines = [f"# {p.get('name')} · 现在可以做"]

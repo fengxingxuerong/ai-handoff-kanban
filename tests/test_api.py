@@ -220,6 +220,65 @@ def test_export_redact_hides_secrets(server):
     assert "sk-abcd1234efgh5678" not in safe_all
 
 
+@pytest.mark.parametrize("secret", [
+    '{"api_key": "abcdef1234567890", "model": "gpt-4o"}',       # JSON 形态（键名带引号）
+    "gitlab: glpat-AbCdEf123456",
+    "AKIA1234567890ABCDEF",                                      # AWS 长期凭据
+    "ASIA1234567890ABCDEF",                                      # AWS 临时凭据
+    "postgres://app:S3cr3tPass@db.internal:5432/prod",           # 连接串
+    "header: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghij1234567890",
+    "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAabcdefg\n-----END RSA PRIVATE KEY-----",
+])
+def test_redact_covers_common_secret_shapes(secret):
+    """脱敏的用途决定它的覆盖面：交接物里最常见的是 JSON 配置和连接串，不是裸 sk-。
+
+    老规则只认 `key: value`（键名不带引号），于是 `"api_key": "xxx"` 整段原样导出；
+    JWT / PEM / AWS 那几种形态压根没有规则。
+    """
+    from app.main import redact_text
+
+    out = redact_text(secret)
+    assert "********" in out, f"没有任何掩码：{out}"
+    for frag in ("abcdef1234567890", "AbCdEf123456", "1234567890ABCDEF",
+                 "S3cr3tPass", "abcdefghij1234567890", "MIIEpAIBAAKCAQEAabcdefg",
+                 "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"):
+        assert frag not in out, f"{frag} 没被盖住：{out}"
+
+
+def test_redact_leaves_ordinary_handoff_text_alone():
+    """别把有用信息一起盖掉：短提交号、文件路径、中文人名都得原样留着"""
+    from app.main import redact_text
+
+    text = "最新提交 3f2a1b9c 修好了登录；文档在 docs/handoff.md；负责人张三；先跑 pytest -n auto"
+    assert redact_text(text) == text
+
+
+def test_summarize_uploads_redacted_text_only(ai_client):
+    """会话提炼会把整段对话发到模型那边 —— 贴进来的凭据必须在这一步之前被盖掉"""
+    pid = ai_client.create_project("提炼脱敏")[1]["id"]
+    ai_client.stub.push_json({"summary": "ok", "new_tasks": [], "memories": [],
+                              "next_action": "", "handoff_note_updates": ""})
+    status, _ = ai_client.post("/api/ai/summarize", {
+        "pid": pid, "text": "帮我改下配置：api_key=abcd1234efgh5678，改完重启服务"})
+    assert status == 200
+    sent = json.dumps(ai_client.stub.calls[-1]["payload"], ensure_ascii=False)
+    assert "abcd1234efgh5678" not in sent, "密钥原文被发出去了"
+    assert "********" in sent
+
+
+def test_analyze_prompt_keeps_ids_but_redacts_free_text(ai_client):
+    """监管分析的 prompt：自由文本脱敏，但项目 id / 标题不能一起盖掉（建议要回传对齐）"""
+    status, proj = ai_client.post("/api/projects", {
+        "name": "脱敏分析项目", "status": "进行中",
+        "background": "登录模块用的第三方密钥 secret: zzzz9998887776666，先跑联调"})
+    assert status == 201
+    ai_client.stub.push_json({"summary": "整体正常", "insights": [], "global_suggestions": []})
+    assert ai_client.post("/api/ai/analyze")[0] == 200
+    sent = json.dumps(ai_client.stub.calls[-1]["payload"], ensure_ascii=False)
+    assert "zzzz9998887776666" not in sent, "背景里的密钥被原样送进模型"
+    assert proj["id"] in sent and "脱敏分析项目" in sent
+
+
 # ---------------- 任务过程日志 ----------------
 
 def test_task_journal_and_status_transition(server):
