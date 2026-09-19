@@ -279,6 +279,32 @@ def test_analyze_prompt_keeps_ids_but_redacts_free_text(ai_client):
     assert proj["id"] in sent and "脱敏分析项目" in sent
 
 
+def test_idempotent_replay_writes_nothing_at_all(app_client, monkeypatch):
+    """命中幂等键时**一次落盘都不许发生**，不是"写回同样的内容"。
+
+    `mutate_project` 现在认 `fn` 返回 False 表示"没改过"，这条钉子保证以后有人把它
+    改回无条件写盘时立刻变红 —— 否则重试虽然不产生重复任务，却仍然在刷 last-good、
+    刷 updated_at、并和另一个真实写入抢锁。
+    """
+    import app.main as kanban
+
+    _, proj = app_client.create_project("回放不落盘")
+    pid = proj["id"]
+    app_client.post(f"/api/projects/{pid}/tasks?client_ref=replay-1", {"title": "一条"})
+
+    writes = {"n": 0}
+    real_save = kanban._save_data
+
+    def counted(*a, **kw):
+        writes["n"] += 1
+        return real_save(*a, **kw)
+
+    monkeypatch.setattr(kanban, "_save_data", counted)
+    s, again = app_client.post(f"/api/projects/{pid}/tasks?client_ref=replay-1", {"title": "一条"})
+    assert s == 201 and again["title"] == "一条"
+    assert writes["n"] == 0, f"幂等回放仍然写了 {writes['n']} 次盘"
+
+
 # ---------------- 部分更新（PATCH）与接手包脱敏 ----------------
 
 def test_patch_project_keeps_fields_that_were_not_sent(app_client):

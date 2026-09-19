@@ -171,3 +171,37 @@ def test_reports_dir_is_capped_and_keeps_the_newest(tmp_path, monkeypatch):
     assert len(names) == 5, f"报告没裁剪：{names}"
     assert names[-1] == "20260008", "必须留下最新的一份"
     assert "20260000" not in names, "该被裁掉的最旧一份还在"
+
+
+def test_idempotency_table_is_capped(app_client):
+    """client_ref 表也是追加型存储：只会比"最近这么多键"更长，必须自己收口"""
+    import app.main as kanban
+
+    _, proj = app_client.create_project("幂等表上限")
+    pid = proj["id"]
+    for i in range(kanban.MAX_IDEM + 60):
+        app_client.post(f"/api/projects/{pid}/tasks?client_ref=op-{i}",
+                        {"title": f"任务 {i}"})
+    data = json.loads((kanban.data_dir() / "projects.json").read_text(encoding="utf-8"))
+    table = data.get(kanban.IDEM_KEY) or {}
+    assert len(table) <= kanban.MAX_IDEM, f"幂等表涨到 {len(table)} 条，没裁"
+    assert "op-0" not in table and f"op-{kanban.MAX_IDEM + 59}" in table, "应当丢最老的键"
+
+
+def test_http_create_accepts_client_ref_query_param(app_client):
+    """HTTP 侧同样能去重：智能体不走 MCP 时（直接打接口）也会超时重试"""
+    _, proj = app_client.create_project("HTTP 幂等")
+    pid = proj["id"]
+    s1, t1 = app_client.post(f"/api/projects/{pid}/tasks?client_ref=web-1",
+                             {"title": "只建一次"})
+    s2, t2 = app_client.post(f"/api/projects/{pid}/tasks?client_ref=web-1",
+                             {"title": "只建一次"})
+    assert t1["id"] == t2["id"], "同一个键建出了两条"
+    _, back = app_client.get(f"/api/projects/{pid}")
+    assert sum(1 for t in back["tasks"] if t["title"] == "只建一次") == 1
+
+    _, p2 = app_client.post("/api/projects?client_ref=proj-1", {"name": "按键建项目"})
+    _, p3 = app_client.post("/api/projects?client_ref=proj-1", {"name": "按键建项目"})
+    assert p2["id"] == p3["id"], "项目创建同理"
+    names = [p["name"] for p in app_client.get("/api/projects")[1]["projects"]]
+    assert names.count("按键建项目") == 1

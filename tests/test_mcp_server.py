@@ -184,9 +184,15 @@ def test_unknown_method_returns_jsonrpc_error(mcp):
     assert resp["error"]["code"] == -32601
 
 
-def test_resources_and_prompts_are_empty_not_error(mcp):
-    assert mcp.call("resources/list")["result"]["resources"] == []
-    assert mcp.call("prompts/list")["result"]["prompts"] == []
+def test_resources_and_prompts_answer_even_with_an_empty_board(mcp):
+    """空看板上也要答得出来（不是 error、也不是空数组）：
+    客户端在列表阶段就按"有没有这个能力"决定要不要显示入口。"""
+    res = mcp.call("resources/list")["result"]
+    assert "kanban://projects" in {r["uri"] for r in res["resources"]}, res
+    assert len(mcp.call("prompts/list")["result"]["prompts"]) == 3
+    # 指向不存在项目的资源仍然是错误，不能返回一份空壳装作成功
+    resp = mcp.call("resources/read", {"uri": "kanban://project/nope/handoff"})
+    assert resp.get("error") or resp["result"].get("isError"), resp
 
 
 # ---------------- 工具目录 ----------------
@@ -751,3 +757,134 @@ def test_handoff_tool_reports_package_size(mcp):
     sid = small.split("[")[-1].split("]")[0]
     text2, _ = mcp.tool("kanban_handoff", {"project_id": sid})
     assert "本包约" not in text2, "正常长度不该打扰"
+
+
+# ---------------- resources / prompts：把已有内容换个入口摆出来 ----------------
+
+def _result(mcp, method, params=None):
+    resp = mcp.call(method, params or {})
+    assert "result" in resp, resp
+    return resp["result"]
+
+
+def test_resources_are_listed_and_readable(mcp):
+    """交接内容摆成资源：客户端把它们渲染成用户可选项，不占每轮对话的工具目录"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "资源项目", "status": "进行中"})[0])
+    resources = {r["uri"]: r for r in _result(mcp, "resources/list")["resources"]}
+    assert "kanban://projects" in resources and "kanban://board/today" in resources
+    handoff = f"kanban://project/{pid}/handoff"
+    ctx = f"kanban://project/{pid}/context"
+    assert handoff in resources and ctx in resources, list(resources)[:6]
+    assert resources[handoff]["mimeType"] == "text/markdown"
+
+    body = _result(mcp, "resources/read", {"uri": handoff})
+    assert body["contents"][0]["uri"] == handoff
+    assert "资源项目" in body["contents"][0]["text"]
+    assert body["ttlMs"] and body["cacheScope"], "resultType:complete 的结果要带缓存提示"
+
+    parsed = json.loads(_result(mcp, "resources/read", {"uri": ctx})["contents"][0]["text"])
+    assert parsed["project"]["id"] == pid and parsed["code_reality"]["available"] is False
+
+    templates = _result(mcp, "resources/templates/list")["resourceTemplates"]
+    assert any("{pid}" in t["uriTemplate"] for t in templates)
+
+
+def test_unknown_resource_and_prompt_are_protocol_errors(mcp):
+    """规范：没有这个资源/提示词是调用方的形状错误 → -32602（客户端也接受 -32002，但我们只发一种）"""
+    for method, params in (("resources/read", {"uri": "kanban://没有这个东西"}),
+                           ("prompts/get", {"name": "nope"})):
+        resp = mcp.call(method, params)
+        assert resp.get("error", {}).get("code") == -32602, (method, resp)
+
+
+def test_declared_capabilities_match_what_the_server_answers(mcp):
+    """声明了 resources/prompts 才谈得上被发现；而且 initialize 与 discover 必须报同一份"""
+    init = _result(mcp, "initialize", {"protocolVersion": "2025-06-18"})
+    disc = _result(mcp, "server/discover")
+    for caps in (init["capabilities"], disc["capabilities"]):
+        assert {"tools", "resources", "prompts"} <= set(caps), caps
+    assert init["capabilities"] == disc["capabilities"]
+    # 能力声明与真能回答的方法要一致：声明了却没实现，客户端一调就报错
+    assert "resources" in _result(mcp, "resources/list")
+    assert "prompts" in _result(mcp, "prompts/list")
+
+
+def test_prompts_offer_takeover_daily_and_wrapup(mcp):
+    """三段提示词就是原本来写在 instructions 里的规矩，摆成用户可点的入口"""
+    names = {p["name"] for p in _result(mcp, "prompts/list")["prompts"]}
+    assert names == {"takeover", "daily", "wrapup"}
+    mcp.tool("kanban_create_project", {"name": "接手演练", "status": "进行中"})
+
+    got = _result(mcp, "prompts/get", {"name": "takeover", "arguments": {"project": "接手演练"}})
+    text = got["messages"][0]["content"]["text"]
+    assert got["messages"][0]["role"] == "user"
+    assert "kanban_context" in text and "接手演练" in text, text[:160]
+
+    daily = _result(mcp, "prompts/get", {"name": "daily", "arguments": {}})
+    assert "现在就能动手" in daily["messages"][0]["content"]["text"]
+
+    wrap = _result(mcp, "prompts/get", {"name": "wrapup", "arguments": {"project": "接手演练"}})
+    for step in ("kanban_update_task", "kanban_log_progress", "kanban_memory_add",
+                 "kanban_update_project"):
+        assert step in wrap["messages"][0]["content"]["text"], step
+
+
+def test_prompt_project_reference_must_be_unambiguous(mcp):
+    mcp.tool("kanban_create_project", {"name": "同名项目"})
+    mcp.tool("kanban_create_project", {"name": "同名项目"})
+    resp = mcp.call("prompts/get", {"name": "takeover", "arguments": {"project": "同名"}})
+    assert resp.get("error", {}).get("code") == -32602, resp
+    assert "歧义" in resp["error"]["message"], resp
+
+
+def test_readonly_mode_still_serves_resources(tmp_path):
+    """只读模式关掉的是写工具；资源与提示词本来就是读，不该一起消失"""
+    data_dir = tmp_path / "kanban-mcp-readonly-res"
+    data_dir.mkdir(parents=True)
+    cfg = data_dir / "config.json"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(json.dumps({"ai": {"endpoints": [], "mcp_readonly": True}},
+                              ensure_ascii=False), encoding="utf-8")
+    c = McpClient(data_dir)
+    try:
+        assert c.tool("kanban_create_project", {"name": "只读下不该建成"})[1], "只读模式没生效"
+        assert "resources" in _result(c, "resources/list"), "只读模式把资源一起摘掉了"
+        assert _result(c, "prompts/list")["prompts"]
+    finally:
+        c.close()
+
+
+# ---------------- 创建幂等键 ----------------
+
+def test_client_ref_dedupes_retried_create(mcp):
+    """智能体超时重试是常态：同一个 client_ref 第二次必须拿回同一条而不是再建一条。
+
+    重复任务不是"多一条数据"这么轻：它会跟着进交接包、进拓扑序，
+    事后只能靠"标题一模一样"人肉分辨哪条是真的。
+    """
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "幂等项目"})[0])
+    first, err = mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "只应该存在一条", "client_ref": "op-2026-09-19-1"})
+    assert not err, first
+    tid = last_id(first)
+    again, err = mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "只应该存在一条", "client_ref": "op-2026-09-19-1"})
+    assert not err and last_id(again) == tid, f"重试建出了新任务：{again}"
+
+    other, _ = mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "另一条", "client_ref": "op-2026-09-19-2"})
+    assert last_id(other) != tid, "不同的键应当各建一条"
+
+    detail = _result(mcp, "tools/call", {"name": "kanban_get_project",
+                                         "arguments": {"project_id": pid}})
+    text = detail["content"][0]["text"]
+    assert text.count("只应该存在一条") == 1, "重复项还是落盘了"
+    assert "另一条" in text
+
+
+def test_create_without_client_ref_still_creates_twice(mcp):
+    """不传键时行为不变 —— 幂等是可选的，不能把正常连建两条也吞掉"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "无键项目"})[0])
+    a = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "重复标题"})[0])
+    b = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "重复标题"})[0])
+    assert a != b

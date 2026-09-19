@@ -539,15 +539,19 @@ def mutate(fn) -> tuple[bool, object]:
 
 
 def mutate_project(pid: str, fn):
-    """在锁内定位项目并执行 fn(project, data) -> None，返回修改后的项目；找不到返回 None"""
+    """在锁内定位项目并执行 fn(project, data)，返回修改后的项目；找不到返回 None
+
+    `fn` 显式返回 `False` 表示"这次一个字都没改"，于是不落盘 —— 幂等键的回放走这条。
+    返回 None（所有老调用方的写法）照旧算"改过了"。
+    """
     box: dict = {"p": None}
 
     def worker(data: dict) -> tuple[bool, object]:
         for p in data.get("projects", []):
             if p.get("id") == pid:
-                fn(p, data)
+                changed = fn(p, data)
                 box["p"] = p
-                return True, p
+                return changed is not False, p
         return False, None
 
     mutate(worker)
@@ -913,8 +917,38 @@ def list_projects():
     return {"projects": out, "data_recovered": recovered, "recovered_from": recovered_from}
 
 
+MAX_IDEM = 500           # 幂等键表上限：追加型存储，按硬性约定 11 必须有上限
+IDEM_KEY = "_client_refs"
+
+
+def _idem_seen(data: dict, ref: str) -> str | None:
+    """这个 `client_ref` 之前用过吗？用过就返回当初建出来的 id。"""
+    hit = (data.get(IDEM_KEY) or {}).get(ref)
+    return hit if isinstance(hit, str) else None
+
+
+def _idem_remember(data: dict, ref: str, ident: str) -> None:
+    """记住"这个键造出了这条记录"。
+
+    智能体调用超时后重试是常态：没有幂等键，同一条指令就会造出成对的重复任务，
+    重复项还会跟着进交接包与拓扑序，事后要靠"标题一样"手工分辨。
+    写入与记账必须在**同一个临界区**里（所以它吃 `mutate` 的那份 `data`）——
+    分两次做就会出现"建成了但没记下来"，重试照样翻倍。
+    同一个键配不同正文时按"重试"处理：返回第一次的结果，不覆盖。
+    """
+    table = data.setdefault(IDEM_KEY, {})
+    table[ref] = ident
+    while len(table) > MAX_IDEM:      # 先进先出；幂等窗口只需覆盖"刚才那次重试"
+        table.pop(next(iter(table)))
+
+
+def _clean_ref(raw) -> str:
+    ref = str(raw or "").strip()
+    return ref[:80]
+
+
 @app.post("/api/projects", status_code=201)
-def create_project(body: ProjectIn):
+def create_project(body: ProjectIn, client_ref: str = ""):
     now = now_str()
     project = {
         "id": uuid.uuid4().hex[:12], "name": body.name.strip(), "status": body.status,
@@ -924,17 +958,27 @@ def create_project(body: ProjectIn):
         "next_action": body.next_action, "tasks": [],
         "created_at": now, "updated_at": now,
     }
+    ref = _clean_ref(client_ref)
 
     def worker(data: dict):
+        if ref:
+            hit = _idem_seen(data, ref)
+            if hit:
+                for p in data.get("projects", []):
+                    if p.get("id") == hit:
+                        return False, p      # 重试：原样返回，一个字节都不写
+                data.get(IDEM_KEY, {}).pop(ref, None)   # 键指向的记录已被删，别再认它
         # 首次落盘：磁盘上还没有数据文件时，说明看板从未被真正使用过，
         # 内置示例数据只用于引导界面，不该跟着用户的第一条真实数据一起写进去。
         if not data_file().exists():
             data["projects"] = []
         data.setdefault("projects", []).insert(0, project)
+        if ref:
+            _idem_remember(data, ref, project["id"])
         return True, project
 
-    mutate(worker)
-    return project
+    _, result = mutate(worker)
+    return result
 
 
 @app.get("/api/projects/{pid}")
@@ -1025,8 +1069,9 @@ def delete_project(pid: str):
 # ---- 任务 CRUD ----
 
 @app.post("/api/projects/{pid}/tasks", status_code=201)
-def create_task(pid: str, body: TaskIn):
+def create_task(pid: str, body: TaskIn, client_ref: str = ""):
     now = now_str()
+    ref = _clean_ref(client_ref)
     task = {
         "id": uuid.uuid4().hex[:12],
         "title": body.title.strip(), "desc": body.desc,
@@ -1036,21 +1081,33 @@ def create_task(pid: str, body: TaskIn):
         "refs": clean_refs(body.refs),
         "depends_on": [],          # 依赖在锁内算，见 apply
     }
+    replay: dict = {}
 
-    def apply(p: dict, _data: dict) -> None:
+    def apply(p: dict, data: dict):
         # 取兄弟任务、清洗依赖、判环全部放进同一个临界区。先前是拿锁外快照算好
         # depends_on 再另起一次锁写入 —— 两个并发请求各自都判得过，
         # 合起来却能把依赖写成一个环（环一进来 topo_order 就静默退化成原序）。
+        if ref:
+            hit = _idem_seen(data, ref)
+            if hit:
+                for t in (p.get("tasks") or []):
+                    if t.get("id") == hit:
+                        replay["task"] = t
+                        return False      # 重试：原样返回那条，一个字节都不写
+                data.get(IDEM_KEY, {}).pop(ref, None)   # 记录已删，别再认这个键
         siblings = [t for t in (p.get("tasks") or []) if isinstance(t, dict)]
         task["depends_on"] = clean_deps(body.depends_on, {t.get("id") for t in siblings})
         if has_cycle(task_graph(siblings + [task])):
             raise HTTPException(400, "依赖会形成循环，已放弃创建")
         p.setdefault("tasks", []).insert(0, task)
         p["updated_at"] = now
+        if ref:
+            _idem_remember(data, ref, task["id"])
 
-    if mutate_project(pid, apply) is None:
+    p = mutate_project(pid, apply)
+    if p is None:
         raise HTTPException(404, "项目不存在")
-    return task
+    return replay.get("task") or task
 
 
 def _apply_task(t: dict, p: dict, tid: str, body: TaskIn) -> None:

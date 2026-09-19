@@ -23,6 +23,7 @@ AI 交接看板 - MCP 服务（stdio 传输，零依赖手写 JSON-RPC 2.0）
 from __future__ import annotations
 
 import json
+import re
 import os
 import sys
 import traceback
@@ -65,8 +66,21 @@ SUPPORTED_VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2
 DEFAULT_VERSION = SUPPORTED_VERSIONS[0]
 
 # 我们声明的服务能力。只有一份：initialize 与 server/discover 必须报同一件事，
-# 两处各写一遍的话，将来加 resources/prompts 时必然只改到一边。
-CAPABILITIES = {"tools": {"listChanged": False}}
+# 两处各写一遍的话，将来加能力时必然只改到一边。
+# resources / prompts 都只是"把已有的交接内容换个入口摆出来"，不是新能力：
+# 客户端把它们渲染成用户可选项，因此不占每轮对话的工具目录。
+CAPABILITIES = {"tools": {"listChanged": False},
+                "resources": {"listChanged": False},
+                "prompts": {"listChanged": False}}
+
+# 创建类工具共用的幂等键。智能体超时后重试是常态，没有这个键同一条指令就会
+# 造出成对的重复任务（重复项还会跟着进交接包和拓扑序）。
+# 命中时返回**第一次建出来的那条的 id**：所以"看到的 id 和上次一样"就等于去重发生过。
+CLIENT_REF_SCHEMA = {
+    "type": "string", "maxLength": 80,
+    "description": "可选幂等键：同一次工作重试时传同一个值（比如你自己的操作 id），"
+                   "看板会返回第一次创建的那条而不是再建一条。",
+}
 
 
 def log(msg: str) -> None:
@@ -203,7 +217,7 @@ def t_create_project(args: dict) -> str:
         handoff_note=args.get("handoff_note") or "",
         next_action=args.get("next_action") or "",
     )
-    project = kanban.create_project(body)
+    project = kanban.create_project(body, client_ref=args.get("client_ref") or "")
     return f"已创建项目 [{project['id']}] {project['name']}（状态 {project['status']}）"
 
 
@@ -236,7 +250,7 @@ def t_add_task(args: dict) -> str:
         depends_on=args.get("depends_on") or [],
         due_date=args.get("due_date") or "",
     )
-    task = kanban.create_task(pid, body)
+    task = kanban.create_task(pid, body, client_ref=args.get("client_ref") or "")
     refs = ("；涉及 " + "、".join(task["refs"])) if task.get("refs") else ""
     return f"已在项目 [{pid}] 新增任务 [{task['id']}] {task['title']}（{task['status']}/{task['priority']}）{refs}"
 
@@ -490,6 +504,7 @@ TOOLS: list[dict] = [
                 "handoff_note": {"type": "string", "description": "给接手者的交接说明"},
                 "next_action": {"type": "string", "description": "下一步行动"},
                 "tags": {"type": "array", "items": {"type": "string"}},
+                "client_ref": CLIENT_REF_SCHEMA,
             },
             "required": ["name"], "additionalProperties": False,
         },
@@ -532,6 +547,7 @@ TOOLS: list[dict] = [
                                "description": "前置任务 id（同一项目内），用于排「先做哪个」"},
                 "due_date": {"type": "string",
                              "description": "截止日期 YYYY-MM-DD，留空表示未设置"},
+                "client_ref": CLIENT_REF_SCHEMA,
             },
             "required": ["project_id", "title"], "additionalProperties": False,
         },
@@ -748,6 +764,133 @@ def visible_tools() -> list[dict]:
     return [t for t in TOOLS if TOOL_KIND.get(t["name"], ("write",))[0] == "read"]
 
 
+# ---------------- resources：把交接内容摆成"客户端可挑的资源" ----------------
+#
+# 为什么不干脆再加三个工具：工具目录每一轮都占模型的上下文，而"交接包"这类内容
+# 通常只在一开始读一次。resources 在客户端（Claude Desktop 的 @ 菜单、Cursor、
+# Continue 的 @mcp）是**人选**的入口，不进目录 —— 同一份内容换个摆法，不扩工具面。
+# 读出来的文本一律走同一批 handler，不复刻第二套渲染逻辑。
+
+RESOURCE_INDEXES = [
+    ("kanban://projects", "看板项目总览", "text/plain",
+     "所有项目的状态、进度、任务数与就绪度一览"),
+    ("kanban://board/today", "现在就能动手的任务", "text/plain",
+     "跨项目的可执行任务，按优先级与截止日期排序"),
+]
+RESOURCE_TEMPLATES = [
+    ("kanban://project/{pid}/handoff", "项目交接包（Markdown）", "text/markdown"),
+    ("kanban://project/{pid}/context", "项目机器可读接手包（JSON）", "application/json"),
+]
+RESOURCE_LIMIT = 200          # 项目多到一定程度，列出来的资源就没法挑了；与工具目录同一考量
+
+
+def _uri_kind(uri: str) -> tuple[str | None, str]:
+    """uri → (种类, 项目 id)；认不出来返回 (None, "")。"""
+    if uri == "kanban://projects":
+        return "projects", ""
+    if uri == "kanban://board/today":
+        return "today", ""
+    m = re.match(r"^kanban://project/([^/]+)/(handoff|context)$", uri or "")
+    return (m.group(2), m.group(1)) if m else (None, "")
+
+
+def list_resources() -> list[dict]:
+    out = [{"uri": u, "name": n, "mimeType": mt, "description": d}
+           for u, n, mt, d in RESOURCE_INDEXES]
+    for p in _projects_brief()[:RESOURCE_LIMIT]:
+        pid = p["id"]
+        out.append({"uri": f"kanban://project/{pid}/handoff",
+                    "name": f"{p['name']} · 交接包", "mimeType": "text/markdown",
+                    "description": "完整交接包（已脱敏）：背景、交接说明、下一步、按依赖排序的任务清单"})
+        out.append({"uri": f"kanban://project/{pid}/context",
+                    "name": f"{p['name']} · 接手上下文", "mimeType": "application/json",
+                    "description": "机器可读接手包（已脱敏）：可执行任务、代码现实、就绪度缺口、记忆"})
+    return out
+
+
+def read_resource(uri: str) -> dict:
+    kind, pid = _uri_kind(uri)
+    if kind == "projects":
+        text, mime = t_list_projects({}), "text/plain"
+    elif kind == "today":
+        text, mime = t_today({}), "text/plain"
+    elif kind == "handoff":
+        text, mime = t_handoff({"project_id": pid}), "text/markdown"
+    elif kind == "context":
+        text = json.dumps(kanban.project_context(pid, redact=1), ensure_ascii=False, indent=1)
+        mime = "application/json"
+    else:
+        raise ValueError(f"没有这个资源：{uri}（先 resources/list 看看有哪些）")
+    return {"contents": [{"uri": uri, "mimeType": mime, "text": text}],
+            "ttlMs": 60000, "cacheScope": "public"}
+
+
+# ---------------- prompts：把"怎么接手 / 怎么收尾"摆成用户可点的指令 ----------------
+#
+# 这三段以前只写在 initialize 的 instructions 里，客户端不会把它显示成入口。
+# 摆成 prompts 之后用户能一键插入，正文仍然只引用现有工具与资源，不含任何新能力。
+
+PROMPTS = {
+    "takeover": {
+        "title": "接手一个项目",
+        "description": "读某个项目的交接上下文，先复述约束再动手",
+        "arguments": [{"name": "project", "description": "项目名或 id", "required": True}],
+    },
+    "daily": {
+        "title": "今天做什么",
+        "description": "跨项目列出可以立刻动手的任务并排好顺序",
+        "arguments": [],
+    },
+    "wrapup": {
+        "title": "干完一段活写回看板",
+        "description": "更新任务状态/进度/下一步，并把决策与坑记进项目记忆",
+        "arguments": [{"name": "project", "description": "项目名或 id", "required": True}],
+    },
+}
+
+
+def _resolve_project(ref: str) -> dict:
+    hits = _match_by_name(ref)
+    if not hits:
+        raise ValueError(f"找不到项目「{ref}」；kanban://projects 或 kanban_list_projects 可以看现有项目")
+    if len(hits) > 1:
+        raise ValueError("项目名有歧义，请给 id：" + "、".join(f"{h['name']}[{h['id']}]" for h in hits[:6]))
+    return hits[0]
+
+
+def list_prompts() -> list[dict]:
+    return [{"name": k, "title": v["title"], "description": v["description"],
+             "arguments": v["arguments"]} for k, v in PROMPTS.items()]
+
+
+def get_prompt(name: str, args: dict) -> dict:
+    spec = PROMPTS.get(name or "")
+    if not spec:
+        raise ValueError(f"没有这个提示词：{name}；可用：{'、'.join(PROMPTS)}")
+    if name == "daily":
+        text = ("下面是看板上「现在就能动手」的任务（依赖已满足、自己未完成），"
+                "按优先级和截止日期排过序。挑一条开始做，做完用 kanban_update_task 改状态，"
+                "别一次领多条。\n\n" + t_today({}))
+    else:
+        p = _resolve_project(str(args.get("project") or ""))
+        pid = p["id"]
+        if name == "takeover":
+            text = (f"接手项目「{p['name']}」（id {pid}）。先读它的交接上下文："
+                    "kanban_context 或资源 kanban://project/" + pid + "/context，"
+                    "然后向用户复述三件事——背景与约束、交接说明里点过的坑、你现在要从哪条任务开始"
+                    "（用 start_here / kanban_next_task，别挑被前置挡住的）。"
+                    "复述完得到确认再动手写代码。")
+        else:
+            text = (f"项目「{p['name']}」（id {pid}）这一段活干完了，按看板约定写回："
+                    "1) 用 kanban_update_task 把做完的任务改成「已完成」（状态变化会自动进过程轨迹）；"
+                    "2) 用 kanban_log_progress 给还在做的任务留一条「改了什么决策/踩了什么坑」；"
+                    "3) 有长期价值的结论用 kanban_memory_add 记成 决策/坑/约定；"
+                    "4) 用 kanban_update_project 更新 progress 与 next_action，"
+                    "next_action 要写成下一条能直接开工的具体动作。")
+    return {"description": spec["description"],
+            "messages": [{"role": "user", "content": {"type": "text", "text": text}}]}
+
+
 def _validate_args(schema: dict, args: dict) -> None:
     """按工具自己声明的 inputSchema 校验入参。
 
@@ -869,9 +1012,32 @@ def handle(msg: dict) -> dict | None:
             detail = getattr(e, "detail", None) or str(e) or type(e).__name__
             return _ok(mid, {"content": [{"type": "text", "text": f"执行失败：{detail}"}], "isError": True})
 
-    if method in ("resources/list", "prompts/list"):
-        key = "resources" if method.startswith("resources") else "prompts"
-        return _ok(mid, {key: []})
+    if method == "resources/list":
+        return _ok(mid, {"resources": list_resources(), "ttlMs": 60000, "cacheScope": "public"})
+
+    if method == "resources/templates/list":
+        return _ok(mid, {"resourceTemplates": [
+            {"uriTemplate": u, "name": n, "mimeType": mt,
+             "description": "按项目 id 取；pid 从 kanban_list_projects 或 kanban://projects 拿"}
+            for u, n, mt in RESOURCE_TEMPLATES],
+            "ttlMs": 60000, "cacheScope": "public"})
+
+    if method == "resources/read":
+        uri = params.get("uri") or ""
+        try:
+            return _ok(mid, read_resource(uri))
+        except ValueError as e:
+            # 规范：没有这个资源回 -32602（旧客户端可能仍按 -32002 找，但我们只发一种）
+            return _err(mid, -32602, str(e))
+
+    if method == "prompts/list":
+        return _ok(mid, {"prompts": list_prompts(), "ttlMs": 60000, "cacheScope": "public"})
+
+    if method == "prompts/get":
+        try:
+            return _ok(mid, get_prompt(params.get("name") or "", params.get("arguments") or {}))
+        except ValueError as e:
+            return _err(mid, -32602, str(e))
 
     if is_notification:
         log(f"忽略未知通知：{method}")

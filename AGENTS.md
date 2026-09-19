@@ -184,6 +184,12 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
     包括 `boolean` —— 声明与实现不一致时，模型以为"要 150 条"而实际拿 50 条，
     它会当成"只有这么多"。
   - 写工具的"部分更新"不许在锁外读快照（见数据层约定 11，走 `kanban.patch_*`）。
+  - **resources / prompts 是同一批内容的另一个入口，不是第二套实现**：`resources/read`
+    必须复用工具 handler，`prompts` 正文只引用现有工具与资源。指向不存在的对象时报
+    `-32602`，不许回一份空壳装作成功；`CAPABILITIES` 里声明了什么，`handle()` 就得真能答。
+    只读模式只摘写工具，资源与提示词照旧可用。
+  - **创建类工具收 `client_ref`**（数据层约定 13）：智能体超时重试是常态，没有幂等键
+    就会造出成对重复任务，而重复项会跟着进交接包和拓扑序。
 
 自测（不需要客户端）：
 
@@ -289,6 +295,12 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
     静默截断与静默降级都会让智能体拿一份残缺状态当事实继续写。
     还有一条同类：**数据刚自愈过就要说话** —— `take_recovered_flag()` 现在界面和
     `kanban_list_projects` 两边都能取（一次性标记），否则代理不知道自己在改一份救回来的数据。
+13. **创建可以带幂等键**：`client_ref`（HTTP 查询参数 / MCP 工具入参）命中时返回第一次
+    建出的那条，并且**一次落盘都不做** —— `mutate_project` 认 `fn` 显式返回 `False`
+    表示"没改过"。键表在 `projects.json` 的 `_client_refs`，`MAX_IDEM` 先进先出；
+    键指向的记录被删了就顺手作废该键（否则重试会拿一个 404 的 id 当真）。
+    导出/导入**不带**这张表：它是本进程的"刚才那次重试"窗口，跨机复活只会吞掉新创建。
+    同一个键配不同正文按"重试"处理（与 Stripe 同口径）：返回第一次的结果，不覆盖。
 
 ## 多智能体入口文件（别退化成 N 份副本）
 
@@ -463,9 +475,11 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-19 收口）**：`pytest` 475 收集（469 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-覆盖率 94%（语句 2225 / 缺 138，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
-公开接口面：HTTP 47 条路由 + MCP 17 个工具。
+**验证基线（2026-09-19 收口）**：`pytest` 486 收集（480 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+覆盖率 94%（语句 2261 / 缺 140，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
+公开接口面：HTTP 47 条端点（`method+path` 计 48，多的那条是框架自带的 `/openapi.json`）
++ MCP 17 个工具，另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
+  4 类 uri）与提示词（`prompts/list` / `prompts/get`，3 个）。
 门禁脚本：`release_regression --no-ai` 18/0、`delivery_drill`（自起隔离实例）19/0、
 `scenario_test` 33/33、`live_check --mcp` 12/12、`frozen_smoke` 8/0。
 并行（`-n auto`，已写进 `pytest.ini`）冷跑约 50 秒、热跑约 20 秒。
@@ -500,11 +514,21 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
      收口办法是把 `MAX_JOURNAL` 50→20、`MAX_JOURNAL_TEXT` 500→200 —— **会看不到既有过程记录**。
    - **`_projects_brief` 有两份实现且语义已分叉**（`main` 那份给 LLM、任务 `[:40]` 截断；
      MCP 那份重抄了 `/api/projects` 的计数+就绪度）。合并会同时改两处工具输出，收益不值这个风险。
-6. **接口扩面候选（2026-09-19 竞品对照的结论，与「不要再做的事」冲突，等用户点头才做）**：
-   - MCP `resources/list` + `resources/read`（把交接包/接手包/项目暴露成可选资源，
-     不再让每份内容都占一个工具位）与 3 个 `prompts`（斜杠命令，客户端确实渲染成用户入口，成本低）。
-   - 创建类工具的幂等键（`client_ref`）：智能体超时重试是常态，现在会造出成对重复任务。
-   - MCP 侧缺的记忆"列/删"、删项目、全量导出 —— 属于新能力，不是把已有接口做深。
+6. **接口扩面：2026-09-19 已经做过一轮**（用户点头后）。做出来的三样：
+   - **MCP resources**：`kanban://projects`、`kanban://board/today` 两个总览 +
+     每个项目 `.../handoff`（Markdown）与 `.../context`（JSON，**已脱敏**）；
+     `resources/list` / `resources/templates/list` / `resources/read` 都实现了，
+     读的时候**复用工具的那批 handler**（`t_list_projects` / `t_today` / `t_handoff` /
+     `project_context`），不许出现第二套渲染。理由：交接内容摆成资源就不占每轮对话的工具目录。
+   - **MCP prompts**：`takeover` / `daily` / `wrapup` 三个，正文就是原先只写在
+     `initialize.instructions` 里的规矩。项目参数按名称解析，**歧义时报错并列候选**，
+     不猜。
+   - **创建幂等键 `client_ref`**：`POST /api/projects`、`POST /api/projects/{pid}/tasks`
+     （查询参数）与两个 MCP 建工具都收；命中时返回第一次建出的那条且**一个字节都不写**
+     （`mutate_project` 认 `fn` 返回 `False` 表示"没改过"）。表在 `projects.json` 的
+     `_client_refs` 里，`MAX_IDEM=500` 先进先出；键指向的记录被删掉时顺手作废该键；
+     **导出/导入不带它**（那是本进程的重试窗口，不该跨机复活）。
+   仍然没做、下次要单独决定的：MCP 侧的记忆"列/删"、删项目、全量导出 —— 那是新能力不是深化。
    已判定为负资产、不要再提：游标分页（整份读改写下省不掉解析，只加边界 bug）、
    ETag/If-Match（`mutate()` + 跨进程锁已经串行化了两个写入进程）、
    webhook/SSE（要常驻订阅态与追加型事件表，撞约定 11）、软删除回收站（每条读路径多一个分支，
