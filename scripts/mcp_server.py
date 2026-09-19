@@ -270,32 +270,33 @@ def t_update_task(args: dict) -> str:
 def t_next_task(args: dict) -> str:
     """现在就能动手的任务：接手时先问这个，别一上来挑个被前置挡住的"""
     pid = args.get("project_id") or ""
-    p = _find(pid)
-    if not p:
-        raise ValueError(f"找不到项目：{pid}")
-    tasks = p.get("tasks") or []
-    ready = kanban.executable_tasks(tasks)
-    # 按 id 比：`t not in ready` 是整份字典的相等比较，任务一多就是几万次全字段对比
-    ready_ids = {t.get("id") for t in ready}
-    blocked = [t for t in tasks if t.get("id") not in ready_ids and t.get("status") != "已完成"]
-    if not tasks:
-        return f"「{p.get('name')}」还没有任务。"
-    lines = [f"# {p.get('name')} · 现在可以做"]
+    # 判定全部复用 HTTP 的 /api/projects/{pid}/next。以前这里自己 _find() 读一份、
+    # 再手算一遍 blocked：一次调用两次整份读盘，而且是**第二套实现** ——
+    # 改了一边，代理看到的"可执行"就会和界面给的不一样（本项目反复栽的形状）。
+    try:
+        data = kanban.next_tasks(pid)
+    except kanban.HTTPException as e:
+        raise ValueError(f"{e.detail}（project_id={pid}）") from None
+    name, ready, blocked = data["project"], data["next"], data["blocked"]
+    if not data["total"]:
+        return f"「{name}」还没有任务。可以用 kanban_add_task 建第一条。"
+    lines = [f"# {name} · 现在可以做"]
     if ready:
         for t in ready:
             refs = ("（" + "、".join(t.get("refs") or []) + "）") if t.get("refs") else ""
-            lines.append(f"- [{t['id']}] {t.get('title')} · {t.get('priority')}{refs}")
+            lines.append(f"- [{t['id']}] {t['title']} · {t.get('priority')}{refs}")
+    elif data["done"] == data["total"]:
+        # 三种"没有可做的"是三件不同的事，分开说：没任务 / 都完成了 / 都在等前置
+        lines.append(f"- 全部 {data['total']} 条任务都已完成，没有待办。")
     else:
         lines.append("- 没有可以直接开工的任务（都在等前置）")
     if blocked:
-        by_id = {x.get("id"): x for x in tasks}
         lines.append("")
         lines.append("被前置挡住：")
         for t in blocked:
-            waiting = [by_id[d].get("title", d) for d in (t.get("depends_on") or [])
-                       if d in by_id and by_id[d].get("status") != "已完成"]
+            waiting = t.get("waiting_for") or []
             if waiting:
-                lines.append(f"- {t.get('title')}（等：{'、'.join(waiting)}）")
+                lines.append(f"- {t['title']}（等：{'、'.join(waiting)}）")
     return "\n".join(lines)
 
 

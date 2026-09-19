@@ -1053,3 +1053,44 @@ def test_readonly_keeps_backup_and_export(mcp):
     assert "kanban_export_all" in kinds
     assert kinds["kanban_backup"]["idempotentHint"] is False, "备份每次都会新建一份"
     assert kinds["kanban_export_all"]["readOnlyHint"] is True
+
+
+# ---------------- t_next_task 复用 HTTP 判定 ----------------
+
+def test_next_task_tool_delegates_instead_of_recomputing():
+    """`kanban_next_task` 不许再自己算一遍"可执行/被挡"。
+
+    以前它读一份数据 + `executable_tasks` + 手搭 blocked，等于第二套实现：
+    改了一边，代理看到的"现在能做"就和界面给的不一样，而且没人会红。
+    这条是结构性钉子 —— 想在 MCP 里重算就得先改这条测试的理由。
+    """
+    src = (ROOT / "scripts" / "mcp_server.py").read_text(encoding="utf-8")
+    start = src.index("def t_next_task")
+    body = src[start:src.index("def t_delete_task", start)]
+    # 只看代码行：注释里写着"以前这里 _find() 读一份"是解释，不是重新实现
+    code = "\n".join(l for l in body.splitlines() if not l.strip().startswith("#"))
+    assert "kanban.next_tasks(" in code, "没复用 HTTP 的那份判定"
+    for banned in ("executable_tasks(", "by_id", "depends_on", "_find("):
+        assert banned not in code, f"工具里又出现本地判定逻辑：{banned}"
+
+
+def test_next_task_tool_names_the_reason_when_nothing_is_ready(mcp):
+    """三种"没有可做的"必须分开说，否则代理会把"都完成了"当成"卡住了" """
+    empty = last_id(mcp.tool("kanban_create_project", {"name": "空项目"})[0])
+    text, err = mcp.tool("kanban_next_task", {"project_id": empty})
+    assert not err and "还没有任务" in text, text
+
+    done = last_id(mcp.tool("kanban_create_project", {"name": "已完成项目"})[0])
+    t = last_id(mcp.tool("kanban_add_task", {"project_id": done, "title": "收工的活"})[0])
+    mcp.tool("kanban_update_task", {"task_id": t, "status": "已完成"})
+    text2, _ = mcp.tool("kanban_next_task", {"project_id": done})
+    assert "都已完成" in text2 and "等前置" not in text2, text2
+
+    wait = last_id(mcp.tool("kanban_create_project", {"name": "卡住项目"})[0])
+    a = last_id(mcp.tool("kanban_add_task", {"project_id": wait, "title": "前置甲"})[0])
+    mcp.tool("kanban_add_task", {"project_id": wait, "title": "在后头等", "depends_on": [a]})
+    text3, _ = mcp.tool("kanban_next_task", {"project_id": wait})
+    assert f"- [{a}] 前置甲" in text3, text3        # 能做的照实列出来
+    assert "被前置挡住" in text3 and "前置甲" in text3.split("被前置挡住")[1], text3
+    # 说明：无环数据里"一条都动不了"其实到不了（拓扑上必然有入度为 0 的一条），
+    # 那行文案是兜底，不为它编一个假场景来测。

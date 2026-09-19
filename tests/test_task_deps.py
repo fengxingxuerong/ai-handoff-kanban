@@ -107,6 +107,8 @@ def test_next_tasks_endpoint(app_client):
 
     _, body = app_client.get(f"/api/projects/{pid}/next")
     assert [t["id"] for t in body["next"]] == [a["id"]]
+    # total/done 是给"为什么没有可做的"准备的：没任务 / 都完成 / 都在等前置 是三件事
+    assert (body["total"], body["done"]) == (2, 0), body
     assert body["blocked"] and body["blocked"][0]["id"] == b["id"]
     assert body["blocked"][0]["waiting_for"] == ["搭骨架"]
 
@@ -114,6 +116,7 @@ def test_next_tasks_endpoint(app_client):
     _, body2 = app_client.get(f"/api/projects/{pid}/next")
     assert [t["id"] for t in body2["next"]] == [b["id"]], "前置完成后就该轮到下一个"
     assert body2["blocked"] == []
+    assert (body2["total"], body2["done"]) == (2, 1)
 
     assert app_client.get("/api/projects/不存在/next")[0] == 404
 

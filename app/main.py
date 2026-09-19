@@ -2671,6 +2671,10 @@ def next_tasks(pid: str):
     ready_ids = {t.get("id") for t in ready}
     return {
         "project": p.get("name", ""),
+        # 三个计数是给"为什么没有可做的"准备的：next 为空时，
+        # 没任务、都已完成、都在等前置 是三件完全不同的事（MCP 侧要靠它分辨并说清楚）。
+        "total": len(tasks),
+        "done": sum(1 for t in tasks if t.get("status") == "已完成"),
         "next": [{"id": t["id"], "title": t.get("title"), "priority": t.get("priority"),
                   "refs": t.get("refs") or []} for t in ready],
         "blocked": [{"id": t["id"], "title": t.get("title"),

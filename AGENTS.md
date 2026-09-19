@@ -184,6 +184,12 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
     包括 `boolean` —— 声明与实现不一致时，模型以为"要 150 条"而实际拿 50 条，
     它会当成"只有这么多"。
   - 写工具的"部分更新"不许在锁外读快照（见数据层约定 11，走 `kanban.patch_*`）。
+  - **"现在能做什么"只有一份判定**：`kanban_next_task` 直接调 `next_tasks()`（也就是
+    `GET /api/projects/{pid}/next`）。以前它自己 `_find()` 读一份 + `executable_tasks` +
+    手搭 blocked —— 一次调用两次整份读盘，而且是第二套实现，改一边就会让代理看到的
+    "可执行"和界面给的不一样。结构性钉子：
+    `test_next_task_tool_delegates_instead_of_recomputing`。响应里的 `total`/`done`
+    是用来分清"没任务 / 都完成 / 在等前置"三种情况的（文案要不同，别笼统说"都在等前置"）。
   - **resources / prompts 是同一批内容的另一个入口，不是第二套实现**：`resources/read`
     必须复用工具 handler，`prompts` 正文只引用现有工具与资源。指向不存在的对象时报
     `-32602`，不许回一份空壳装作成功；`CAPABILITIES` 里声明了什么，`handle()` 就得真能答。
@@ -439,6 +445,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   `python -m PyInstaller` 直接 ModuleNotFoundError）；顶层没有 `PYTHONIOENCODING`，而 scenario 与
   package 步骤要打印中文、还要按 UTF-8 解子进程输出，GBK runner 上是假红；打好的 exe 没有上传，
   打包成功也拿不到产物。**改 workflow 一律按"它会被真执行"来写**；哪天真跑通了，把结论和用时补回这里。
+- **"这个端点没人用"要先连 scripts/ 和 tests/ 一起看**（2026-09-19 我就是这样误判过两条）：
+  `GET /api/projects/{pid}/next` 前端与 MCP 当时都不用，但 `delivery_drill` 与
+  `test_task_deps` 在用；`GET /api/ai/reports` 界面上进不去（`openReport(rid)` 的"历史报告"
+  分支根本没有入口传 rid），可 `scenario_test` 与 `test_ai_endpoints` 在用。
+  只看产品表面就下"无消费者"结论，删掉的会是自己的门禁。
+  正确方向反而在另一端：历史报告是**界面少了一截**去接那个已经存在的列表端点。
 - **同一秒内的两次备份会 collapse 成一份**：快照目录名是 `backup_%Y%m%d_%H%M%S`，只精确到秒，
   而"备份"恰恰最容易被连着触发（导入流程自己先备份一次、用户又点一次；代理批量改动前连拍两份）。
   同名会落进同一个目录、第二次把第一次的内容覆盖掉 —— 以为有两份退路，其实一份，且全程没提示。
@@ -480,7 +492,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-19 收口）**：`pytest` 498 收集（492 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+**验证基线（2026-09-19 收口）**：`pytest` 500 收集（494 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
 覆盖率 94%（语句 2278 / 缺 141，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
 公开接口面：HTTP 47 条端点（`method+path` 计 48，多的那条是框架自带的 `/openapi.json`）
 + MCP 23 个工具，另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
