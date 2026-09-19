@@ -718,16 +718,22 @@ def health():
 # ---- 项目 CRUD ----
 
 @app.get("/api/context/{pid}")
-def project_context(pid: str):
+def project_context(pid: str, redact: int = 0):
     """机器可读项目上下文：给 AI 智能体直接拉取的「接手包」。
 
     对标 bd prime / Xanther——其他工具无需人工粘贴，
     通过本接口（或 MCP 工具）一次拿到接手所需的全部结构化上下文。
+
+    `?redact=1` 只打掩码，不改结构：这个包是**推荐给智能体直接取**的入口，
+    而智能体的上下文通常在别的机器上。脱敏范围与 `_projects_brief` 同一条线 ——
+    自由文本（背景/交接说明/下一步/任务描述/过程记录/记忆）盖掉，
+    id / 标题 / 状态 / 分支名 / refs 原样保留（模型要靠它们对齐项目与任务）。
     """
     found = find_project(pid)
     if not found:
         raise HTTPException(404, "项目不存在")
     p = found[1]
+    mask = redact_text if redact else (lambda s: s)
     tasks = p.get("tasks") or []
     ready = executable_tasks(tasks)
     by_id = {t.get("id"): t for t in tasks}
@@ -745,10 +751,10 @@ def project_context(pid: str):
         if t.get("refs"):
             d["refs"] = t["refs"]
         if t.get("desc"):
-            d["desc"] = (t.get("desc") or "")[:200]
+            d["desc"] = mask((t.get("desc") or ""))[:200]
         jr = t.get("journal") or []
         if jr:
-            d["recent_journal"] = [{"time": e.get("time", ""), "text": (e.get("text") or "")[:120]}
+            d["recent_journal"] = [{"time": e.get("time", ""), "text": mask((e.get("text") or ""))[:120]}
                                    for e in jr[-2:]]
         waiting = [by_id[x].get("title", x) for x in (t.get("depends_on") or [])
                    if x in by_id and by_id[x].get("status") != "已完成"]
@@ -765,18 +771,25 @@ def project_context(pid: str):
             "id": p["id"], "name": p["name"], "status": p.get("status", ""),
             "progress": p.get("progress", 0), "priority": p.get("priority", ""),
             "tags": p.get("tags", []), "repo_path": p.get("repo_path", ""),
-            "background": p.get("background", ""),
-            "handoff_note": p.get("handoff_note", ""),
-            "next_action": p.get("next_action", ""),
+            "background": mask(p.get("background", "")),
+            "handoff_note": mask(p.get("handoff_note", "")),
+            "next_action": mask(p.get("next_action", "")),
         },
-        "memories": [m for m in _load_memories() if m.get("pid") == p.get("id")][-15:],
+        "memories": [{**m, "text": mask(m.get("text") or "")}
+                     for m in _load_memories() if m.get("pid") == p.get("id")][-15:],
         "code_reality": ({
+            "available": True,
             "branch": snap.get("branch", ""),
             "last_commit_at": (snap.get("head") or {}).get("date", ""),
-            "last_commit_subject": (snap.get("head") or {}).get("subject", ""),
+            "last_commit_subject": mask((snap.get("head") or {}).get("subject", "")),
             "days_since_commit": snap.get("days_since_commit"),
             "uncommitted_files": snap.get("dirty_count", 0),
-        } if snap.get("ok") else None),
+        } if snap.get("ok") else {
+            # 读不到要说话。以前整节省掉（=null），于是"这个项目没填代码路径"和
+            # "填了但不是 git 仓库/路径没了"在接手方看来一模一样，排查成本全转给用户。
+            "available": False,
+            "reason": "未填代码路径" if not p.get("repo_path") else (snap.get("error") or "git 读取失败"),
+        }),
         "start_here": [  # 现在就能动手的（依赖已满足）
             {"id": t["id"], "title": t.get("title"), "priority": t.get("priority"),
              "refs": t.get("refs") or []} for t in ready
@@ -863,6 +876,20 @@ def search_tasks(q: str = "", limit: int = 30):
                     return {"results": out}
     return {"results": out}
 
+
+def take_recovered_flag() -> tuple[bool, str]:
+    """取走「这次读盘刚从 last-good/空结构自愈过」的标记（一次性，读完即清）。
+
+    包成函数而不是让调用方直接摸全局，是因为两个写入进程都要上报它：界面靠它弹恢复提示，
+    MCP 的 `kanban_list_projects` 要在智能体动手改看板**之前**先说清楚
+    "这份数据刚被救回来过" —— 否则智能体会拿一份残缺的旧状态当事实继续往下写。
+    """
+    global _DATA_RECOVERED, _DATA_RECOVERED_FROM
+    recovered, _DATA_RECOVERED = _DATA_RECOVERED, False
+    recovered_from, _DATA_RECOVERED_FROM = _DATA_RECOVERED_FROM, ""
+    return recovered, recovered_from
+
+
 @app.get("/api/projects")
 def list_projects():
     """总览：不含任务明细，带任务统计"""
@@ -882,9 +909,7 @@ def list_projects():
             "task_counts": counts, "total_tasks": len(tasks),
         })
     # 数据文件损坏并重建过：必须让用户知道，否则会以为项目凭空消失
-    global _DATA_RECOVERED, _DATA_RECOVERED_FROM
-    recovered, _DATA_RECOVERED = _DATA_RECOVERED, False
-    recovered_from, _DATA_RECOVERED_FROM = _DATA_RECOVERED_FROM, ""
+    recovered, recovered_from = take_recovered_flag()
     return {"projects": out, "data_recovered": recovered, "recovered_from": recovered_from}
 
 
@@ -920,16 +945,49 @@ def get_project(pid: str):
     return found[1]
 
 
+def _apply_project(p: dict, body: ProjectIn) -> None:
+    p.update({
+        "name": body.name.strip(), "status": body.status,
+        "progress": body.progress, "priority": body.priority,
+        "tags": body.tags or [], "repo_path": body.repo_path.strip(),
+        "background": body.background, "handoff_note": body.handoff_note,
+        "next_action": body.next_action, "updated_at": now_str(),
+    })
+
+
+def _merge_into(model, current: dict, changes: dict):
+    """把 `changes` 盖到「当前盘上的这一份」上，再交给 Pydantic 校验。
+
+    只认模型声明过的字段；值为 `None` 视为"没给"（与 MCP 侧一直沿用的 `pick()` 语义一致），
+    显式空串则是"要清空"，会照常传下去。
+    """
+    fields = set(model.model_fields)
+    merged = {k: v for k, v in current.items() if k in fields and v is not None}
+    merged.update({k: v for k, v in changes.items() if k in fields and v is not None})
+    return model(**merged)
+
+
+def patch_project(pid: str, changes: dict) -> dict:
+    """部分更新：未提到的字段保持**当前值**。
+
+    与 `PUT /api/projects/{pid}`（整体覆盖）的差别不只是"少传几个字段"：
+    调用方自己先读一份、改完再提交，那份快照是在临界区**外面**读的 ——
+    桌面端在这两次读之间改过的字段，会被这次提交带回来的旧值反向覆盖（丢更新）。
+    所以补全必须发生在 `mutate` 里面。MCP 那几个 `*_update_*` 工具原来正是这样在外面读的。
+    """
+    def apply(p: dict, _data: dict) -> None:
+        _apply_project(p, _merge_into(ProjectIn, p, changes))
+
+    p = mutate_project(pid, apply)
+    if p is None:
+        raise HTTPException(404, "项目不存在")
+    return p
+
+
 @app.put("/api/projects/{pid}")
 def update_project(pid: str, body: ProjectIn):
     def apply(p: dict, _data: dict) -> None:
-        p.update({
-            "name": body.name.strip(), "status": body.status,
-            "progress": body.progress, "priority": body.priority,
-            "tags": body.tags or [], "repo_path": body.repo_path.strip(),
-            "background": body.background, "handoff_note": body.handoff_note,
-            "next_action": body.next_action, "updated_at": now_str(),
-        })
+        _apply_project(p, body)
 
     p = mutate_project(pid, apply)
     if p is None:
@@ -995,33 +1053,55 @@ def create_task(pid: str, body: TaskIn):
     return task
 
 
+def _apply_task(t: dict, p: dict, tid: str, body: TaskIn) -> None:
+    # 同 create_task：兄弟任务、自依赖、环判定都必须在锁内做，
+    # 否则两个并发请求能合力把一个环写进依赖图。
+    now = now_str()
+    if tid in (body.depends_on or []):
+        raise HTTPException(400, "任务不能依赖自己")
+    siblings = [x for x in (p.get("tasks") or [])
+                if isinstance(x, dict) and x.get("id") != tid]
+    deps = clean_deps(body.depends_on, {x.get("id") for x in siblings})
+    if has_cycle(task_graph(siblings + [{"id": tid, "depends_on": deps}])):
+        raise HTTPException(400, "依赖会形成循环，已放弃更新")
+
+    old_status = t.get("status", "")
+    t.update({
+        "title": body.title.strip(), "desc": body.desc,
+        "status": body.status, "priority": body.priority,
+        "agent": body.agent.strip(), "due_date": body.due_date,
+        "updated_at": now,
+        "refs": clean_refs(body.refs),
+        "depends_on": deps,
+    })
+    # 状态流转自动沉淀过程轨迹
+    if body.status != old_status:
+        _append_journal(t, f"状态：{old_status} → {body.status}", now)
+    p["updated_at"] = now
+
+
+def patch_task(tid: str, changes: dict, *, with_project: bool = False):
+    """部分更新任务：未提到的字段取**当前盘上的值**（理由同 `patch_project`）。
+
+    `with_project=True` 时连带返回所属项目名 —— 智能体侧的回复要报"这个任务在哪个项目"，
+    而它不该为此在临界区外再读一整份数据。
+    """
+    box: dict = {}
+
+    def apply(t: dict, p: dict) -> None:
+        _apply_task(t, p, tid, _merge_into(TaskIn, t, changes))
+        box["project"] = p.get("name", "")
+
+    t = mutate_task(tid, apply)
+    if t is None:
+        raise HTTPException(404, "任务不存在")
+    return (t, box.get("project", "")) if with_project else t
+
+
 @app.put("/api/tasks/{tid}")
 def update_task(tid: str, body: TaskIn):
     def apply(t: dict, p: dict) -> None:
-        # 同 create_task：兄弟任务、自依赖、环判定都必须在锁内做，
-        # 否则两个并发请求能合力把一个环写进依赖图。
-        now = now_str()
-        if tid in (body.depends_on or []):
-            raise HTTPException(400, "任务不能依赖自己")
-        siblings = [x for x in (p.get("tasks") or [])
-                    if isinstance(x, dict) and x.get("id") != tid]
-        deps = clean_deps(body.depends_on, {x.get("id") for x in siblings})
-        if has_cycle(task_graph(siblings + [{"id": tid, "depends_on": deps}])):
-            raise HTTPException(400, "依赖会形成循环，已放弃更新")
-
-        old_status = t.get("status", "")
-        t.update({
-            "title": body.title.strip(), "desc": body.desc,
-            "status": body.status, "priority": body.priority,
-            "agent": body.agent.strip(), "due_date": body.due_date,
-            "updated_at": now,
-            "refs": clean_refs(body.refs),
-            "depends_on": deps,
-        })
-        # 状态流转自动沉淀过程轨迹
-        if body.status != old_status:
-            _append_journal(t, f"状态：{old_status} → {body.status}", now)
-        p["updated_at"] = now
+        _apply_task(t, p, tid, body)
 
     t = mutate_task(tid, apply)
     if t is None:
@@ -1066,18 +1146,27 @@ class JournalIn(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
 
 
-@app.post("/api/tasks/{tid}/journal", status_code=201)
-def add_task_journal(tid: str, body: JournalIn):
-    """手动追加一条过程记录（做了什么、改了什么决策、踩了什么坑）"""
+def append_task_journal(tid: str, text: str) -> dict:
+    """追加一条过程记录，返回**追加后的任务本身**。
+
+    返回整个任务而不是那条记录，是为了让 MCP 那类调用方一次读改写就能同时拿到
+    任务标题和新记录 —— 它原来为了在回复里报出标题，会在临界区外再多读一整份数据。
+    """
     def apply(t: dict, p: dict) -> None:
         now = now_str()
-        _append_journal(t, body.text.strip(), now)
+        _append_journal(t, text.strip(), now)
         p["updated_at"] = now
 
     t = mutate_task(tid, apply)
     if t is None:
         raise HTTPException(404, "任务不存在")
-    return t["journal"][-1]
+    return t
+
+
+@app.post("/api/tasks/{tid}/journal", status_code=201)
+def add_task_journal(tid: str, body: JournalIn):
+    """手动追加一条过程记录（做了什么、改了什么决策、踩了什么坑）"""
+    return append_task_journal(tid, body.text)["journal"][-1]
 
 
 @app.delete("/api/tasks/{tid}")
@@ -2565,6 +2654,12 @@ def _projects_brief(projects: list[dict]) -> list[dict]:
             "memories": [{**m, "text": redact_text(m.get("text") or "")}
                          for m in mems_by_pid.get(p["id"], [])][-10:],
         }
+        # 截断必须留痕：以前静默给前 40 条，模型以为"这项目的活就这些"，
+        # 于是监管报告漏掉第 41 条之后的阻塞。看板自己的场景测试就造过 45 条的项目。
+        total_tasks = len(p.get("tasks") or [])
+        if total_tasks > 40:
+            item["tasks_note"] = (f"该项目共 {total_tasks} 条任务，本简报只带前 40 条，"
+                                  "其余未在本次分析范围内")
         snap = git_snapshot(p.get("repo_path", ""), limit=1)
         if snap.get("ok"):
             item["git"] = {
@@ -2884,9 +2979,21 @@ class CommandBody(BaseModel):
     text: str = Field(..., min_length=1, max_length=500)
 
 
+# 这两份名单就是 /api/ai/command 告诉模型的"能改什么"，也是前端 execSingleAction
+# 真正放行的白名单 —— 前端那份在 web/index.html 里（AI_PROJECT_FIELDS / AI_TASK_FIELDS），
+# `test_ai_command_prompt_fields_match_frontend_whitelist` 逐字比对两边。
+# **repo_path 永远不进这个名单**：它指向本机目录，改了它就等于让外部内容远程探测本机
+# 并把结果拼进 prompt（见 git_snapshot / _projects_brief）。
+AI_EDITABLE_PROJECT_FIELDS = ["name", "status", "progress", "priority", "tags",
+                              "background", "handoff_note", "next_action"]
+AI_EDITABLE_TASK_FIELDS = ["title", "desc", "status", "priority", "agent", "due_date",
+                           "refs", "depends_on"]
+
 _CMD_TYPES = (
-    "create_project(新建项目), update_project(修改项目字段 field ∈ status/progress/priority/next_action/handoff_note/background), "
-    "delete_project(删除项目), create_task(在 project_id 下新建任务), update_task(修改任务 field ∈ status/priority/agent/title/desc), "
+    "create_project(新建项目), update_project(修改项目字段 field ∈ "
+    + ", ".join(AI_EDITABLE_PROJECT_FIELDS) + "), "
+    "delete_project(删除项目), create_task(在 project_id 下新建任务), "
+    "update_task(修改任务 field ∈ " + ", ".join(AI_EDITABLE_TASK_FIELDS) + "), "
     "delete_task(删除任务)"
 )
 

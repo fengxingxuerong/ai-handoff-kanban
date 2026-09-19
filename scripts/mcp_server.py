@@ -64,6 +64,10 @@ def local_url(path: str) -> str:
 SUPPORTED_VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 DEFAULT_VERSION = SUPPORTED_VERSIONS[0]
 
+# 我们声明的服务能力。只有一份：initialize 与 server/discover 必须报同一件事，
+# 两处各写一遍的话，将来加 resources/prompts 时必然只改到一边。
+CAPABILITIES = {"tools": {"listChanged": False}}
+
 
 def log(msg: str) -> None:
     print(f"[ai-kanban-mcp] {msg}", file=sys.stderr, flush=True)
@@ -123,6 +127,13 @@ def t_list_projects(_args: dict) -> str:
     if not projects:
         return "看板里还没有项目。可以用 kanban_create_project 建一个。"
     lines = [f"共 {len(projects)} 个项目："]
+    recovered, recovered_from = kanban.take_recovered_flag()
+    if recovered:
+        # 界面有恢复提示，代理这边以前什么都收不到：它以为看到的是正常的板，
+        # 实际上这份可能刚从 last-good 救回来、缺着最近的项目。
+        lines.insert(0, "⚠ 数据文件此前损坏，本次读到的内容刚从"
+                        + (f" {recovered_from} " if recovered_from else "备份/空结构 ")
+                        + "自愈恢复，可能不是最新状态；写入前请先与用户确认。")
     for p in projects:
         lines.append(
             f"- [{p['id']}] {p['name']} · {p['status']} · {p['progress']}% · 优先级{p['priority']}"
@@ -199,28 +210,17 @@ def t_create_project(args: dict) -> str:
 def t_update_project(args: dict) -> str:
     _ensure_writable()
     pid = args.get("project_id") or ""
-    p = _find(pid)
-    if not p:
-        raise ValueError(f"找不到项目：{pid}")
-
-    def pick(key: str, default):
-        v = args.get(key)
-        return default if v is None else v
-
-    body = kanban.ProjectIn(
-        name=pick("name", p.get("name")),
-        status=pick("status", p.get("status")),
-        progress=int(pick("progress", p.get("progress") or 0)),
-        priority=pick("priority", p.get("priority")),
-        tags=pick("tags", p.get("tags") or []),
-        repo_path=pick("repo_path", p.get("repo_path") or ""),
-        background=pick("background", p.get("background") or ""),
-        handoff_note=pick("handoff_note", p.get("handoff_note") or ""),
-        next_action=pick("next_action", p.get("next_action") or ""),
-    )
-    updated = kanban.update_project(pid, body)
-    changed = [k for k in args if k not in ("project_id",)]
-    return f"已更新 [{pid}] {updated['name']}：{('、'.join(changed)) or '无字段变化'}"
+    changes = {k: v for k, v in args.items() if k != "project_id"}
+    # 「没给的字段保持原值」这件事必须在 mutate 的临界区里做（见 kanban.patch_project）：
+    # 以前这里先 _find() 读一整份、再把字段逐个回填提交，桌面端在那之间改过的值
+    # 会被我们带回去的旧值反向抹掉 —— 典型的丢更新，而且只有并发时才看得见。
+    try:
+        updated = kanban.patch_project(pid, changes)
+    except kanban.HTTPException as e:
+        # main 侧的 404 不带 id（HTTP 的 id 在 URL 里），代理这边得补上
+        raise ValueError(f"{e.detail}（project_id={pid}；先用 kanban_list_projects 或 "
+                         f"kanban_find_project 确认 id）") from None
+    return f"已更新 [{pid}] {updated['name']}：{('、'.join(changes)) or '无字段变化'}"
 
 
 def t_add_task(args: dict) -> str:
@@ -244,26 +244,13 @@ def t_add_task(args: dict) -> str:
 def t_update_task(args: dict) -> str:
     _ensure_writable()
     tid = args.get("task_id") or ""
-    project, task = _task_by_id(tid)
-    if not task:
-        raise ValueError(f"找不到任务：{tid}")
-
-    def pick(key: str, default):
-        v = args.get(key)
-        return default if v is None else v
-
-    body = kanban.TaskIn(
-        title=pick("title", task.get("title")),
-        desc=pick("desc", task.get("desc") or ""),
-        status=pick("status", task.get("status")),
-        priority=pick("priority", task.get("priority")),
-        agent=pick("agent", task.get("agent") or ""),
-        refs=pick("refs", task.get("refs") or []),
-        depends_on=pick("depends_on", task.get("depends_on") or []),
-        due_date=pick("due_date", task.get("due_date") or ""),
-    )
-    updated = kanban.update_task(tid, body)
-    return f"任务 [{tid}] 已更新为 {updated['status']}/{updated['priority']}（所属项目 {project.get('name')}）"
+    changes = {k: v for k, v in args.items() if k != "task_id"}
+    # 同 t_update_project：补全在临界区内做，不在锁外读快照
+    try:
+        updated, project_name = kanban.patch_task(tid, changes, with_project=True)
+    except kanban.HTTPException as e:
+        raise ValueError(f"{e.detail}（task_id={tid}）") from None
+    return f"任务 [{tid}] 已更新为 {updated['status']}/{updated['priority']}（所属项目 {project_name}）"
 
 
 def t_next_task(args: dict) -> str:
@@ -301,9 +288,7 @@ def t_next_task(args: dict) -> str:
 def t_delete_task(args: dict) -> str:
     _ensure_writable()
     tid = args.get("task_id") or ""
-    if not _task_by_id(tid)[1]:
-        raise ValueError(f"找不到任务：{tid}")
-    kanban.delete_task(tid)
+    kanban.delete_task(tid)      # 找不到会抛 404，不必先在锁外读一整份确认存在
     return f"已删除任务 [{tid}]"
 
 
@@ -322,6 +307,18 @@ def t_stats(_args: dict) -> str:
     return "\n".join(lines)
 
 
+def _redact_arg(args: dict, default: bool = True) -> bool:
+    """`redact` 参数：智能体拿到的东西默认**脱敏**。
+
+    默认值取 True 是因为这些文本会进别的机器上的上下文窗口（看板自己的约定 9：
+    被动外出的读取默认收口，用户主动要的润色才给原文）。
+    想拿原文：显式传 `false`。类型由 inputSchema 声明 boolean、`_validate_args` 强制，
+    所以这里只会收到真正的布尔值。
+    """
+    v = args.get("redact")
+    return default if v is None else bool(v)
+
+
 def t_handoff(args: dict) -> str:
     """交接包：让新接手的 AI 一次拿到全部上下文"""
     pid = args.get("project_id") or ""
@@ -329,6 +326,8 @@ def t_handoff(args: dict) -> str:
     if not p:
         raise ValueError(f"找不到项目：{pid}")
     md = kanban._build_handoff_markdown(p)
+    if _redact_arg(args):
+        md = kanban.redact_text(md)
     # 智能体是把整包读进上下文窗口的，报个尺寸让它知道要不要改用 kanban_context 分片取
     return md + kanban._budget_note(md)
 
@@ -340,33 +339,36 @@ def t_agents_md(args: dict) -> str:
         raise ValueError(f"找不到项目：{pid}")
     text, source, _ep = kanban._generate_agents_md(p)
     body = f"<!-- 来源：{source} -->\n\n{text}"
+    if _redact_arg(args):
+        body = kanban.redact_text(body)
     return body + kanban._budget_note(body)
 
 
 def t_context(args: dict) -> str:
     """机器可读接手包：一次拿到背景/交接说明/可执行任务/代码现实/就绪度"""
     pid = args.get("project_id") or ""
-    p = _find(pid)
-    if not p:
-        raise ValueError(f"找不到项目：{pid}")
-    ctx = kanban.project_context(pid)
+    # 不再自己 _find() 判存在：project_context 找不到会 404，而 _find 是**又一整份读盘**
+    ctx = kanban.project_context(pid, redact=_redact_arg(args))
     parts = [
         f"【{ctx['project']['name']}】接手上下文（{ctx['generated_at']}）",
         f"状态：{ctx['project']['status']}（进度 {ctx['project']['progress']}%）| 优先级：{ctx['project']['priority']} | 标签：{'、'.join(ctx['project'].get('tags') or []) or '无'}",
     ]
-    if ctx.get("code_reality"):
-        cr = ctx["code_reality"]
+    cr = ctx.get("code_reality") or {}
+    if cr.get("available"):
         parts.append(f"代码现实：分支 {cr.get('branch') or '—'}，最近提交 {cr.get('last_commit_at') or '—'}（{cr.get('days_since_commit')} 天前），未提交文件 {cr.get('uncommitted_files')} 个")
+    else:
+        # 读不到要说出来：以前整行不出现，"没填路径"和"git 坏了"看起来一模一样
+        parts.append(f"代码现实：不可用（{cr.get('reason') or '未知原因'}）")
     if ctx["project"].get("background"):
         parts.append("项目背景：" + ctx["project"]["background"])
     if ctx["project"].get("handoff_note"):
         parts.append("交接说明（务必先读）：" + ctx["project"]["handoff_note"])
     if ctx["project"].get("next_action"):
         parts.append("下一步行动：" + ctx["project"]["next_action"])
-    mems = [m for m in kanban._load_memories() if m.get("pid") == pid]
+    mems = ctx.get("memories") or []
     if mems:
         parts.append("项目记忆（决策/坑/约定，接手时自动带上）：")
-        parts += [f"  - [{m.get('type')}] {m.get('text')}" for m in mems[-8:]]
+        parts += [f"  - [{m.get('type')}] {m.get('text')}" for m in mems]
     if ctx["start_here"]:
         parts.append("现在就能动手的任务：")
         parts += [f"  - {t['title']}（{t.get('priority','中')}）{' @' + '、'.join(t['refs']) if t.get('refs') else ''}"
@@ -382,7 +384,9 @@ def t_context(args: dict) -> str:
         parts.append("阻塞：" + "；".join(t["title"] for t in blocked))
     rd = ctx["readiness"]
     parts.append(f"交接就绪度：{rd['score']}/100" + (f"（缺口：{'、'.join(rd['missing'])}）" if rd["missing"] else "（齐备）"))
-    parts.append(f"实时上下文（本机服务，活数据）：{local_url('/api/context/' + pid)}")
+    # 直链也要带上这次同样的脱敏口径：不然是"工具给了脱敏版、链接指向未脱敏版"
+    link_suffix = "?redact=1" if _redact_arg(args) else ""
+    parts.append(f"实时上下文（本机服务，活数据）：{local_url('/api/context/' + pid)}{link_suffix}")
     parts.append("—— 来自 AI 交接看板 MCP（可继续用 kanban_* 工具读写任务）")
     return "\n".join(parts)
 
@@ -408,7 +412,8 @@ def t_search_tasks(args: dict) -> str:
     hits = r["results"]
     if not hits:
         return f"没有匹配「{args.get('query')}」的任务。"
-    lines = [f"匹配 {len(hits)} 条任务："]
+    lines = [f"匹配 {len(hits)} 条任务："] if len(hits) < 50 else \
+        [f"匹配 {len(hits)} 条任务（已到上限 50，可能还有更多 —— 换个更具体的关键词）："]
     for t in hits:
         # 注意：搜索接口用的是 task_id（today 用的是 id），这里按它自己的字段取
         lines.append(f"  [{t.get('task_id')}] {t['title']} —— {t['project_name']}（{t['status']}/{t['priority']}）")
@@ -419,10 +424,14 @@ def t_log_progress(args: dict) -> str:
     """给任务追加一条过程记录（做了什么 / 改了什么决策 / 踩了什么坑）"""
     _ensure_writable()
     tid = args.get("task_id") or ""
-    project, task = _task_by_id(tid)
-    if not task:
-        raise ValueError(f"找不到任务：{tid}")
-    entry = kanban.add_task_journal(tid, kanban.JournalIn(text=args.get("text") or ""))
+    # 复用 JournalIn 那一份校验（非空 + 长度上限），别绕过去自己信客户端
+    text = kanban.JournalIn(text=args.get("text") or "").text
+    # 一次读改写就拿到标题与新记录；原来为了报标题，会先在锁外整份读一遍
+    try:
+        task = kanban.append_task_journal(tid, text)
+    except kanban.HTTPException as e:
+        raise ValueError(f"{e.detail}（task_id={tid}）") from None
+    entry = task["journal"][-1]
     return f"已记录到任务 [{tid}]（{task.get('title')}）：{entry.get('text')}"
 
 
@@ -575,28 +584,34 @@ TOOLS: list[dict] = [
     },
     {
         "name": "kanban_handoff",
-        "description": "导出项目的完整交接包（Markdown）：背景、交接说明、下一步、任务清单。适合在换会话/换工具时一次性读完上下文。",
+        "description": "导出项目的完整交接包（Markdown）：背景、交接说明、下一步、任务清单。适合在换会话/换工具时一次性读完上下文。默认脱敏。",
         "inputSchema": {
             "type": "object",
-            "properties": {"project_id": {"type": "string"}},
+            "properties": {"project_id": {"type": "string"},
+                           "redact": {"type": "boolean", "default": True,
+                                      "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）；确实需要原文时显式传 false"}},
             "required": ["project_id"], "additionalProperties": False,
         },
     },
     {
         "name": "kanban_agents_md",
-        "description": "生成该项目的 AGENTS.md 正文（AI 不可用时自动用本地模板），可写进仓库给编码代理读。",
+        "description": "生成该项目的 AGENTS.md 正文（AI 不可用时自动用本地模板），可写进仓库给编码代理读。默认脱敏。",
         "inputSchema": {
             "type": "object",
-            "properties": {"project_id": {"type": "string"}},
+            "properties": {"project_id": {"type": "string"},
+                           "redact": {"type": "boolean", "default": True,
+                                      "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）；确实需要原文时显式传 false"}},
             "required": ["project_id"], "additionalProperties": False,
         },
     },
     {
         "name": "kanban_context",
-        "description": "获取项目的机器可读接手包：背景、交接说明、现在就能动手的任务（依赖已满足）、代码现实、交接就绪度。换人/换工具接手时先调这个，一次拿到全部上下文。",
+        "description": "获取项目的机器可读接手包：背景、交接说明、现在就能动手的任务（依赖已满足）、代码现实、交接就绪度。换人/换工具接手时先调这个，一次拿到全部上下文。默认脱敏。",
         "inputSchema": {
             "type": "object",
-            "properties": {"project_id": {"type": "string"}},
+            "properties": {"project_id": {"type": "string"},
+                           "redact": {"type": "boolean", "default": True,
+                                      "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）；确实需要原文时显式传 false"}},
             "required": ["project_id"], "additionalProperties": False,
         },
     },
@@ -619,8 +634,10 @@ TOOLS: list[dict] = [
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "关键词"},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 200,
-                          "description": "最多返回多少条，默认 30"},
+                # 上限与 search_tasks 内部那道 min(50) 一致：以前这里写 200，
+                # 客户端要 150 条拿回 50 条、还以为是"就这么多"。
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50,
+                          "description": "最多返回多少条，默认 30，上限 50"},
             },
             "required": ["query"], "additionalProperties": False,
         },
@@ -763,6 +780,8 @@ def _validate_args(schema: dict, args: dict) -> None:
                 raise ValueError(f"{key} 不能大于 {spec['maximum']}")
         if typ == "array" and not isinstance(val, list):
             raise ValueError(f"{key} 必须是数组")
+        if typ == "boolean" and not isinstance(val, bool):
+            raise ValueError(f"{key} 必须是布尔值（收到「{val}」）")
         enum = spec.get("enum")
         if enum and val not in enum:
             raise ValueError(f"{key} 只能是 {'/'.join(enum)}，收到「{val}」")
@@ -796,13 +815,13 @@ def handle(msg: dict) -> dict | None:
         client_version = (params.get("protocolVersion") or "")
         return _ok(mid, {
             "protocolVersion": _negotiate(client_version),
-            "capabilities": {"tools": {"listChanged": False}},
+            "capabilities": CAPABILITIES,
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
             "instructions": ("这是「AI 交接看板」：管理多个项目的状态与交接上下文。"
                              "开工前先 kanban_list_projects，再用 kanban_get_project 或 kanban_handoff 读上下文；"
                              "干完一段活请用 kanban_update_project 更新 progress 与 next_action。"
-                             f"需要最新数据时也可以直接 GET {local_url('/api/context/<项目id>')}"
-                             "（本机服务，取到的是活的，不是快照）。"),
+                             f"需要最新数据时也可以直接 GET {local_url('/api/context/<项目id>?redact=1')}"
+                             "（本机服务，取到的是活的，不是快照；带 redact=1 是脱敏版）。"),
         })
 
     if method in ("notifications/initialized", "initialized"):
@@ -812,11 +831,19 @@ def handle(msg: dict) -> dict | None:
         return _ok(mid, {})
 
     if method in ("server/discover", "discover"):
+        # 无状态模式下客户端靠 discover 选版本，规范（2026-07-28）要求回 `supportedVersions`
+        # —— 只报单个 protocolVersion 等于把协商的余地全给了对面，现代客户端可能直接选不到版本。
+        # 同时 `resultType:"complete"` 的结果必须带缓存提示；serverInfo 走 `_meta`，
+        # 顶层那份仍留着给停在 2025-xx 的客户端。
         return _ok(mid, {
-            "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
             "protocolVersion": DEFAULT_VERSION,
-            "capabilities": {"tools": {"listChanged": False}},
+            "supportedVersions": SUPPORTED_VERSIONS,
+            "capabilities": CAPABILITIES,
+            "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
+            "_meta": {"io.modelcontextprotocol/serverInfo":
+                      {"name": SERVER_NAME, "version": SERVER_VERSION}},
             "tools": visible_tools(),
+            "ttlMs": 60000, "cacheScope": "public",
         })
 
     if method == "tools/list":
@@ -827,15 +854,12 @@ def handle(msg: dict) -> dict | None:
         args = params.get("arguments") or {}
         handler = HANDLERS.get(name)
         if not handler:
-            return _ok(mid, {
-                "content": [{"type": "text", "text": f"未知工具：{name}"}],
-                "isError": True,
-            })
+            # 「工具不存在」是**调用方的形状错误**，规范给的是 JSON-RPC -32602；
+            # 工具跑了但失败（含入参校验不过）才是 isError —— 那条要让模型自己纠。
+            # 原来两者都走 isError，于是客户端把"名字写错"当成"服务里这个工具坏了"。
+            return _err(mid, -32602, f"未知工具：{name}", {"可用工具": sorted(TOOL_BY_NAME)})
         if not isinstance(args, dict):
-            return _ok(mid, {
-                "content": [{"type": "text", "text": "arguments 必须是对象"}],
-                "isError": True,
-            })
+            return _err(mid, -32602, "params.arguments 必须是对象")
         try:
             _validate_args(TOOL_BY_NAME[name].get("inputSchema") or {}, args)
             text = handler(args)

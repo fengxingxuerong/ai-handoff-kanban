@@ -173,6 +173,17 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 - **跨进程写安全**：`mutate()` 里除线程锁外还有 `_cross_process_lock()`（Windows 用 `msvcrt.locking`，
   其他平台 `fcntl.flock`）。桌面应用与 MCP 服务是两个进程、同一份 JSON，**少了这把锁就是丢更新**。
 - 短命进程不要后台线程：MCP 服务启动前设 `KANBAN_NO_SCHEDULER=1`。
+- **代理侧的契约纪律**（改工具时逐条对齐，`test_mcp_server.py` 有对应钉子）：
+  - 「工具名不存在」是 JSON-RPC 协议错误 `-32602`（调用方的形状问题）；
+    「工具跑了但失败」（含入参校验不过、项目/任务找不到）才是 `isError:true` —— 后者要让模型自己纠。
+    两类混成 `isError` 时，客户端会把"名字写错"显示成"这个工具坏了"。
+  - `server/discover` 必须回 `supportedVersions`（无状态客户端靠它选版本），
+    且 `resultType:"complete"` 的结果要带 `ttlMs`/`cacheScope`；`capabilities` 与 `serverInfo`
+    在 initialize / discover 之间共用同一份常量（`CAPABILITIES`），两处各写一遍必然漂。
+  - schema 声明的 `maximum`/`enum`/`type` 就是代码里真的执行的那道（`_validate_args`），
+    包括 `boolean` —— 声明与实现不一致时，模型以为"要 150 条"而实际拿 50 条，
+    它会当成"只有这么多"。
+  - 写工具的"部分更新"不许在锁外读快照（见数据层约定 11，走 `kanban.patch_*`）。
 
 自测（不需要客户端）：
 
@@ -256,10 +267,28 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
    - 反向闸门：模型看到的文本带着 `MASK_MARK`，就可能把掩码当原文抄回来，
      所以 `apply-suggestions` 遇到带掩码的值**拒绝落地并回报 `skipped_masked`**；
      界面也不许在 `applied=0` 时宣布"已应用 ✓"。
+   - **代理侧（MCP）默认就是脱敏的**：`kanban_handoff` / `kanban_agents_md` / `kanban_context`
+     都有 `redact`（默认 true，显式传 false 才拿原文），`/api/context/{pid}?redact=1` 同口径。
+     理由：代理拿到的文本必然进别的机器上的上下文窗口，而"要不要脱敏"不该由客户端记得问。
+     **`_validate_args` 会强制 boolean 类型** —— 别把它放宽成"什么都能塞"。
 10. **`usage.jsonl` 的追加与裁剪共用一把跨进程锁**（`llm._usage_locked` → `app/filelock.py`）。
     桌面 exe 与 MCP 是两条进程写同一份账，只有线程锁时 `_trim_usage` 的
     「整读 → 重写 → os.replace」会把读走之后别人刚追加的行一起替换掉（实测吞行），
     表现为 `/api/usage` 长期偏小且无声。
+11. **"没给的字段保持原值"必须发生在临界区内**：部分更新走 `patch_project` / `patch_task`
+    （它们在读-改-写的同一个锁内取当前值再合并），整体覆盖仍走 `PUT` 的 `update_*`。
+    MCP 的三个写工具以前是"客户端先读一整份、改几个字段、再提交整份"，
+    那份快照读在锁外 —— 桌面端在这之间改过的字段会被旧值反向抹掉（丢更新，且只在并发时显形），
+    顺带每次写还多读一遍盘。`test_patch_task_rejects_illegal_values_and_reads_once`
+    钉的就是"一次部分更新只有一次整份读"。
+12. **给模型看的声明不能撒谎**：inputSchema 里的 `maximum`、`required`、`enum` 与代码里那道夹
+    必须同数（`kanban_search_tasks` 的 50 与 `kanban_today` 的 200 就不一样，别抄错）；
+    任何截断都要在返回里留痕（`_projects_brief` 超 40 条任务时带 `tasks_note`，
+    `/api/today` 带 `truncated`，搜索满 50 条时在文本里说明）；读不到东西要说"为什么读不到"
+    （`/api/context` 的 `code_reality.available` + `reason`）。
+    静默截断与静默降级都会让智能体拿一份残缺状态当事实继续写。
+    还有一条同类：**数据刚自愈过就要说话** —— `take_recovered_flag()` 现在界面和
+    `kanban_list_projects` 两边都能取（一次性标记），否则代理不知道自己在改一份救回来的数据。
 
 ## 多智能体入口文件（别退化成 N 份副本）
 
@@ -372,6 +401,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
     空载 0.33ms、`-n auto` 跑批时超 4ms，只会造出假红 ——
     用 `_Counting` 列表数全量遍历的遍数（旧实现 1201 遍 / 新实现 4 遍）是确定的数。
     读盘次数同理：monkeypatch `_load_memories` 计数，比测延迟可靠。
+13. **跨语言的声明要有一张对账测试**：Python 侧告诉模型的字段名单（`_CMD_TYPES` /
+    `AI_EDITABLE_*`）与前端真放行的白名单（`web/index.html` 的 `AI_PROJECT_FIELDS` /
+    `AI_TASK_FIELDS`）是两份文本，靠 `test_frontend.py` 逐字比对。同类还有
+    `test_readiness.py`（两份就绪度实现）、`test_agent_files.py`（入口文件目标集合）。
+    **凡是"两边各写一份"的东西，都必须有一张测试把它们钉在一起**，否则改一边不会变红 ——
+    这个项目已经为此反复出过事故（版本条手填时间、MCP 版本号漂在应用后面）。
 
 ## 容易踩的坑
 
@@ -428,8 +463,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-19 收口）**：`pytest` 463 收集（457 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-覆盖率 94%（语句 2189 / 缺 137，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
+**验证基线（2026-09-19 收口）**：`pytest` 475 收集（469 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+覆盖率 94%（语句 2225 / 缺 138，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
+公开接口面：HTTP 47 条路由 + MCP 17 个工具。
 门禁脚本：`release_regression --no-ai` 18/0、`delivery_drill`（自起隔离实例）19/0、
 `scenario_test` 33/33、`live_check --mcp` 12/12、`frozen_smoke` 8/0。
 并行（`-n auto`，已写进 `pytest.ini`）冷跑约 50 秒、热跑约 20 秒。
@@ -463,7 +499,17 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
      文件 4.67MB → 81MB，`_load_data` 57ms → 336ms（与项目数无关）。
      收口办法是把 `MAX_JOURNAL` 50→20、`MAX_JOURNAL_TEXT` 500→200 —— **会看不到既有过程记录**。
    - **`_projects_brief` 有两份实现且语义已分叉**（`main` 那份给 LLM、任务 `[:40]` 截断；
-     MCP 那份重抄了 `/api/projects` 的计数与就绪度）。合并会同时改两处工具输出，收益不值这个风险。
+     MCP 那份重抄了 `/api/projects` 的计数+就绪度）。合并会同时改两处工具输出，收益不值这个风险。
+6. **接口扩面候选（2026-09-19 竞品对照的结论，与「不要再做的事」冲突，等用户点头才做）**：
+   - MCP `resources/list` + `resources/read`（把交接包/接手包/项目暴露成可选资源，
+     不再让每份内容都占一个工具位）与 3 个 `prompts`（斜杠命令，客户端确实渲染成用户入口，成本低）。
+   - 创建类工具的幂等键（`client_ref`）：智能体超时重试是常态，现在会造出成对重复任务。
+   - MCP 侧缺的记忆"列/删"、删项目、全量导出 —— 属于新能力，不是把已有接口做深。
+   已判定为负资产、不要再提：游标分页（整份读改写下省不掉解析，只加边界 bug）、
+   ETag/If-Match（`mutate()` + 跨进程锁已经串行化了两个写入进程）、
+   webhook/SSE（要常驻订阅态与追加型事件表，撞约定 11）、软删除回收站（每条读路径多一个分支，
+   "删错了"已经由备份/恢复覆盖）、`outputSchema` 声明式校验与 progress/cancellation
+   （前者一旦与文本漂移会被客户端整包拒；后两者要为串行临界区上并发）。
 
 **不要再做的事**（已经想清楚、别回头做）：
 

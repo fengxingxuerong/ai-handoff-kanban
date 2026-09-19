@@ -278,3 +278,37 @@ def test_action_results_are_announced_outside_the_modal():
     body = HTML[HTML.index("async function executeActions"):]
     body = body[:body.index("\n}\n")]
     assert "cmdAddMsg(" in body and "toast(" in body, "结果没有同时播报到 aria-live 区域"
+
+
+def _js_array(name: str) -> list[str]:
+    """取 `const NAME = ["a", "b", ...]` 里的字符串项（跨行也要能拼起来）"""
+    m = re.search(r"const " + name + r" = \[(.*?)\]", HTML, re.S)
+    assert m, f"页面里找不到 const {name}"
+    return re.findall(r'"([^"]+)"', m.group(1))
+
+
+def test_ai_command_prompt_fields_match_frontend_whitelist():
+    """提示词里告诉模型的"能改哪些字段"＝前端真放行的白名单，一个字都不能差。
+
+    两边分开写必然漂：模型以为能改的字段被前端拒掉，用户看到的就是
+    "AI 说改了但看板上没变"；反过来前端放行而提示词没写的字段，等于给
+    注入内容留了一条模型不会主动走、但走一次就生效的通道。
+    """
+    import app.main as kanban
+
+    assert _js_array("AI_PROJECT_FIELDS") == kanban.AI_EDITABLE_PROJECT_FIELDS
+    assert _js_array("AI_TASK_FIELDS") == kanban.AI_EDITABLE_TASK_FIELDS
+    assert "field ∈ " + ", ".join(kanban.AI_EDITABLE_PROJECT_FIELDS) in kanban._CMD_TYPES
+    assert "field ∈ " + ", ".join(kanban.AI_EDITABLE_TASK_FIELDS) in kanban._CMD_TYPES
+
+
+def test_repo_path_is_never_ai_editable():
+    """repo_path 决定"去哪个本地目录跑 git"，改了它等于让外部内容远程探测本机。
+
+    所以它既不能出现在 AI 白名单里，也不能出现在给模型的指令声明里。
+    """
+    import app.main as kanban
+
+    joined = " ".join(kanban.AI_EDITABLE_PROJECT_FIELDS + kanban.AI_EDITABLE_TASK_FIELDS)
+    assert "repo_path" not in joined and "repo_path" not in kanban._CMD_TYPES
+    assert "repo_path" not in " ".join(_js_array("AI_PROJECT_FIELDS"))

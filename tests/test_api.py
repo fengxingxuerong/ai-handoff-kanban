@@ -279,6 +279,100 @@ def test_analyze_prompt_keeps_ids_but_redacts_free_text(ai_client):
     assert proj["id"] in sent and "脱敏分析项目" in sent
 
 
+# ---------------- 部分更新（PATCH）与接手包脱敏 ----------------
+
+def test_patch_project_keeps_fields_that_were_not_sent(app_client):
+    """`patch_*` 的"没给＝保持原值"发生在临界区内，语义要与 MCP 侧一贯的行为一致"""
+    import app.main as kanban
+
+    status, proj = app_client.create_project("部分更新项目")
+    assert status == 201
+    pid = proj["id"]
+    kanban.patch_project(pid, {"progress": 42, "next_action": "先跑测试"})
+    _, after = app_client.get(f"/api/projects/{pid}")
+    assert after["progress"] == 42 and after["next_action"] == "先跑测试"
+    assert after["name"] == "部分更新项目", "没传 name 不能把项目名改掉"
+
+    kanban.patch_project(pid, {"handoff_note": ""})   # 显式空串＝清空
+    _, after = app_client.get(f"/api/projects/{pid}")
+    assert after["handoff_note"] == "" and after["progress"] == 42
+
+
+def test_patch_task_rejects_illegal_values_and_reads_once(app_client, monkeypatch):
+    """补全必须只做一次整份读：在锁外多读一份快照，就是丢更新的入口"""
+    import app.main as kanban
+
+    _, proj = app_client.create_project("读一次项目")
+    pid = proj["id"]
+    _, task = app_client.post(f"/api/projects/{pid}/tasks",
+                              {"title": "读一次", "status": "待办", "priority": "高",
+                               "due_date": "2030-01-02"})
+    tid = task["id"]
+
+    reads = {"n": 0}
+    real = kanban._load_data
+
+    def counted():
+        reads["n"] += 1
+        return real()
+
+    monkeypatch.setattr(kanban, "_load_data", counted)
+    reads["n"] = 0
+    updated = kanban.patch_task(tid, {"status": "进行中"})
+    assert updated["status"] == "进行中"
+    assert reads["n"] == 1, f"一次部分更新读了 {reads['n']} 遍整份数据"
+    assert updated["due_date"] == "2030-01-02" and updated["priority"] == "高"
+
+    reads["n"] = 0
+    import pytest as _pt
+    with _pt.raises(Exception):
+        kanban.patch_task(tid, {"status": "乱写"})
+    _, back = app_client.get(f"/api/projects/{pid}")
+    assert back["tasks"][0]["status"] == "进行中", "校验失败不能写坏数据"
+
+
+def test_context_endpoint_can_redact_prose_only(app_client):
+    """`/api/context/{pid}` 是**推荐给智能体直接取**的入口，以前偏偏没有脱敏开关。
+
+    开了 `?redact=1` 之后：自由文本盖掉，id / 标题 / 状态 / 分支原样留着
+    —— 模型要靠这些把建议对回项目。
+    """
+    secret = "api_key=abcd1234efgh5678"
+    status, proj = app_client.create_project("接手包脱敏")
+    pid = proj["id"]
+    app_client.put(f"/api/projects/{pid}", {
+        "name": "接手包脱敏", "status": "进行中", "progress": 20, "priority": "高",
+        "background": f"第三方服务 {secret}，联系 ops@corp.example.com",
+        "next_action": "带 key 的任务"})
+    app_client.post(f"/api/projects/{pid}/tasks",
+                    {"title": "配密钥", "desc": f"用 {secret} 配置", "status": "待办"})
+
+    _, raw = app_client.get(f"/api/context/{pid}")
+    assert "abcd1234efgh5678" in str(raw), "默认行为不变（不传 redact 就是原文）"
+
+    _, safe = app_client.get(f"/api/context/{pid}?redact=1")
+    blob = str(safe)
+    assert "abcd1234efgh5678" not in blob, "背景与任务描述里的密钥漏了"
+    assert "ops@corp.example.com" not in blob
+    assert safe["project"]["id"] == pid and safe["project"]["name"] == "接手包脱敏"
+    assert any(t["title"] == "配密钥" for t in safe["tasks"]["todo"]), "标题不能被盖掉"
+
+
+def test_context_reports_why_code_reality_is_missing(app_client):
+    """读不到代码现状要说话：整节省掉等于把"没填路径"和"git 坏了"伪装成同一件事"""
+    _, proj = app_client.create_project("没有代码路径")
+    _, ctx = app_client.get(f"/api/context/{proj['id']}")
+    cr = ctx["code_reality"]
+    assert cr["available"] is False and cr["reason"] == "未填代码路径", cr
+
+    pid = proj["id"]
+    app_client.put(f"/api/projects/{pid}", {
+        "name": "没有代码路径", "status": "进行中", "repo_path": "D:\\这个路径不存在"})
+    _, ctx = app_client.get(f"/api/context/{pid}")
+    cr = ctx["code_reality"]
+    assert cr["available"] is False and "不存在" in cr["reason"], cr
+
+
 # ---------------- 任务过程日志 ----------------
 
 def test_task_journal_and_status_transition(server):

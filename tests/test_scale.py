@@ -216,3 +216,23 @@ def test_sanitize_normalizes_loose_due_dates(app_client):
     assert dues["松写法"] == "2026-09-05", dues
     assert dues["另一种松写法"] == "2026-09-07", dues
     assert dues["废值"] == "", f"解析不出来的应当清空而不是留着：{dues}"
+
+
+def test_llm_brief_says_when_it_drops_tasks(app_client):
+    """给模型的简报只带前 40 条任务，这个截断必须写在数据里。
+
+    不留痕的后果不是"少看几条"：模型会以为这项目的活就这些，于是监管报告
+    漏掉第 41 条之后的阻塞，而用户完全看不出漏过。
+    """
+    import app.main as kanban
+
+    many = [{"id": f"t{i}", "title": f"任务 {i}", "status": "待办", "priority": "中",
+             "depends_on": []} for i in range(55)]
+    brief = kanban._projects_brief([
+        {"id": "p1", "name": "任务很多", "status": "进行中", "tasks": many},
+        {"id": "p2", "name": "任务不多", "status": "进行中", "tasks": many[:10]},
+    ])
+    by_id = {b["id"]: b for b in brief}
+    assert len(by_id["p1"]["tasks"]) == 40
+    assert "55" in by_id["p1"]["tasks_note"] and "40" in by_id["p1"]["tasks_note"], by_id["p1"]
+    assert "tasks_note" not in by_id["p2"], "没截断就别多塞一个键"

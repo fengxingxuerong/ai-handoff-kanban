@@ -345,10 +345,98 @@ def test_cycle_via_mcp_is_rejected(mcp):
     assert is_err and ("循环" in text or "依赖" in text), text
 
 
-def test_unknown_tool_is_tool_error_not_crash(mcp):
-    text, is_err = mcp.tool("kanban_not_exist")
-    assert is_err and "未知工具" in text
-    assert mcp.call("ping")["result"] is not None
+def test_unknown_tool_is_a_jsonrpc_protocol_error(mcp):
+    """「工具名不存在」是调用方的形状错误 → JSON-RPC -32602，不是工具执行失败（isError）。
+
+    规范把两类错误分开：-32602 给"你叫了一个不存在的东西"，isError 给"这个工具跑了但没成"。
+    以前都走 isError，客户端于是把"名字写错"当成"这个工具坏了"来显示。
+    """
+    resp = mcp.call("tools/call", {"name": "kanban_not_exist", "arguments": {}})
+    assert resp.get("error", {}).get("code") == -32602, resp
+    assert "未知工具" in resp["error"]["message"], resp
+    # 入参校验不过仍然是工具错误 —— 那条要让模型自己纠
+    text, is_err = mcp.tool("kanban_add_task", {"project_id": "x"})
+    assert is_err and "缺少必填参数" in text, text
+    assert mcp.call("ping")["result"] is not None, "协议错误之后服务必须还能用"
+
+
+def test_server_discover_matches_the_stateless_spec(mcp):
+    """无状态模式下客户端靠 server/discover 选协议版本：只报一个 protocolVersion 不够。
+
+    规范（2026-07-28）要求 discover 回 supportedVersions，并且 `resultType:"complete"`
+    的结果带缓存提示；serverInfo 走 `_meta`。旧客户端读的那份顶层字段仍然保留。
+    """
+    res = mcp.call("server/discover")["result"]
+    assert res["supportedVersions"] and "2026-07-28" in res["supportedVersions"]
+    assert res["protocolVersion"] in res["supportedVersions"]
+    assert res["ttlMs"] > 0 and res["cacheScope"]
+    assert res["_meta"]["io.modelcontextprotocol/serverInfo"]["name"] == "ai-kanban"
+    # initialize 与 discover 报的能力必须是同一份，不然客户端按哪一份走都不对
+    init = mcp.call("initialize", {"protocolVersion": "2025-06-18"})["result"]
+    assert init["capabilities"] == res["capabilities"], "两处 capabilities 漂移了"
+
+
+def test_redact_is_on_by_default_for_agent_outputs(mcp):
+    """智能体拿到的交接包/接手包默认脱敏：这些文本会进别的机器上的上下文窗口。
+
+    以前 MCP 这条路根本没有 redact 参数 —— 同一个模型走 HTTP 能要求脱敏，
+    走 MCP 就只能拿原文，边界形同虚设。
+    """
+    text, err = mcp.tool("kanban_create_project", {
+        "name": "脱敏默认值", "status": "进行中",
+        "background": "登录用的第三方 api_key: zzzz9998887776666，联系人 dev@corp.example.com"})
+    assert not err, text
+    pid = last_id(text)
+
+    safe, err = mcp.tool("kanban_handoff", {"project_id": pid})
+    assert not err, safe
+    assert "zzzz9998887776666" not in safe and "********" in safe, "默认没脱敏"
+    assert "dev@corp.example.com" not in safe
+
+    raw, err = mcp.tool("kanban_handoff", {"project_id": pid, "redact": False})
+    assert not err, raw
+    assert "zzzz9998887776666" in raw, "显式传 false 应当拿原文"
+
+    ctx, err = mcp.tool("kanban_context", {"project_id": pid})
+    assert not err, ctx
+    assert "zzzz9998887776666" not in ctx, "接手包同样要默认脱敏"
+    assert "pid" in ctx or pid in ctx, "项目 id 不能被一起盖掉"
+
+
+def test_boolean_arg_type_is_enforced(mcp):
+    """schema 里声明了 boolean 就得真的校验：给字符串要说清楚，而不是悄悄当"没给" """
+    resp = mcp.call("tools/call", {"name": "kanban_handoff",
+                                   "arguments": {"project_id": "随便", "redact": "yes"}})
+    text = "\n".join(c.get("text", "") for c in resp["result"].get("content", []))
+    assert resp["result"]["isError"] is True, resp
+    assert "必须是布尔值" in text, text
+
+
+def test_search_limit_schema_matches_the_actual_clamp(mcp):
+    """schema 声明的上限就是代码里那道夹：写 200 而只给 50 条，模型以为"就这么多" """
+    tools = {t["name"]: t for t in mcp.call("tools/list")["result"]["tools"]}
+    search = tools["kanban_search_tasks"]["inputSchema"]["properties"]["limit"]
+    assert search["maximum"] == 50, search
+    today = tools["kanban_today"]["inputSchema"]["properties"]["limit"]
+    assert today["maximum"] == 200, "today 内部夹的是 200，别一起改掉"
+
+
+def test_list_projects_warns_after_self_heal(tmp_path):
+    """数据刚自愈过时，代理必须在动手之前知道这件事"""
+    data_dir = tmp_path / "kanban-mcp-heal"
+    data_dir.mkdir(parents=True)
+    (data_dir / "projects.json").write_text("{ 不是 JSON", encoding="utf-8")
+    c = McpClient(data_dir)
+    try:
+        c.tool("kanban_create_project", {"name": "救回来的项目"})
+        text, err = c.tool("kanban_list_projects")
+        assert not err, text
+        assert text.startswith("⚠") and "写入前请先与用户确认" in text, f"没提示数据是救回来的：{text[:200]}"
+        # 标记是一次性的：报过一次就该闭嘴，否则每条回复都在喊
+        text2, _ = c.tool("kanban_list_projects")
+        assert not text2.startswith("⚠"), f"恢复标记没被清掉：{text2[:120]}"
+    finally:
+        c.close()
 
 
 def test_missing_project_gives_actionable_error(mcp):
@@ -630,7 +718,9 @@ def test_log_progress_tool_appends_journal(tmp_path):
         assert any("采样率不匹配" in e.get("text", "") for e in stored.get("journal") or []),             f"过程记录没落盘：{stored.get('journal')}"
 
         text, is_err = c.tool("kanban_log_progress", {"task_id": "不存在的任务", "text": "x"})
-        assert is_err and "找不到任务" in text, text
+        assert is_err and "任务不存在" in text, text
+        # 404 的原文来自主体（HTTP 那边 id 在 URL 里），代理这边必须把 id 补回去
+        assert "不存在的任务" in text, f"错误里没说是哪个任务：{text}"
     finally:
         c.close()
 
