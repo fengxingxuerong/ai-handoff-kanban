@@ -29,7 +29,7 @@
 | `scripts/test_all_llm.py` | LLM 端点全量实测：端点×Key×模型 健康矩阵 |
 | `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
-| `scripts/mcp_server.py` | MCP 服务（stdio）：代理可列项目/拉接手包(context)/读写任务/记过程与记忆/生成交接物。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/additionalProperties 真的校验 |
+| `scripts/mcp_server.py` | MCP 服务（stdio，20 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作 |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
@@ -475,10 +475,10 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-19 收口）**：`pytest` 486 收集（480 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+**验证基线（2026-09-19 收口）**：`pytest` 491 收集（485 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
 覆盖率 94%（语句 2261 / 缺 140，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
 公开接口面：HTTP 47 条端点（`method+path` 计 48，多的那条是框架自带的 `/openapi.json`）
-+ MCP 17 个工具，另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
++ MCP 20 个工具，另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
   4 类 uri）与提示词（`prompts/list` / `prompts/get`，3 个）。
 门禁脚本：`release_regression --no-ai` 18/0、`delivery_drill`（自起隔离实例）19/0、
 `scenario_test` 33/33、`live_check --mcp` 12/12、`frozen_smoke` 8/0。
@@ -514,7 +514,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
      收口办法是把 `MAX_JOURNAL` 50→20、`MAX_JOURNAL_TEXT` 500→200 —— **会看不到既有过程记录**。
    - **`_projects_brief` 有两份实现且语义已分叉**（`main` 那份给 LLM、任务 `[:40]` 截断；
      MCP 那份重抄了 `/api/projects` 的计数+就绪度）。合并会同时改两处工具输出，收益不值这个风险。
-6. **接口扩面：2026-09-19 已经做过一轮**（用户点头后）。做出来的三样：
+6. **接口扩面：2026-09-19 已经做过两轮**（用户点头后）。做出来的：
    - **MCP resources**：`kanban://projects`、`kanban://board/today` 两个总览 +
      每个项目 `.../handoff`（Markdown）与 `.../context`（JSON，**已脱敏**）；
      `resources/list` / `resources/templates/list` / `resources/read` 都实现了，
@@ -528,7 +528,14 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
      （`mutate_project` 认 `fn` 返回 `False` 表示"没改过"）。表在 `projects.json` 的
      `_client_refs` 里，`MAX_IDEM=500` 先进先出；键指向的记录被删掉时顺手作废该键；
      **导出/导入不带它**（那是本进程的重试窗口，不该跨机复活）。
-   仍然没做、下次要单独决定的：MCP 侧的记忆"列/删"、删项目、全量导出 —— 那是新能力不是深化。
+   - **补上记忆层的读与删、以及删项目**：`kanban_list_memories`（按项目/类型/关键词过滤，
+     默认脱敏，50 条封顶且**超了就报数**）、`kanban_delete_memory`、`kanban_delete_project`。
+     以前智能体只能往记忆层盲写：写进去几条、id 是什么、想撤一条，全都不知道。
+   - **`kanban_delete_project` 要 `confirm=true` 才真删**：第一次调用只返回"将失去多少条任务
+     （几条没做完）、几条项目记忆"并拒绝执行。全看板只有这一个工具要 confirm ——
+     因为它是唯一无法单独撤销的操作：没有软删除，唯一退路是拿备份**整份**恢复，
+     那会把其它项目一起回滚。别把这个门槛"为了顺手"去掉，也别推广到别的工具。
+   仍然没做、下次要单独决定的：MCP 侧的全量导出（`/api/data/export` 的对等工具）—— 那是新能力不是深化。
    已判定为负资产、不要再提：游标分页（整份读改写下省不掉解析，只加边界 bug）、
    ETag/If-Match（`mutate()` + 跨进程锁已经串行化了两个写入进程）、
    webhook/SSE（要常驻订阅态与追加型事件表，撞约定 11）、软删除回收站（每条读路径多一个分支，

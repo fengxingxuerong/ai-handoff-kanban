@@ -465,6 +465,64 @@ def t_memory_add(args: dict) -> str:
     return f"已记下 [{mem['type']}] 到 {where}：{mem['text']}"
 
 
+MEMORY_LIST_LIMIT = 50
+
+
+def t_list_memories(args: dict) -> str:
+    """查记忆层：可按项目 / 类型 / 关键词过滤（以前智能体只能盲写，写完看不见）"""
+    pid = args.get("project_id") or ""
+    rows = kanban.list_memories(pid=pid, q=args.get("query") or "",
+                                mtype=args.get("type") or "")["memories"]
+    if not rows:
+        scope = f"项目 [{pid}]" if pid else "看板"
+        return f"{scope}的记忆层是空的（或没有匹配的）。可以用 kanban_memory_add 记决策/坑/约定。"
+    show = args.get("redact") is not False
+    lines = [f"记忆 {len(rows)} 条（新的在前）："]
+    for m in rows[:MEMORY_LIST_LIMIT]:
+        text = kanban.redact_text(m.get("text") or "") if show else (m.get("text") or "")
+        lines.append(f"- [{m.get('id')}]【{m.get('type')}】{m.get('time')} "
+                     f"· {m.get('pid') or '通用'} · {text}")
+    if len(rows) > MEMORY_LIST_LIMIT:
+        lines.append(f"…… 另有 {len(rows) - MEMORY_LIST_LIMIT} 条未列出："
+                     "用 project_id / type / query 收窄，别一次全塞进上下文。")
+    return "\n".join(lines)
+
+
+def t_delete_memory(args: dict) -> str:
+    _ensure_writable()
+    mid = args.get("memory_id") or ""
+    try:
+        kanban.delete_memory(mid)
+    except kanban.HTTPException as e:
+        raise ValueError(f"{e.detail}（memory_id={mid}；先用 kanban_list_memories 看现有条目）") from None
+    return f"已删除记忆 [{mid}]"
+
+
+def t_delete_project(args: dict) -> str:
+    """删项目 —— 整个看板里破坏性最大的一次调用，所以要求显式 confirm"""
+    _ensure_writable()
+    pid = args.get("project_id") or ""
+    found = kanban.find_project(pid)
+    if not found:
+        raise ValueError(f"找不到项目：{pid}（kanban_list_projects 可以看现有项目）")
+    project = found[1]
+    tasks = project.get("tasks") or []
+    unfinished = [t for t in tasks if t.get("status") != "已完成"]
+    mems = [m for m in kanban._load_memories() if m.get("pid") == pid]
+
+    if args.get("confirm") is not True:
+        # 没有软删除、没有回收站：项目连同任务一起消失，孤儿记忆也会被顺手清掉。
+        # 想回来只能事后用备份**整份**恢复 —— 那会把别的项目也一起回滚，所以这里先拒绝一次。
+        raise ValueError(
+            f"删除项目「{project['name']}」会一起失去 {len(tasks)} 条任务"
+            f"（{len(unfinished)} 条还没做完）和 {len(mems)} 条项目记忆，"
+            f"且无法单独撤销：只能从备份整份恢复（会连其它项目一起回滚）。"
+            f"确认就带 confirm=true 再调一次。")
+    kanban.delete_project(pid)
+    return (f"已删除项目 [{pid}]「{project['name']}」"
+            f"（连带 {len(tasks)} 条任务、{len(mems)} 条记忆）")
+
+
 TOOLS: list[dict] = [
     {
         "name": "kanban_list_projects",
@@ -684,6 +742,46 @@ TOOLS: list[dict] = [
             "required": ["text"], "additionalProperties": False,
         },
     },
+    {
+        "name": "kanban_list_memories",
+        "description": "查项目记忆层（决策/坑/约定），可按项目、类型、关键词过滤。"
+                       "写完记忆后调它确认进去了；也可用来回顾一个项目的历史约束。默认脱敏。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "留空表示看全部（含跨项目的通用记忆）"},
+                "type": {"type": "string", "enum": ["决策", "坑", "约定", "事实"]},
+                "query": {"type": "string", "description": "按正文关键词过滤"},
+                "redact": {"type": "boolean", "default": True,
+                           "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "kanban_delete_memory",
+        "description": "删掉一条已过期的项目记忆（先用 kanban_list_memories 拿到它的 id）。"
+                       "记忆是长期复用的，删错了不会体现在任何项目页面上。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"memory_id": {"type": "string"}},
+            "required": ["memory_id"], "additionalProperties": False,
+        },
+    },
+    {
+        "name": "kanban_delete_project",
+        "description": "删除整个项目：连带它的任务、过程轨迹与该项目记忆一起消失，且不能单独撤销。"
+                       "第一次调用（不带 confirm）只会告诉你将失去什么，确认后再带 confirm=true。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string"},
+                "confirm": {"type": "boolean",
+                            "description": "必须显式传 true 才会真删；不传只返回影响清单"},
+            },
+            "required": ["project_id"], "additionalProperties": False,
+        },
+    },
 ]
 
 HANDLERS = {
@@ -704,6 +802,9 @@ HANDLERS = {
     "kanban_search_tasks": t_search_tasks,
     "kanban_log_progress": t_log_progress,
     "kanban_memory_add": t_memory_add,
+    "kanban_list_memories": t_list_memories,
+    "kanban_delete_memory": t_delete_memory,
+    "kanban_delete_project": t_delete_project,
 }
 
 
@@ -728,7 +829,10 @@ TOOL_KIND = {
     "kanban_update_task": ("write", "更新任务"),
     "kanban_log_progress": ("write", "追加过程记录"),
     "kanban_memory_add": ("write", "记录项目记忆"),
+    "kanban_list_memories": ("read", "查项目记忆"),
+    "kanban_delete_memory": ("destructive", "删除项目记忆"),
     "kanban_delete_task": ("destructive", "删除任务"),
+    "kanban_delete_project": ("destructive", "删除整个项目"),
 }
 
 ANNOTATIONS = {

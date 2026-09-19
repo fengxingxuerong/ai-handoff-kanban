@@ -888,3 +888,94 @@ def test_create_without_client_ref_still_creates_twice(mcp):
     a = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "重复标题"})[0])
     b = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "重复标题"})[0])
     assert a != b
+
+
+# ---------------- 记忆列/删 与 删项目 ----------------
+
+def test_memories_can_be_listed_filtered_and_deleted(mcp):
+    """以前智能体只能往记忆层盲写：写进去几条、id 是什么、想撤一条，全都不知道"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "记忆可见性"})[0])
+    mcp.tool("kanban_memory_add", {"project_id": pid, "type": "决策", "text": "导出统一走流式"})
+    mcp.tool("kanban_memory_add", {"project_id": pid, "type": "坑", "text": "Windows 文件锁会误报"})
+    mcp.tool("kanban_memory_add", {"type": "事实", "text": "跨项目的通用约定"})
+
+    all_rows, err = mcp.tool("kanban_list_memories")
+    assert not err and "3 条" in all_rows, all_rows
+    only_proj, _ = mcp.tool("kanban_list_memories", {"project_id": pid})
+    assert "2 条" in only_proj and "通用约定" not in only_proj, only_proj
+    pits, _ = mcp.tool("kanban_list_memories", {"type": "坑"})
+    assert "文件锁" in pits and "流式" not in pits, pits
+    hits, _ = mcp.tool("kanban_list_memories", {"query": "流式"})
+    assert "1 条" in hits, hits
+
+    mid = hits.split("[")[1].split("]")[0]
+    text, is_err = mcp.tool("kanban_delete_memory", {"memory_id": mid})
+    assert not is_err, text
+    assert "流式" not in mcp.tool("kanban_list_memories")[0]
+    again, is_err = mcp.tool("kanban_delete_memory", {"memory_id": mid})
+    assert is_err and "记忆不存在" in again and mid in again, f"重复删除应当报错并说清是哪条：{again}"
+
+
+def test_listed_memories_are_redacted_by_default(mcp):
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "记忆脱敏"})[0])
+    mcp.tool("kanban_memory_add", {"project_id": pid, "text": "预发 token=zzzz9998887776666"})
+    safe, _ = mcp.tool("kanban_list_memories", {"project_id": pid})
+    assert "zzzz9998887776666" not in safe and "********" in safe, safe
+    raw, _ = mcp.tool("kanban_list_memories", {"project_id": pid, "redact": False})
+    assert "zzzz9998887776666" in raw, "显式传 false 才给原文"
+
+
+def test_memory_list_reports_truncation(mcp):
+    """一次列 50 条封顶，超了要说 —— 不然模型以为记忆层就这么点东西"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "记忆很多"})[0])
+    for i in range(55):
+        mcp.tool("kanban_memory_add", {"project_id": pid, "text": f"要点 {i:03d}"})
+    text, err = mcp.tool("kanban_list_memories", {"project_id": pid})
+    assert not err
+    assert "55 条" in text, text[:120]
+    assert "另有 5 条未列出" in text, "超上限却没告诉调用方"
+
+
+def test_delete_project_asks_before_destroying(mcp):
+    """删项目是全看板破坏性最大的一步：第一次调用只报清单，确认后才真删。
+
+    没有软删除也没有回收站，唯一退路是拿备份**整份**恢复（会把其它项目一起回滚），
+    所以这里宁可多一次往返。
+    """
+    a = last_id(mcp.tool("kanban_create_project", {"name": "要删掉的项目"})[0])
+    b = last_id(mcp.tool("kanban_create_project", {"name": "留下不要动"})[0])
+    mcp.tool("kanban_add_task", {"project_id": a, "title": "没做完的活"})
+    mcp.tool("kanban_add_task", {"project_id": a, "title": "完成的活", "status": "已完成"})
+    mcp.tool("kanban_memory_add", {"project_id": a, "text": "这个项目的约定"})
+
+    warn, is_err = mcp.tool("kanban_delete_project", {"project_id": a})
+    assert is_err, "没给 confirm 就直接删了"
+    assert "2 条任务" in warn and "1 条还没做完" in warn and "1 条项目记忆" in warn, warn
+    assert "confirm=true" in warn, warn
+    assert not mcp.tool("kanban_get_project", {"project_id": a})[1], "拒绝阶段不该动数据"
+
+    done, is_err = mcp.tool("kanban_delete_project", {"project_id": a, "confirm": True})
+    assert not is_err, done
+    assert "已删除项目" in done and "2 条任务" in done, done
+    assert mcp.tool("kanban_get_project", {"project_id": a})[1], "项目没删掉"
+    assert "这个项目的约定" not in mcp.tool("kanban_list_memories")[0], "孤儿记忆没跟着清"
+    assert not mcp.tool("kanban_get_project", {"project_id": b})[1], "别的项目被牵连了"
+
+
+def test_readonly_mode_hides_destructive_but_keeps_reads(tmp_path):
+    """只读模式该摘掉的：删项目、删记忆；该留下的：查记忆（它本来就是读）"""
+    data_dir = tmp_path / "kanban-mcp-readonly-del"
+    cfg = data_dir / "config.json"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(json.dumps({"ai": {"endpoints": [], "mcp_readonly": True}},
+                              ensure_ascii=False), encoding="utf-8")
+    c = McpClient(data_dir)
+    try:
+        names = {t["name"] for t in _result(c, "tools/list")["tools"]}
+        assert "kanban_list_memories" in names
+        for gone in ("kanban_delete_project", "kanban_delete_memory", "kanban_delete_task"):
+            assert gone not in names, gone
+        _, is_err = c.tool("kanban_delete_project", {"project_id": "x", "confirm": True})
+        assert is_err and "只读" in _, f"只读模式下竟然执行了删除：{_}"
+    finally:
+        c.close()
