@@ -523,6 +523,33 @@ def t_delete_project(args: dict) -> str:
             f"（连带 {len(tasks)} 条任务、{len(mems)} 条记忆）")
 
 
+def t_backup(args: dict) -> str:
+    """给整块板拍一份快照（批量改动前的保险）"""
+    # 故意不挂 _ensure_writable：它只把数据拷出去，一行看板内容都不改，
+    # 而"动手前先留一份退路"恰恰是只读模式下最该保留的动作。
+    res = kanban.create_backup()
+    return (f"已创建快照 {Path(res['folder']).name}（含 {'、'.join(res['files']) or '无文件'}；"
+            f"当前共 {res['total']} 份，只保留最近 10 份）。"
+            "恢复要人在看板「数据」面板里点 —— 代理自动回滚整块板会吞掉你可能想救的内容。")
+
+
+def t_list_backups(args: dict) -> str:
+    rows = kanban.list_backups()["backups"]
+    if not rows:
+        return "还没有任何快照。批量改动前可以先调 kanban_backup。"
+    lines = [f"快照 {len(rows)} 份（新的在前，只保留最近 10 份）："]
+    for b in rows:
+        lines.append(f"- {b['time']} · {b['name']} · {'、'.join(b.get('files') or []) or '（空）'}")
+    lines.append("恢复只由人在界面上操作，没有对应的 MCP 工具（这是有意的）。")
+    return "\n".join(lines)
+
+
+def t_export_all(args: dict) -> str:
+    """全项目合并交接包（与 GET /api/export-all 同一份渲染）"""
+    md = kanban.build_export_all(_redact_arg(args))
+    return md + kanban._budget_note(md)
+
+
 TOOLS: list[dict] = [
     {
         "name": "kanban_list_projects",
@@ -782,6 +809,32 @@ TOOLS: list[dict] = [
             "required": ["project_id"], "additionalProperties": False,
         },
     },
+    {
+        "name": "kanban_export_all",
+        "description": "导出**所有项目**合并成的交接包（Markdown）：换机器、写给同事接手、"
+                       "或一次读完整个看板时用。默认脱敏；单个项目请用 kanban_handoff。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "redact": {"type": "boolean", "default": True,
+                           "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "kanban_backup",
+        "description": "给整个看板数据拍一份快照（projects/config/memories/监管报告），"
+                       "批量改动或删除项目前先调它。不改任何看板内容，只留一份退路；"
+                       "恢复由人在界面上点，没有对应的工具。",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "kanban_list_backups",
+        "description": "列出已有快照的时间与内容（只保留最近 10 份）。需要回滚时把这些报给用户，"
+                       "由用户在「数据」面板里选一份恢复。",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
 ]
 
 HANDLERS = {
@@ -805,6 +858,9 @@ HANDLERS = {
     "kanban_list_memories": t_list_memories,
     "kanban_delete_memory": t_delete_memory,
     "kanban_delete_project": t_delete_project,
+    "kanban_export_all": t_export_all,
+    "kanban_backup": t_backup,
+    "kanban_list_backups": t_list_backups,
 }
 
 
@@ -833,6 +889,11 @@ TOOL_KIND = {
     "kanban_delete_memory": ("destructive", "删除项目记忆"),
     "kanban_delete_task": ("destructive", "删除任务"),
     "kanban_delete_project": ("destructive", "删除整个项目"),
+    "kanban_export_all": ("read", "导出全项目交接包"),
+    # snapshot：不改看板内容，但也不是"读"—— 每次调用都会新建一份文件，所以
+    # 不能挂着 idempotentHint=True 骗客户端；同时它在只读模式下应当保留（见 READONLY_KINDS）。
+    "kanban_backup": ("snapshot", "创建数据快照"),
+    "kanban_list_backups": ("read", "查看数据快照"),
 }
 
 ANNOTATIONS = {
@@ -840,7 +901,11 @@ ANNOTATIONS = {
     "write":       {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
     "destructive": {"readOnlyHint": False, "destructiveHint": True,  "idempotentHint": True},
     "generate":    {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
+    "snapshot":    {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
 }
+
+# 只读模式下仍然可见的 kinds：read 本来就是读；snapshot 只拷出不改动。
+READONLY_KINDS = {"read", "snapshot"}
 
 TOOL_BY_NAME: dict[str, dict] = {}
 for _t in TOOLS:
@@ -865,7 +930,8 @@ def visible_tools() -> list[dict]:
     """
     if not _readonly_on():
         return TOOLS
-    return [t for t in TOOLS if TOOL_KIND.get(t["name"], ("write",))[0] == "read"]
+    return [t for t in TOOLS
+            if TOOL_KIND.get(t["name"], ("write",))[0] in READONLY_KINDS]
 
 
 # ---------------- resources：把交接内容摆成"客户端可挑的资源" ----------------

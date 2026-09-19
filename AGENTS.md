@@ -29,7 +29,7 @@
 | `scripts/test_all_llm.py` | LLM 端点全量实测：端点×Key×模型 健康矩阵 |
 | `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
-| `scripts/mcp_server.py` | MCP 服务（stdio，20 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作 |
+| `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
@@ -439,6 +439,11 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   `python -m PyInstaller` 直接 ModuleNotFoundError）；顶层没有 `PYTHONIOENCODING`，而 scenario 与
   package 步骤要打印中文、还要按 UTF-8 解子进程输出，GBK runner 上是假红；打好的 exe 没有上传，
   打包成功也拿不到产物。**改 workflow 一律按"它会被真执行"来写**；哪天真跑通了，把结论和用时补回这里。
+- **同一秒内的两次备份会 collapse 成一份**：快照目录名是 `backup_%Y%m%d_%H%M%S`，只精确到秒，
+  而"备份"恰恰最容易被连着触发（导入流程自己先备份一次、用户又点一次；代理批量改动前连拍两份）。
+  同名会落进同一个目录、第二次把第一次的内容覆盖掉 —— 以为有两份退路，其实一份，且全程没提示。
+  现在重名会往后缀 `-2`/`-3`，`_backup_label()` 负责把它显示成"（第 2 次）"。
+  教训通用：**凡是"名字里带时间戳"的目录/文件，都要假设同一秒会被撞两次**。
 - **`--specpath build` + 相对 `--add-data`**：会按 spec 目录解析，报
   `Unable to find ...\build\web`。必须用 `%~dp0` 绝对路径。
 - **改完源码忘了重打包**：`dist\AI交接看板.exe` 不会自动更新。判据：看版本条（设置面板里）
@@ -475,10 +480,10 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-19 收口）**：`pytest` 491 收集（485 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-覆盖率 94%（语句 2261 / 缺 140，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
+**验证基线（2026-09-19 收口）**：`pytest` 498 收集（492 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+覆盖率 94%（语句 2278 / 缺 141，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
 公开接口面：HTTP 47 条端点（`method+path` 计 48，多的那条是框架自带的 `/openapi.json`）
-+ MCP 20 个工具，另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
++ MCP 23 个工具，另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
   4 类 uri）与提示词（`prompts/list` / `prompts/get`，3 个）。
 门禁脚本：`release_regression --no-ai` 18/0、`delivery_drill`（自起隔离实例）19/0、
 `scenario_test` 33/33、`live_check --mcp` 12/12、`frozen_smoke` 8/0。
@@ -535,7 +540,13 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
      （几条没做完）、几条项目记忆"并拒绝执行。全看板只有这一个工具要 confirm ——
      因为它是唯一无法单独撤销的操作：没有软删除，唯一退路是拿备份**整份**恢复，
      那会把其它项目一起回滚。别把这个门槛"为了顺手"去掉，也别推广到别的工具。
-   仍然没做、下次要单独决定的：MCP 侧的全量导出（`/api/data/export` 的对等工具）—— 那是新能力不是深化。
+   - **全项目导出与快照**：`kanban_export_all`（复用 `build_export_all()` —— 把它从路由里抽出来，
+     就是为了不让"MCP 与 HTTP 各有一份渲染"重演一次）、`kanban_backup`、`kanban_list_backups`。
+   - **恢复（restore）故意不给代理**：一次误判就会把其它项目一起回滚，而且会无声吞掉人可能想救的内容。
+     代理能做的是"拍一份快照 + 把快照清单报给用户"，最后一步由人在「数据」面板点。
+     别为了"顺手"补一个 `kanban_restore`。
+   - 还剩没做的：AI 配置读写。**这条我要先否掉**：允许代理写 `/api/ai/config` 就等于让它改
+     `base_url`，之后所有调用都会被导向另一台服务器 —— 那是凭据外流的通路，不是便利。
    已判定为负资产、不要再提：游标分页（整份读改写下省不掉解析，只加边界 bug）、
    ETag/If-Match（`mutate()` + 跨进程锁已经串行化了两个写入进程）、
    webhook/SSE（要常驻订阅态与追加型事件表，撞约定 11）、软删除回收站（每条读路径多一个分支，

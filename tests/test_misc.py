@@ -113,6 +113,30 @@ def test_backup_listing_and_retention(app_client):
     assert body["backups"][0]["name"].startswith("backup_")
 
 
+def test_rapid_backups_do_not_collapse_into_one_folder(app_client):
+    """连着拍两份必须真的留下两份。
+
+    目录名只精确到秒，而"备份"恰恰最容易被连着调（代理批量改动前拍一份、又拍一份，
+    导入流程自己也先备份一次）。同名会落进同一个目录，第二次把第一次覆盖掉：
+    用户以为有两份退路，其实只剩一份，而且全程没有任何提示。
+    """
+    folders = {app_client.post("/api/backup")[1]["folder"] for _ in range(4)}
+    assert len(folders) == 4, f"四次备份只剩 {len(folders)} 个目录：{sorted(folders)}"
+    listing = app_client.get("/api/backups")[1]["backups"]
+    assert len({b["name"] for b in listing}) == len(listing)
+    # 同秒重入的那份要看得出来，不能显示成同一个时刻的两条同名记录
+    assert any("-2" in b["name"] for b in listing), [b["name"] for b in listing]
+
+
+def test_backup_label_reads_the_suffix(app_client):
+    from app.main import _backup_label
+
+    assert _backup_label("backup_20260919_182610") == "2026-09-19 18:26:10"
+    assert _backup_label("backup_20260919_182610-2") == "2026-09-19 18:26:10（第 2 次）"
+    # 手出来的目录名不该把接口打崩，原样回显即可
+    assert _backup_label("backup_完全不是时间") == "完全不是时间"
+
+
 # ---------------- 导出落盘 ----------------
 
 def test_export_save_without_path_falls_back_to_desktop(app_client, monkeypatch, tmp_path):

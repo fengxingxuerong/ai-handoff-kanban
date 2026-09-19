@@ -979,3 +979,77 @@ def test_readonly_mode_hides_destructive_but_keeps_reads(tmp_path):
         assert is_err and "只读" in _, f"只读模式下竟然执行了删除：{_}"
     finally:
         c.close()
+
+
+# ---------------- 快照 / 全项目导出 ----------------
+
+def test_backup_leaves_the_board_untouched_and_is_not_idempotent(mcp, tmp_path):
+    """`kanban_backup` 只拷出去：看板一行没动，但每调一次就多一份文件
+    （所以它的 annotations 必须是 idempotentHint=false，别装作可重复调用）"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "快照前状态"})[0])
+    before, err = mcp.tool("kanban_get_project", {"project_id": pid})
+    assert not err
+
+    text, err = mcp.tool("kanban_backup")
+    assert not err, text
+    assert "已创建快照 backup_" in text and "10 份" in text, text
+    assert "恢复" in text and "面板" in text, "没告诉代理回滚要人来点"
+
+    text2, _ = mcp.tool("kanban_backup")
+    assert "backup_" in text2 and text2.split("backup_")[1] != text.split("backup_")[1], \
+        "两次备份拿到了同一份快照名"
+    listing, _ = mcp.tool("kanban_list_backups")
+    assert "2 份" in listing, listing
+    after, err2 = mcp.tool("kanban_get_project", {"project_id": pid})
+    assert after == before, "备份改动了看板内容"
+
+
+def test_there_is_deliberately_no_restore_tool(mcp):
+    """恢复整块板**故意**不给代理：一次误判就会无声吞掉人可能想救的其它项目。
+
+    如果哪天有人加了这个工具，这条用例就是留给他的那道坎 —— 先想清楚
+    "代理自己回滚"和"代理报快照名、由人决定"哪个才是对的默认。
+    """
+    names = {t["name"] for t in _result(mcp, "tools/list")["tools"]}
+    assert not any("restore" in n or "recover" in n for n in names), names
+    assert not any("import" in n or "export/save" in n for n in names), "写盘类数据通道也不该开给代理"
+
+
+def test_export_all_tool_matches_http_rendering_and_redacts(mcp):
+    """全项目导出复用 HTTP 那份渲染，且默认脱敏"""
+    pid = last_id(mcp.tool("kanban_create_project", {
+        "name": "合并包项目", "status": "进行中",
+        "background": "网关 key=abcd1234efgh5678"})[0])
+    mcp.tool("kanban_create_project", {"name": "另一个项目"})
+    text, err = mcp.tool("kanban_export_all")
+    assert not err, text
+    assert text.startswith("# AI 交接看板 · 全项目交接包"), text[:60]
+    assert "合并包项目" in text and "另一个项目" in text
+    assert "共 2 个项目" in text
+    assert "abcd1234efgh5678" not in text and "********" in text, "默认没脱敏"
+    raw, _ = mcp.tool("kanban_export_all", {"redact": False})
+    assert "abcd1234efgh5678" in raw
+
+
+def test_export_all_route_and_builder_cannot_drift(app_client):
+    """`GET /api/export-all` 必须就是 `build_export_all()` 的包装。
+
+    两处各写一遍的话，MCP 与 HTTP 会给出两份不同的"全项目交接包" ——
+    这个项目已经为两份 `_projects_brief` 付过一次代价。
+    """
+    import app.main as kanban
+
+    _, proj = app_client.create_project("对账项目")
+    kanban.add_memory(kanban.MemoryIn(pid=proj["id"], type="决策", text="统一走流式导出"))
+    for redact in (0, 1):
+        body = app_client.get(f"/api/export-all?redact={redact}")[1]
+        assert body == kanban.build_export_all(bool(redact)), f"redact={redact} 时两边不一致"
+
+
+def test_readonly_keeps_backup_and_export(mcp):
+    """只读模式该留的：读、导出、以及"动手前拍一份退路"的快照"""
+    kinds = {t["name"]: t["annotations"] for t in _result(mcp, "tools/list")["tools"]}
+    assert "kanban_backup" in kinds and "kanban_list_backups" in kinds
+    assert "kanban_export_all" in kinds
+    assert kinds["kanban_backup"]["idempotentHint"] is False, "备份每次都会新建一份"
+    assert kinds["kanban_export_all"]["readOnlyHint"] is True

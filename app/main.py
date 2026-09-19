@@ -829,7 +829,7 @@ _REDACT_PATTERNS = [
     # 原来那条 `key\s*[:=]` 卡在引号上匹配不到，于是最常见的 JSON 配置反而没脱敏。
     # 另外替换必须原样保留分隔符 —— 老写法把 `:` 统一换成 `=`，脱敏顺手改了别人的格式。
     (r"(?i)\b(api[_-]?key|apikey|access[_-]?token|auth[_-]?token|refresh[_-]?token|token"
-     r"|secret|password|passwd|pwd|授权码|密钥)([\"']?)(\s*[:=]\s*)([\"']?)[^\s\"']{4,}",
+     r"|secret|password|passwd|pwd|key|授权码|密钥)([\"']?)(\s*[:=]\s*)([\"']?)[^\s\"']{4,}",
      r"\1\2\3\4" + MASK_MARK),
     # 连接串 postgres://user:pass@host —— 盖掉口令，主机名留着（排查问题要用）
     # 必须排在邮箱规则前面：否则邮箱规则先把 `pass@host.com` 吃掉，口令就漏在协议头里
@@ -1538,8 +1538,12 @@ def save_export(body: SaveExportBody):
     raise HTTPException(500, "保存失败，无法写入任何位置")
 
 
-@app.get("/api/export-all")
-def export_all(redact: int = 0):
+def build_export_all(redact: bool = False) -> str:
+    """全项目合并交接包的正文。
+
+    单独一个函数是为了让 MCP 的 `kanban_export_all` 复用同一份渲染，
+    而不是抄第二遍（本项目已经有过两份 `_projects_brief` 分叉的前例）。
+    """
     data = get_projects_data()
     projects = data.get("projects", [])
     mems_by_pid = _memories_by_pid()
@@ -1548,7 +1552,12 @@ def export_all(redact: int = 0):
     for p in projects:
         md = _build_handoff_markdown(p, mems_by_pid.get(p.get("id"), []))
         parts.append("\n\n---\n\n" + (redact_text(md) if redact else md))
-    return PlainTextResponse("".join(parts), media_type="text/markdown; charset=utf-8")
+    return "".join(parts)
+
+
+@app.get("/api/export-all")
+def export_all(redact: int = 0):
+    return PlainTextResponse(build_export_all(bool(redact)), media_type="text/markdown; charset=utf-8")
 
 
 @app.get("/api/today")
@@ -1832,7 +1841,14 @@ def export_agent_files(pid: str, body: AgentFilesBody):
 def create_backup():
     backups = data_dir() / "backups"
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # 名字只精确到秒，而"备份"恰恰是最容易被连着调两次的操作（代理批量改动前拍一份、
+    # 又拍一份；或导入流程自己先备份一次）。同名会直接落进同一个目录，
+    # 第二次把第一次的内容覆盖掉 —— 用户以为留了两份退路，其实只有一份。
     folder = backups / f"backup_{ts}"
+    n = 2
+    while folder.exists():
+        folder = backups / f"backup_{ts}-{n}"
+        n += 1
     folder.mkdir(parents=True, exist_ok=True)
     copied = []
     for name in ("projects.json", "config.json", "memories.json"):
@@ -1861,8 +1877,27 @@ def list_backups():
             files = [f.name for f in b.iterdir()] if b.is_dir() else []
         except Exception:
             files = []
-        out.append({"name": b.name, "time": b.name.replace("backup_", "").replace("_", " "), "files": files})
+        out.append({"name": b.name, "time": _backup_label(b.name), "files": files})
     return {"backups": out}
+
+
+def _backup_label(name: str) -> str:
+    """快照目录名 → 给人看的时刻。
+
+    同秒重入时名字带 `-2` 后缀（见 create_backup），所以这里只认前两段，
+    并把后缀原样接在时间后面 —— 用字符串 replace 硬凑会把 "…-2" 当成时刻显示。
+    """
+    stem = name[len("backup_"):] if name.startswith("backup_") else name
+    stamp, _, suffix = stem.partition("-")
+    parts = stamp.split("_")
+    if len(parts) == 2 and len(stamp) == 15:
+        try:
+            shown = datetime.strptime(stamp, "%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            shown = stamp
+    else:
+        shown = stamp
+    return f"{shown}（第 {suffix} 次）" if suffix else shown
 
 
 # ---- 全量数据导出 / 导入（跨机迁移） ----
