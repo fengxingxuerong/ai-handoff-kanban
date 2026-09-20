@@ -408,6 +408,19 @@ def test_redact_is_on_by_default_for_agent_outputs(mcp):
     assert "zzzz9998887776666" not in ctx, "接手包同样要默认脱敏"
     assert "pid" in ctx or pid in ctx, "项目 id 不能被一起盖掉"
 
+    # 密钥写在**任务标题**里是最常见的形状，曾经从这条线上整条漏出去
+    _, err = mcp.tool("kanban_add_task", {"project_id": pid,
+                                          "title": "轮换 sk-zzzz9998887776666 这把"})
+    assert not err
+    ctx2, err = mcp.tool("kanban_context", {"project_id": pid})
+    assert not err, ctx2
+    assert "zzzz9998887776666" not in ctx2, "标题里的密钥也要默认盖掉"
+    assert "轮换 sk-******** 这把" in ctx2, "盖完还得认得出是哪条任务"
+    # 两条路同一个口径靠字面量钉死：tests/test_api.py 断言的是同一个 "轮换 sk-******** 这把"
+    raw2, err = mcp.tool("kanban_context", {"project_id": pid, "redact": False})
+    assert not err, raw2
+    assert "轮换 sk-zzzz9998887776666 这把" in raw2, "显式要原文时才给原文"
+
 
 def test_boolean_arg_type_is_enforced(mcp):
     """schema 里声明了 boolean 就得真的校验：给字符串要说清楚，而不是悄悄当"没给" """
@@ -1094,3 +1107,165 @@ def test_next_task_tool_names_the_reason_when_nothing_is_ready(mcp):
     assert "被前置挡住" in text3 and "前置甲" in text3.split("被前置挡住")[1], text3
     # 说明：无环数据里"一条都动不了"其实到不了（拓扑上必然有入度为 0 的一条），
     # 那行文案是兜底，不为它编一个假场景来测。
+
+
+def test_mcp_says_what_the_cleaner_dropped(mcp):
+    """清洗规则本身没错，错在**丢得毫无声音**：智能体传 `due_date="下周三"`
+    会收到一句"已新增任务"，而盘上日期是空的 —— 它以为设上了。"""
+    text, err = mcp.tool("kanban_create_project", {"name": "清洗回执"})
+    assert not err, text
+    pid = last_id(text)
+
+    text, err = mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "带废日期", "due_date": "下周三",
+        "depends_on": ["不存在的任务id"]})
+    assert not err, text
+    assert "截止日期" in text and "下周三" in text, text
+    assert "前置依赖" in text and "不存在的任务id" in text, text
+    # 回执说了丢了什么，但数据一个字节都没多写：日期仍是空
+    stored, err = mcp.tool("kanban_get_project", {"project_id": pid})
+    assert not err and "下周三" not in stored
+
+    ok, err = mcp.tool("kanban_add_task", {"project_id": pid, "title": "正常日期",
+                                           "due_date": "2026-10-01", "refs": ["app/main.py:1"]})
+    assert not err, ok
+    assert "截止日期" not in ok and "没落上" not in ok, "正常入参不该有回执"
+
+
+def test_mcp_marks_idempotent_replay_in_the_reply(mcp):
+    """重放与新建以前文案完全相同，"id 和上次一样"根本不构成可辨识的信号。"""
+    ref = "op-42"
+    a, err = mcp.tool("kanban_create_project", {"name": "重放文案", "client_ref": ref})
+    assert not err and "幂等重放" not in a, a
+    b, err = mcp.tool("kanban_create_project", {"name": "重放文案", "client_ref": ref})
+    assert not err and "幂等重放" in b, b
+    assert last_id(a) == last_id(b), "重放必须拿回同一条"
+    t1, _ = mcp.tool("kanban_add_task", {"project_id": last_id(b), "title": "甲",
+                                         "client_ref": "t-1"})
+    t2, _ = mcp.tool("kanban_add_task", {"project_id": last_id(b), "title": "甲",
+                                         "client_ref": "t-1"})
+    assert "幂等重放" not in t1 and "幂等重放" in t2, (t1, t2)
+
+
+def test_collection_fields_have_incremental_ops(mcp):
+    """只有整体覆盖时，代理加一条 refs 得先读整份再写回，而那次读在临界区外 ——
+    期间桌面端加进去的东西会被整体写回抹掉。add/remove 在服务端锁内展开。"""
+    text, err = mcp.tool("kanban_create_project", {"name": "增量改", "tags": ["全栈"]})
+    assert not err, text
+    pid = last_id(text)
+    text, err = mcp.tool("kanban_add_task", {"project_id": pid, "title": "甲",
+                                             "refs": ["app/main.py:1"]})
+    assert not err, text
+    tid = last_id(text)
+
+    def tags_line() -> str:
+        # get_project 的正文不列标签，交接包那行 `- **标签**：…` 才是可见的地方
+        md, e = mcp.tool("kanban_handoff", {"project_id": pid})
+        assert not e, md
+        return next((ln for ln in md.splitlines() if "标签" in ln), "")
+
+    text, err = mcp.tool("kanban_update_project", {"project_id": pid, "tags_add": ["增量"]})
+    assert not err, text
+    assert "全栈" in tags_line() and "增量" in tags_line(), "追加不能把原有标签顶掉"
+
+    text, err = mcp.tool("kanban_update_project", {"project_id": pid, "tags_remove": ["全栈"]})
+    assert not err, text
+    line = tags_line()
+    assert "全栈" not in line and "增量" in line, line
+
+    text, err = mcp.tool("kanban_update_task", {"task_id": tid, "refs_add": ["app/llm.py:9"]})
+    assert not err, text
+    md, e = mcp.tool("kanban_handoff", {"project_id": pid})
+    assert not e, md
+    assert "app/main.py:1" in md and "app/llm.py:9" in md, "追加 refs 不能顶掉原有的"
+
+    # 整体值与增量同时给 = 语义冲突，要问清楚而不是猜一个
+    bad, err = mcp.tool("kanban_update_task", {"task_id": tid, "refs": ["只留这条"],
+                                               "refs_add": ["还要这条"]})
+    assert err and "不能同时" in bad, bad
+
+
+def test_completing_a_prerequisite_reports_what_it_unblocked(mcp):
+    """agendum 的 `pm_done` 会回 "Unblocked: item-002"。以前这边只说"已更新为 已完成"，
+    代理要再问一遍 kanban_next_task 才知道自己刚放行了哪条活。"""
+    text, err = mcp.tool("kanban_create_project", {"name": "解锁回执", "status": "进行中"})
+    pid = last_id(text)
+    text, _ = mcp.tool("kanban_add_task", {"project_id": pid, "title": "前置：迁移脚本",
+                                           "status": "进行中"})
+    pre = last_id(text)
+    text, _ = mcp.tool("kanban_add_task", {"project_id": pid, "title": "后置：联调",
+                                           "depends_on": [pre]})
+    post = last_id(text)
+
+    text, err = mcp.tool("kanban_update_task", {"task_id": pre, "status": "已完成"})
+    assert not err, text
+    assert "已解锁" in text and "后置：联调" in text and post in text, text
+    # 再改一个不解锁任何东西的状态，不该凭空报解锁
+    text, _ = mcp.tool("kanban_update_task", {"task_id": post, "priority": "高"})
+    assert "已解锁" not in text, text
+
+
+def test_handoff_can_omit_sections_and_says_so(mcp):
+    """`_budget_note` 一直告诉智能体"本包偏长，建议裁剪"，却没有任何一条路能真的裁。"""
+    text, err = mcp.tool("kanban_create_project", {
+        "name": "可裁剪", "status": "进行中", "background": "背景正文"})
+    pid = last_id(text)
+    mcp.tool("kanban_add_task", {"project_id": pid, "title": "做完的", "status": "已完成",
+                                 "refs": ["app/main.py:1"]})
+    mcp.tool("kanban_add_task", {"project_id": pid, "title": "还没做的", "status": "待办"})
+    mcp.tool("kanban_memory_add", {"project_id": pid, "type": "坑", "text": "记忆正文"})
+
+    full, err = mcp.tool("kanban_handoff", {"project_id": pid})
+    assert not err, full
+    assert "还没做的" in full and "记忆正文" in full and "做完的" in full
+
+    cut, err = mcp.tool("kanban_handoff", {"project_id": pid,
+                                           "omit_sections": ["done", "memories", "refs"]})
+    assert not err, cut
+    assert "做完的" not in cut, "已完成任务没裁掉"
+    assert "记忆正文" not in cut and "还没做的" in cut, "裁过头了"
+    assert "省略" in cut and "已完成任务" in cut, "裁掉什么必须在正文里留痕"
+    assert len(cut) < len(full)
+
+    bad, err = mcp.tool("kanban_handoff", {"project_id": pid, "omit_sections": ["背景"]})
+    assert err and "omit_sections" in bad, bad
+
+
+def test_list_projects_masks_next_action(mcp):
+    """代理侧每一条读取路径都要默认脱敏，`kanban_list_projects` 以前是漏的那条：
+    同一个 `next_action`，模型简报里盖着、板子概览里原样发出去 —— 两条路两个答案。"""
+    text, err = mcp.tool("kanban_create_project", {
+        "name": "概览脱敏", "next_action": "把 sk-listabcdef12345678 换掉"})
+    assert not err, text
+    out, err = mcp.tool("kanban_list_projects", {})
+    assert not err, out
+    assert "sk-listabcdef12345678" not in out, "板子概览把密钥原样发出去了"
+    assert "sk-********" in out, "只盖凭据，那句话本身要还能读"
+
+
+def test_every_agent_read_path_masks_by_default(mcp):
+    """约定 9 说"代理侧默认脱敏"，而 `kanban_get_project` / `kanban_today` /
+    `kanban_search_tasks` / `kanban_next_task` 是仅有的四条连开关都没有的读路径 ——
+    其中 `kanban_get_project` 还是 initialize 指引让代理第一个调的。"""
+    text, err = mcp.tool("kanban_create_project", {
+        "name": "全线脱敏", "status": "进行中",
+        "background": "网关 sk-bgabcdef12345678", "next_action": "换掉 sk-nxabcdef12345678"})
+    assert not err, text
+    pid = last_id(text)
+    _, err = mcp.tool("kanban_add_task", {"project_id": pid, "title": "轮换 sk-tiabcdef12345678",
+                                          "desc": "细节见 sk-deabcdef12345678", "status": "待办"})
+    assert not err
+
+    for name, args in (("kanban_get_project", {"project_id": pid}),
+                       ("kanban_today", {}),
+                       ("kanban_search_tasks", {"query": "轮换"}),
+                       ("kanban_next_task", {"project_id": pid})):
+        out, e = mcp.tool(name, args)
+        assert not e, (name, out)
+        leaks = [s for s in ("sk-bgabcdef", "sk-nxabcdef", "sk-tiabcdef", "sk-deabcdef")
+                 if s in out]
+        assert not leaks, f"{name} 默认没脱敏，漏了 {leaks}"
+
+    # 显式要原文时才给原文（逃生口要在）
+    raw, e = mcp.tool("kanban_get_project", {"project_id": pid, "redact": False})
+    assert not e and "sk-bgabcdef12345678" in raw, "显式 redact:false 应当拿原文"

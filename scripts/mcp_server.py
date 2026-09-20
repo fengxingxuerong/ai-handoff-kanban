@@ -73,13 +73,48 @@ CAPABILITIES = {"tools": {"listChanged": False},
                 "resources": {"listChanged": False},
                 "prompts": {"listChanged": False}}
 
+
+def _add_remove_params(base: str, what: str) -> dict:
+    """生成 `<base>_add` / `<base>_remove` 两个增量参数的 schema。
+
+    只有整体覆盖时，代理要加一条就得"读整份 → 拼好 → 写回"，而那次读发生在临界区外 ——
+    期间桌面端加进去的条目会被这次整体写回抹掉（硬性约定 1 的丢更新形状）。
+    增量在服务端的同一个临界区里展开成整体值，见 `kanban._expand_ops`。
+    """
+    return {
+        f"{base}_add": {"type": "array", "items": {"type": "string"},
+                        "description": f"往{what}里追加几条（不必先读整份再整体写回）"},
+        f"{base}_remove": {"type": "array", "items": {"type": "string"},
+                           "description": f"从{what}里去掉几条"},
+    }
+
+
 # 创建类工具共用的幂等键。智能体超时后重试是常态，没有这个键同一条指令就会
 # 造出成对的重复任务（重复项还会跟着进交接包和拓扑序）。
-# 命中时返回**第一次建出来的那条的 id**：所以"看到的 id 和上次一样"就等于去重发生过。
+# 命中时返回第一次建出来的那条，并在文案里明说"幂等重放"——只靠"id 和上次一样"
+# 判断是不成立的：以前正文文案与新建完全相同，而超过 80 字符的键还会被截断成
+# 同一个键（两条不同请求互相撞车）。现在超长键走"前缀+哈希"，不再截断。
 CLIENT_REF_SCHEMA = {
-    "type": "string", "maxLength": 80,
+    "type": "string",
     "description": "可选幂等键：同一次工作重试时传同一个值（比如你自己的操作 id），"
-                   "看板会返回第一次创建的那条而不是再建一条。",
+                   "看板会返回第一次创建的那条而不是再建一条，并在回执里注明是重放。"
+                   "建议 80 字符以内；更长的会被压成前缀+哈希，仍然是不同的键。",
+}
+
+
+def _omit_arg(args: dict) -> set:
+    """`omit_sections`：要从小节里裁掉什么。不认识的名字要报错，不能静默当"没给"。"""
+    try:
+        return kanban.parse_handoff_sections(args.get("omit_sections"), param="omit_sections")
+    except kanban.HTTPException as e:
+        raise ValueError(e.detail) from None
+
+
+OMIT_SECTIONS_SCHEMA = {
+    "type": "array", "items": {"type": "string", "enum": list(kanban.HANDOFF_SECTIONS)},
+    "description": "裁掉这些小节以省上下文："
+                   + "、".join(f"{k}={v}" for k, v in kanban._SECTION_CN.items())
+                   + "。默认全给；裁掉什么会在正文开头留一行说明，别让接手方误读成\"没有\"。",
 }
 
 
@@ -90,7 +125,17 @@ def log(msg: str) -> None:
 # ---------------- 工具实现 ----------------
 # 直接复用 app.main 里的业务函数（含字段白名单与单临界区写入），不另写一套逻辑。
 
-def _projects_brief() -> list[dict]:
+def _board_rows() -> list[dict]:
+    """`kanban_list_projects` / `resources/list` 用的"整块板子概览"。
+
+    以前它叫 `_projects_brief`，与 `app.main._projects_brief(projects)`（送给模型的简报）
+    **同名不同物**：一个是给人/代理看的板子摘要，一个是给 LLM 的载荷，字段集与脱敏口径都不同。
+    同名两份实现是本项目的老毛病（`app/main.py` 里那句注释、以及"两份 `_projects_brief`
+    付过一次代价"的测试注释都在说这件事），所以先把名字改成分得懂的。
+
+    `next_action` 要过脱敏：它是自由文本，而这条是**代理侧**的读取 ——
+    模型简报那份一直盖着，板子概览这份以前原样发出去，同一个字段两条路两个答案。
+    """
     out = []
     data = kanban.get_projects_data()
     for p in data.get("projects", []):
@@ -103,7 +148,7 @@ def _projects_brief() -> list[dict]:
             "id": p.get("id"), "name": p.get("name"), "status": p.get("status"),
             "progress": p.get("progress"), "priority": p.get("priority"),
             "tags": p.get("tags", []), "repo_path": p.get("repo_path", ""),
-            "next_action": p.get("next_action", ""),
+            "next_action": kanban.redact_text(p.get("next_action", "") or ""),
             "task_counts": counts, "total_tasks": len(tasks),
             "readiness": kanban._readiness_score(p),
             "updated_at": p.get("updated_at", ""),
@@ -121,7 +166,7 @@ def _match_by_name(query: str) -> list[dict]:
     if not q:
         return []
     hits = []
-    for p in _projects_brief():
+    for p in _board_rows():
         if q in (p["name"] or "").lower() or q == (p["id"] or "").lower():
             hits.append(p)
     return hits
@@ -137,7 +182,7 @@ def _task_by_id(task_id: str):
 
 
 def t_list_projects(_args: dict) -> str:
-    projects = _projects_brief()
+    projects = _board_rows()
     if not projects:
         return "看板里还没有项目。可以用 kanban_create_project 建一个。"
     lines = [f"共 {len(projects)} 个项目："]
@@ -157,6 +202,22 @@ def t_list_projects(_args: dict) -> str:
         if p["next_action"]:
             lines.append(f"    下一步：{p['next_action']}")
     return "\n".join(lines)
+
+
+def _agent_text(body: str, args: dict) -> str:
+    """代理侧读路径的统一出口脱敏（默认开）。
+
+    AGENTS 约定 9 写的是"代理侧默认就是脱敏的"，但 `kanban_get_project` / `kanban_today` /
+    `kanban_search_tasks` / `kanban_next_task` 四条以前**连这个开关都没有** ——
+    而 `kanban_get_project` 恰恰是 `initialize` 指引里让代理第一个调的工具。
+    掩码只替换凭据那一段：id / 状态 / 路径 / 项目名都不受影响，代理照样能对齐任务。
+    要原文时显式传 `redact: false`。
+    """
+    return kanban.redact_text(body) if _redact_arg(args) else body
+
+
+REDACT_SCHEMA = {"type": "boolean", "default": True,
+                 "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）；确实需要原文时显式传 false"}
 
 
 def t_get_project(args: dict) -> str:
@@ -187,7 +248,7 @@ def t_get_project(args: dict) -> str:
             if t.get("refs"):
                 row += "  ↳ 涉及：" + "、".join(t["refs"])
             lines.append(row)
-    return "\n".join(lines)
+    return _agent_text("\n".join(lines), args)
 
 
 def t_find_project(args: dict) -> str:
@@ -218,7 +279,8 @@ def t_create_project(args: dict) -> str:
         next_action=args.get("next_action") or "",
     )
     project = kanban.create_project(body, client_ref=args.get("client_ref") or "")
-    return f"已创建项目 [{project['id']}] {project['name']}（状态 {project['status']}）"
+    replay = "（幂等重放：这个项目之前就存在，没有重复创建）" if project.get("client_ref_replayed") else ""
+    return f"已创建项目 [{project['id']}] {project['name']}（状态 {project['status']}）{replay}"
 
 
 def t_update_project(args: dict) -> str:
@@ -237,6 +299,33 @@ def t_update_project(args: dict) -> str:
     return f"已更新 [{pid}] {updated['name']}：{('、'.join(changes)) or '无字段变化'}"
 
 
+def _clean_notes(args: dict, stored: dict) -> list[str]:
+    """把"传了但没落上"的字段说出来。
+
+    看板对入参做规范化（截止日期只认 `YYYY-MM-DD`；refs / depends_on 去重、限量、
+    去不存在项），规则本身是对的，以前的问题是**丢得毫无声音**：智能体传
+    `due_date="下周三"` 会收到一句"已新增任务"，而盘上日期是空的，它以为设上了。
+    这里不改动清洗规则，只把丢掉的东西讲出来 —— 代理需要的是可行动的反馈。
+    """
+    notes = []
+    raw_due = args.get("due_date")
+    if isinstance(raw_due, str) and raw_due.strip() and not (stored.get("due_date") or ""):
+        notes.append(f"截止日期「{raw_due.strip()[:40]}」没认出来，已留空（只接受 YYYY-MM-DD）")
+    for key, label, cap, norm in (
+            ("refs", "涉及代码位置", kanban.MAX_REFS,
+             lambda s: s.strip().strip("`").strip()),
+            ("depends_on", "前置依赖", kanban.MAX_DEPS, lambda s: s.strip())):
+        raw = args.get(key)
+        if not isinstance(raw, (list, tuple)) or not raw:
+            continue
+        got = set(stored.get(key) or [])
+        lost = [n for n in (norm(x) for x in raw if isinstance(x, str)) if n and n not in got]
+        if lost:
+            notes.append(f"{label}有 {len(lost)} 条没落上（不存在/重复/自引用/超 {cap} 条或过长）："
+                         + "、".join(lost[:5]))
+    return notes
+
+
 def t_add_task(args: dict) -> str:
     _ensure_writable()
     pid = args.get("project_id") or ""
@@ -252,7 +341,11 @@ def t_add_task(args: dict) -> str:
     )
     task = kanban.create_task(pid, body, client_ref=args.get("client_ref") or "")
     refs = ("；涉及 " + "、".join(task["refs"])) if task.get("refs") else ""
-    return f"已在项目 [{pid}] 新增任务 [{task['id']}] {task['title']}（{task['status']}/{task['priority']}）{refs}"
+    replay = "（幂等重放：这条之前就存在，没有重复创建）" if task.get("client_ref_replayed") else ""
+    lost = _clean_notes(args, task)
+    tail = ("；" + "；".join(lost)) if lost else ""
+    return (f"已在项目 [{pid}] 新增任务 [{task['id']}] {task['title']}"
+            f"（{task['status']}/{task['priority']}）{refs}{replay}{tail}")
 
 
 def t_update_task(args: dict) -> str:
@@ -261,10 +354,17 @@ def t_update_task(args: dict) -> str:
     changes = {k: v for k, v in args.items() if k != "task_id"}
     # 同 t_update_project：补全在临界区内做，不在锁外读快照
     try:
-        updated, project_name = kanban.patch_task(tid, changes, with_project=True)
+        updated, info = kanban.patch_task(tid, changes, with_project=True)
     except kanban.HTTPException as e:
         raise ValueError(f"{e.detail}（task_id={tid}）") from None
-    return f"任务 [{tid}] 已更新为 {updated['status']}/{updated['priority']}（所属项目 {project_name}）"
+    lost = _clean_notes(args, updated)
+    tail = ("；" + "；".join(lost)) if lost else ""
+    un = info.get("unblocked") or []
+    # 报"你刚放行了哪几条"：不然代理得再问一遍 kanban_next_task 才知道下一步做什么
+    unblock = ("；已解锁 " + "、".join(f"{x['title']} [{x['id']}]" for x in un[:5])
+               + ("…" if len(un) > 5 else "")) if un else ""
+    return (f"任务 [{tid}] 已更新为 {updated['status']}/{updated['priority']}"
+            f"（所属项目 {info.get('project', '')}）{tail}{unblock}")
 
 
 def t_next_task(args: dict) -> str:
@@ -297,7 +397,7 @@ def t_next_task(args: dict) -> str:
             waiting = t.get("waiting_for") or []
             if waiting:
                 lines.append(f"- {t['title']}（等：{'、'.join(waiting)}）")
-    return "\n".join(lines)
+    return _agent_text("\n".join(lines), args)
 
 
 def t_delete_task(args: dict) -> str:
@@ -340,8 +440,9 @@ def t_handoff(args: dict) -> str:
     p = _find(pid)
     if not p:
         raise ValueError(f"找不到项目：{pid}")
-    md = kanban._build_handoff_markdown(p)
-    if _redact_arg(args):
+    show = _redact_arg(args)
+    md = kanban._build_handoff_markdown(p, redact=show, omit=_omit_arg(args))
+    if show:
         md = kanban.redact_text(md)
     # 智能体是把整包读进上下文窗口的，报个尺寸让它知道要不要改用 kanban_context 分片取
     return md + kanban._budget_note(md)
@@ -418,7 +519,7 @@ def t_today(args: dict) -> str:
         refs = " 📍" + "、".join(t["refs"]) if t.get("refs") else ""
         mark = "（阻塞中，先解）" if t.get("status") == "阻塞" else ""
         lines.append(f"  [{t['priority']}]{mark} {t['title']} —— {t['project_name']}{due}{refs}")
-    return "\n".join(lines)
+    return _agent_text("\n".join(lines), args)
 
 
 def t_search_tasks(args: dict) -> str:
@@ -432,7 +533,7 @@ def t_search_tasks(args: dict) -> str:
     for t in hits:
         # 注意：搜索接口用的是 task_id（today 用的是 id），这里按它自己的字段取
         lines.append(f"  [{t.get('task_id')}] {t['title']} —— {t['project_name']}（{t['status']}/{t['priority']}）")
-    return "\n".join(lines)
+    return _agent_text("\n".join(lines), args)
 
 
 def t_log_progress(args: dict) -> str:
@@ -547,7 +648,7 @@ def t_list_backups(args: dict) -> str:
 
 def t_export_all(args: dict) -> str:
     """全项目合并交接包（与 GET /api/export-all 同一份渲染）"""
-    md = kanban.build_export_all(_redact_arg(args))
+    md = kanban.build_export_all(_redact_arg(args), _omit_arg(args))
     return md + kanban._budget_note(md)
 
 
@@ -562,7 +663,8 @@ TOOLS: list[dict] = [
         "description": "读单个项目的完整上下文：背景、交接说明、下一步、全部任务。开始干活前用它代替翻聊天记录。",
         "inputSchema": {
             "type": "object",
-            "properties": {"project_id": {"type": "string", "description": "项目 id，可从 kanban_list_projects 获取"}},
+            "properties": {"project_id": {"type": "string", "description": "项目 id，可从 kanban_list_projects 获取"},
+                           "redact": REDACT_SCHEMA},
             "required": ["project_id"], "additionalProperties": False,
         },
     },
@@ -611,6 +713,7 @@ TOOLS: list[dict] = [
                 "handoff_note": {"type": "string"},
                 "next_action": {"type": "string"},
                 "tags": {"type": "array", "items": {"type": "string"}},
+                **_add_remove_params("tags", "标签"),
             },
             "required": ["project_id"], "additionalProperties": False,
         },
@@ -654,6 +757,8 @@ TOOLS: list[dict] = [
                          "description": "相关代码位置；不改就省略"},
                 "depends_on": {"type": "array", "items": {"type": "string"},
                                "description": "前置任务 id；不改就省略"},
+                **_add_remove_params("refs", "相关代码位置"),
+                **_add_remove_params("depends_on", "前置依赖"),
                 "due_date": {"type": "string",
                              "description": "截止日期 YYYY-MM-DD；不改就省略（传空串等于清掉截止日期）"},
             },
@@ -666,7 +771,8 @@ TOOLS: list[dict] = [
                        "刚接手一个项目时先调这个，别一上来挑个被依赖挡住的。",
         "inputSchema": {
             "type": "object",
-            "properties": {"project_id": {"type": "string"}},
+            "properties": {"project_id": {"type": "string"},
+                           "redact": REDACT_SCHEMA},
             "required": ["project_id"], "additionalProperties": False,
         },
     },
@@ -690,8 +796,8 @@ TOOLS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {"project_id": {"type": "string"},
-                           "redact": {"type": "boolean", "default": True,
-                                      "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）；确实需要原文时显式传 false"}},
+                           "redact": REDACT_SCHEMA,
+                           "omit_sections": OMIT_SECTIONS_SCHEMA},
             "required": ["project_id"], "additionalProperties": False,
         },
     },
@@ -701,8 +807,7 @@ TOOLS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {"project_id": {"type": "string"},
-                           "redact": {"type": "boolean", "default": True,
-                                      "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）；确实需要原文时显式传 false"}},
+                           "redact": REDACT_SCHEMA},
             "required": ["project_id"], "additionalProperties": False,
         },
     },
@@ -712,8 +817,7 @@ TOOLS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {"project_id": {"type": "string"},
-                           "redact": {"type": "boolean", "default": True,
-                                      "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）；确实需要原文时显式传 false"}},
+                           "redact": REDACT_SCHEMA},
             "required": ["project_id"], "additionalProperties": False,
         },
     },
@@ -725,6 +829,7 @@ TOOLS: list[dict] = [
             "properties": {
                 "limit": {"type": "integer", "minimum": 1, "maximum": 200,
                           "description": "最多返回多少条，默认 30"},
+                "redact": REDACT_SCHEMA,
             },
             "additionalProperties": False,
         },
@@ -740,6 +845,7 @@ TOOLS: list[dict] = [
                 # 客户端要 150 条拿回 50 条、还以为是"就这么多"。
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50,
                           "description": "最多返回多少条，默认 30，上限 50"},
+                "redact": REDACT_SCHEMA,
             },
             "required": ["query"], "additionalProperties": False,
         },
@@ -780,8 +886,7 @@ TOOLS: list[dict] = [
                 "project_id": {"type": "string", "description": "留空表示看全部（含跨项目的通用记忆）"},
                 "type": {"type": "string", "enum": ["决策", "坑", "约定", "事实"]},
                 "query": {"type": "string", "description": "按正文关键词过滤"},
-                "redact": {"type": "boolean", "default": True,
-                           "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）"},
+                "redact": REDACT_SCHEMA,
             },
             "additionalProperties": False,
         },
@@ -817,8 +922,8 @@ TOOLS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "redact": {"type": "boolean", "default": True,
-                           "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）"},
+                "redact": REDACT_SCHEMA,
+                "omit_sections": OMIT_SECTIONS_SCHEMA,
             },
             "additionalProperties": False,
         },
@@ -968,7 +1073,7 @@ def _uri_kind(uri: str) -> tuple[str | None, str]:
 def list_resources() -> list[dict]:
     out = [{"uri": u, "name": n, "mimeType": mt, "description": d}
            for u, n, mt, d in RESOURCE_INDEXES]
-    for p in _projects_brief()[:RESOURCE_LIMIT]:
+    for p in _board_rows()[:RESOURCE_LIMIT]:
         pid = p["id"]
         out.append({"uri": f"kanban://project/{pid}/handoff",
                     "name": f"{p['name']} · 交接包", "mimeType": "text/markdown",

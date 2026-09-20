@@ -55,8 +55,14 @@ def _layers(tasks: list[dict]) -> dict[str, int]:
     return depth
 
 
-def dep_graph_svg(tasks: list[dict]) -> str:
-    """任务依赖图（分层 DAG，纯 SVG）。没有任务或没有依赖时返回空串，由调用方决定是否展示"""
+def dep_graph_svg(tasks: list[dict], node_fill: str = "#1E1E22",
+                  text_fill: str = "#E8E6E1") -> str:
+    """任务依赖图（分层 DAG，纯 SVG）。没有任务或没有依赖时返回空串，由调用方决定是否展示
+
+    两个颜色参数是为了让**同一份实现**也能贴到浅色主题的应用里画 ——
+    原来那两套写死给接手页（它是深色单文件），直接复用到浅色界面会出现
+    浅底上贴一块深卡片。默认值保持原样，接手页不受影响。
+    """
     if not tasks:
         return ""
     has_dep = any((t.get("depends_on") or []) for t in tasks)
@@ -102,8 +108,8 @@ def dep_graph_svg(tasks: list[dict]) -> str:
         color = STATUS_COLOR.get(t.get("status", "待办"), "#5F5E5A")
         title = (t.get("title") or "")[:16]
         out.append(f'<rect x="{x}" y="{y}" width="{NODE_W}" height="{NODE_H}" rx="8" '
-                   f'fill="#1E1E22" stroke="{color}" stroke-width="1.5"/>')
-        out.append(f'<text x="{x + 12}" y="{y + 16}" fill="#E8E6E1" font-size="12" '
+                   f'fill="{node_fill}" stroke="{color}" stroke-width="1.5"/>')
+        out.append(f'<text x="{x + 12}" y="{y + 16}" fill="{text_fill}" font-size="12" '
                    f'font-family="system-ui,sans-serif">{esc(title)}</text>')
         out.append(f'<text x="{x + 12}" y="{y + 32}" fill="{color}" font-size="11" '
                    f'font-family="system-ui,sans-serif">{esc(t.get("status", "待办"))}'
@@ -140,13 +146,16 @@ footer{margin-top:32px;padding-top:12px;border-top:1px solid #2C2C32;color:#9A9A
 
 
 def build_handoff_page(p: dict, md: str = "", *, git_block: str = "",
-                       port: str = "18320", generated_at: str = "") -> str:
+                       port: str = "18320", generated_at: str = "",
+                       link_suffix: str = "") -> str:
     """生成单文件接手页 HTML。
 
     p           项目 dict
     md          已生成的 Markdown 交接包（用于"复制全文"，可为空）
     git_block   代码现状文本（由调用方采集，读不到就留空）
     port        本机服务端口，用于打印实时直链
+    link_suffix 实时直链的查询串（脱敏版要传 `?redact=1`，否则页面本身盖了掩码、
+                链出去的三条仍是原文 —— 与 `_build_handoff_markdown` 同一条理由）
     """
     pid = p.get("id") or ""
     tasks = p.get("tasks") or []
@@ -225,9 +234,9 @@ def build_handoff_page(p: dict, md: str = "", *, git_block: str = "",
 <details><summary style="margin-top:10px;cursor:pointer">展开查看</summary>
 <pre id="rawmd">{esc_md_block(md)}</pre></details>
 <h2 id="live">实时直链（活数据，不是快照）</h2>
-<pre>结构化接手包 {esc('http://127.0.0.1:' + str(port) + '/api/context/' + pid)}
-Markdown 交接包 {esc('http://127.0.0.1:' + str(port) + '/api/export/' + pid)}
-自包含接手页   {esc('http://127.0.0.1:' + str(port) + '/api/export/page/' + pid)}</pre>
+<pre>结构化接手包 {esc('http://127.0.0.1:' + str(port) + '/api/context/' + pid + link_suffix)}
+Markdown 交接包 {esc('http://127.0.0.1:' + str(port) + '/api/export/' + pid + link_suffix)}
+自包含接手页   {esc('http://127.0.0.1:' + str(port) + '/api/export/page/' + pid + link_suffix)}</pre>
 <p class="hint">仅限本机（127.0.0.1），服务没开时取不到 —— 这时用本页内容即可。</p>
 <footer>由 AI 交接看板生成 · 单文件离线可用 · 数据未离开本机</footer>
 </div>

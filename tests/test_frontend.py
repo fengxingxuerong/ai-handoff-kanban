@@ -312,3 +312,77 @@ def test_repo_path_is_never_ai_editable():
     joined = " ".join(kanban.AI_EDITABLE_PROJECT_FIELDS + kanban.AI_EDITABLE_TASK_FIELDS)
     assert "repo_path" not in joined and "repo_path" not in kanban._CMD_TYPES
     assert "repo_path" not in " ".join(_js_array("AI_PROJECT_FIELDS"))
+
+
+def test_save_extension_whitelist_matches_the_backend():
+    """前端挡扩展名、后端也挡 —— 两份清单必须一字不差。
+
+    以前前端少一条 `.markdown`：后端明明允许，用户却被告知"路径需以 .md / .txt 结尾"，
+    而那句提示同时也漏了 `.agentsmd`。这是"两条路给不同答案"最小的一例。
+    """
+    import app.main as kanban
+    m = re.search(r"if \(!/\\.\(([^)]+)\)\$/i\.test\(path\)\)", HTML)
+    assert m, "找不到前端那条扩展名白名单正则（改法了？连同这条测试一起改）"
+    fe = {("." + e.lower()) for e in m.group(1).split("|")}
+    assert fe == set(kanban.EXPORT_SUFFIXES), (fe, kanban.EXPORT_SUFFIXES)
+    for suffix in kanban.EXPORT_SUFFIXES:
+        assert suffix in HTML, f"给用户的提示里没提到 {suffix}"
+
+
+def test_inline_script_is_syntactically_valid_js(tmp_path):
+    """整页只有一段内联脚本。它一崩，所有 `data-act` 全部失效、界面变成一块死面板，
+    而**任何 Python 测试都不会红**。
+
+    2026-09-20 实测发生过：在 JS 里写了 Python 风格的相邻字符串拼接
+    （`"甲" "乙"`），pytest 500 多条全绿，直到真开浏览器才现形为
+    `ReferenceError: openDetail is not defined`。`node --check` 一句话就能挡住。
+    """
+    import shutil
+    import subprocess
+
+    blocks = re.findall(r"<script>(.*?)</script>", HTML, re.S)
+    assert blocks, "找不到内联脚本"
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("本机没有 node")
+    for i, src in enumerate(blocks):
+        f = tmp_path / ("inline_%d.js" % i)
+        f.write_text(src, encoding="utf-8")
+        r = subprocess.run([node, "--check", str(f)], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace")
+        assert r.returncode == 0, f"第 {i + 1} 段 <script> 语法错误：\n{(r.stderr or r.stdout)[:600]}"
+
+
+def test_project_edit_form_is_filled_from_the_single_project_endpoint():
+    """总览列表接口**不含** `background` / `handoff_note`，而 `PUT` 是整体覆盖语义。
+    所以从列表项回填编辑表单 = 一保存就把用户手写的这两段清空（2026-09-20 实测复现）。
+
+    这条是静态钉子：真正的行为验证要开浏览器，但"别再从列表回填"这个约束
+    用一眼能看懂的正则守住最划算。
+    """
+    m = re.search(r"async function openProjectModal\(id\)(.*?)\n  openModal\(\"proj-modal\"\)",
+                  HTML, re.S)
+    assert m, "openProjectModal 不再是 async，或函数结构变了（连同这条测试一起看）"
+    body = m.group(1)
+    assert 'api("/api/projects/" + id)' in body, "编辑表单没有从单项目接口取权威数据回填"
+    assert "projects.find" not in body, "又改用总览列表回填了 —— 那会静默吞掉背景与交接说明"
+    assert "阻止打开编辑" in body, "取不到详情时必须拒绝打开这个表单，而不是开一个保存即吞内容的表单"
+
+
+def test_actions_that_receive_data_arg_actually_forward_it():
+    """分发器是 `fn(el.dataset.arg, ev, el)` —— 处理器若写成 `() => X()`，
+    `data-arg` 就被静默丢掉：按钮看着"有反应"，执行的却是另一件事。
+
+    2026-09-20 真实踩到：报告面板的 `openReport: () => openReport()` 让"回看某份历史报告"
+    变成"重新跑一次分析"（rid 没了）。截图甚至看不出差别。
+    """
+    tagged = set(re.findall(r"data-act=\"([A-Za-z_$][\w$]*)\"[^>]*data-arg=", HTML))
+    assert tagged, "全页找不到任何带 data-arg 的按钮 —— 这条测试就失去意义了，请改写它"
+    bad = []
+    for name in sorted(tagged):
+        m = re.search(r"^\s*%s: \(([^)]*)\)" % re.escape(name), HTML, re.M)
+        if m is None:
+            continue          # 不在 ACTIONS 表里的（比如直接 addEventListener 的）由别的测试管
+        if not m.group(1).strip():
+            bad.append(f"{name}: ACTIONS 处理器不收参数，data-arg 会被丢掉")
+    assert not bad, bad

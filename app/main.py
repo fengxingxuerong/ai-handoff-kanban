@@ -7,6 +7,7 @@ AI 交接看板 - FastAPI 后端
 from __future__ import annotations
 
 import heapq
+import hashlib
 import json
 import os
 import re
@@ -28,7 +29,10 @@ from pydantic import BaseModel, Field, field_validator
 
 from . import llm
 from .filelock import blocking_lock
-from .handoff_page import build_handoff_page
+from .handoff_page import build_handoff_page, dep_graph_svg
+from .handoff_page import MAX_NODES as GRAPH_MAX_NODES
+from .handoff_page import MAX_COLS as GRAPH_MAX_COLS
+from .handoff_page import _layers as _graph_layers
 from .readiness import readiness_items, readiness_score
 from .version import APP_VERSION, BUILD_TIME
 
@@ -39,6 +43,16 @@ SERVICE_PORT = os.environ.get("KANBAN_PORT", "18320")
 DEFAULT_STATUS = ["规划中", "进行中", "已暂停", "已完成"]
 DEFAULT_TASK_STATUS = ["待办", "进行中", "已完成", "阻塞"]
 DEFAULT_PRIORITY = ["高", "中", "低"]
+
+# 数据文档与机器可读交接包的**结构版本**，与 APP_VERSION（发布号）分开：
+# 换机导入时"这份 JSON 的字段形状是哪一版"和"看板是第几版"是两件事。
+# 加字段/改字段语义时 +1，并在 tests/test_api.py 的接手包字段集合快照里同步。
+SCHEMA_VERSION = 1
+
+# 导出落盘允许的扩展名。前端 `saveAgentsMD` 里那条正则必须与这份一字不差
+# （以前前端少一条 `.markdown`，后端明明允许却被前端挡在门外），
+# 对账由 tests/test_frontend.py 钉住。
+EXPORT_SUFFIXES = (".md", ".txt", ".markdown", ".agentsmd")
 
 # 合法值白名单：状态/优先级会被前端拼进 class 与文本，必须收口
 _ABBR = {"规划中": "gray", "进行中": "blue", "已暂停": "orange", "已完成": "green"}
@@ -729,9 +743,15 @@ def project_context(pid: str, redact: int = 0):
     通过本接口（或 MCP 工具）一次拿到接手所需的全部结构化上下文。
 
     `?redact=1` 只打掩码，不改结构：这个包是**推荐给智能体直接取**的入口，
-    而智能体的上下文通常在别的机器上。脱敏范围与 `_projects_brief` 同一条线 ——
-    自由文本（背景/交接说明/下一步/任务描述/过程记录/记忆）盖掉，
-    id / 标题 / 状态 / 分支名 / refs 原样保留（模型要靠它们对齐项目与任务）。
+    而智能体的上下文通常在别的机器上。自由文本一律盖：
+    背景 / 交接说明 / 下一步 / 任务标题 / 任务描述 / 过程记录 / 记忆；
+    id / 状态 / 分支名 / refs 原样保留（模型要靠它们对齐项目与任务）。
+    （`_projects_brief` 是这条线的一个例外：那里的标题留着，因为 ai_command 的提示词
+    明写"任务用现有任务标题匹配"，盖了标题就没法把建议对回任务。）
+
+    标题为什么也盖：掩码只替换凭据那一段（"轮换 sk-abcd… 这把" → "轮换 sk-******** 这把"），
+    标题照样认得出来，对齐不受影响；反过来，"把密钥写在任务标题里"恰恰是最常见的写法，
+    放行就等于让唯一一条 redact 开关在最常见的形状上失效。
     """
     found = find_project(pid)
     if not found:
@@ -745,7 +765,7 @@ def project_context(pid: str, redact: int = 0):
 
     def slim(t: dict) -> dict:
         d = {
-            "id": t.get("id"), "title": t.get("title"), "status": t.get("status"),
+            "id": t.get("id"), "title": mask(t.get("title") or ""), "status": t.get("status"),
             "priority": t.get("priority"),
         }
         if t.get("due_date"):
@@ -760,7 +780,7 @@ def project_context(pid: str, redact: int = 0):
         if jr:
             d["recent_journal"] = [{"time": e.get("time", ""), "text": mask((e.get("text") or ""))[:120]}
                                    for e in jr[-2:]]
-        waiting = [by_id[x].get("title", x) for x in (t.get("depends_on") or [])
+        waiting = [mask(by_id[x].get("title", x)) for x in (t.get("depends_on") or [])
                    if x in by_id and by_id[x].get("status") != "已完成"]
         if waiting:
             d["waiting_for"] = waiting
@@ -769,6 +789,7 @@ def project_context(pid: str, redact: int = 0):
     missing = [it["label"] for it in _readiness_items(p) if not it["ok"]]
     return {
         "app": "ai-kanban",
+        "schema_version": SCHEMA_VERSION,
         "generated_at": now_str(),
         "usage_hint": "把本 JSON 作为项目上下文直接喂给 AI 智能体即可接手；配合看板 MCP 工具可读写任务",
         "project": {
@@ -795,7 +816,7 @@ def project_context(pid: str, redact: int = 0):
             "reason": "未填代码路径" if not p.get("repo_path") else (snap.get("error") or "git 读取失败"),
         }),
         "start_here": [  # 现在就能动手的（依赖已满足）
-            {"id": t["id"], "title": t.get("title"), "priority": t.get("priority"),
+            {"id": t["id"], "title": mask(t.get("title") or ""), "priority": t.get("priority"),
              "refs": t.get("refs") or []} for t in ready
         ],
         "tasks": {
@@ -943,8 +964,14 @@ def _idem_remember(data: dict, ref: str, ident: str) -> None:
 
 
 def _clean_ref(raw) -> str:
+    """规范化幂等键。**超长不能简单截断**：两条前 80 字符相同、后面才不同的不同请求
+    会被截成同一个键，第二次直接拿回第一次那条记录的 id —— 静默返回错的东西，
+    比报个错严重得多（实测过：`A`*80+"-first" 与 `A`*80+"-SECOND" 撞成同一条）。
+    超长改成"前缀 + 全串哈希"：表内长度仍有界，不同输入必然不同键。"""
     ref = str(raw or "").strip()
-    return ref[:80]
+    if len(ref) <= 80:
+        return ref
+    return ref[:48] + "~" + hashlib.sha1(ref.encode("utf-8")).hexdigest()[:16]
 
 
 @app.post("/api/projects", status_code=201)
@@ -977,7 +1004,9 @@ def create_project(body: ProjectIn, client_ref: str = ""):
             _idem_remember(data, ref, project["id"])
         return True, project
 
-    _, result = mutate(worker)
+    changed, result = mutate(worker)
+    if not changed:
+        return {**result, "client_ref_replayed": True}   # 同 create_task：复制后再打标记
     return result
 
 
@@ -999,12 +1028,57 @@ def _apply_project(p: dict, body: ProjectIn) -> None:
     })
 
 
+def _as_list(v) -> list:
+    if v is None:
+        return []
+    if isinstance(v, str):
+        return [v]
+    if isinstance(v, (list, tuple)):
+        return [x for x in v if isinstance(x, str)]
+    raise HTTPException(400, "增量参数要字符串或字符串数组")
+
+
+# 集合字段的**增量**入口。整体覆盖照旧保留，另给 add / remove 两个动词：
+# 只有整体覆盖时，智能体想加一条 refs 就得"先读整份 → 拼好 → 写回"，
+# 而那一次读发生在临界区**外面** —— 期间桌面端加进去的 refs 会被这次写回整体抹掉。
+# 这正是硬性约定 1 的丢更新形状，Backlog.md 的 `task_edit`（planSet/planAppend/planClear）
+# 与 GitHub labels 的 PUT/POST/DELETE 三件套都是同一个解法。
+COLLECTION_OPS = {"tags": "tags_add", "refs": "refs_add", "depends_on": "depends_on_add"}
+
+
+def _expand_ops(model, current: dict, changes: dict) -> dict:
+    """把 `tags_add` / `tags_remove` 这类增量动词就地展开成整体值。
+
+    必须在 `mutate` 的临界区里做（和 `_merge_into` 同一处）：基准值是**现在盘上的**那份，
+    不是调用方早前取的那份快照。
+    """
+    fields = set(model.model_fields)
+    out = dict(changes)
+    for base, add_key in COLLECTION_OPS.items():
+        rm_key = add_key.replace("_add", "_remove")
+        if add_key not in out and rm_key not in out:
+            continue
+        if base not in fields:
+            raise HTTPException(400, f"这个对象没有 {base} 字段，{add_key}/{rm_key} 无处可加")
+        if base in out:
+            raise HTTPException(400, f"{base} 不能同时给整体值和 {add_key}/{rm_key}")
+        cur = [x for x in (current.get(base) or []) if isinstance(x, str)]
+        if add_key in out:
+            cur = cur + _as_list(out.pop(add_key))
+        if rm_key in out:
+            gone = set(_as_list(out.pop(rm_key)))
+            cur = [x for x in cur if x not in gone]
+        out[base] = cur
+    return out
+
+
 def _merge_into(model, current: dict, changes: dict):
     """把 `changes` 盖到「当前盘上的这一份」上，再交给 Pydantic 校验。
 
     只认模型声明过的字段；值为 `None` 视为"没给"（与 MCP 侧一直沿用的 `pick()` 语义一致），
     显式空串则是"要清空"，会照常传下去。
     """
+    changes = _expand_ops(model, current, changes)
     fields = set(model.model_fields)
     merged = {k: v for k, v in current.items() if k in fields and v is not None}
     merged.update({k: v for k, v in changes.items() if k in fields and v is not None})
@@ -1107,7 +1181,12 @@ def create_task(pid: str, body: TaskIn, client_ref: str = ""):
     p = mutate_project(pid, apply)
     if p is None:
         raise HTTPException(404, "项目不存在")
-    return replay.get("task") or task
+    if replay:
+        # 只在"命中幂等键"时多带一个标记：调用方（尤其智能体）否则分不清
+        # 这是刚建出来的还是重试拿回来的那条。复制一份再打标记 ——
+        # 直接改 `replay["task"]` 会把标记写进盘上的任务。
+        return {**replay["task"], "client_ref_replayed": True}
+    return task
 
 
 def _apply_task(t: dict, p: dict, tid: str, body: TaskIn) -> None:
@@ -1140,19 +1219,46 @@ def _apply_task(t: dict, p: dict, tid: str, body: TaskIn) -> None:
 def patch_task(tid: str, changes: dict, *, with_project: bool = False):
     """部分更新任务：未提到的字段取**当前盘上的值**（理由同 `patch_project`）。
 
-    `with_project=True` 时连带返回所属项目名 —— 智能体侧的回复要报"这个任务在哪个项目"，
-    而它不该为此在临界区外再读一整份数据。
+    `with_project=True` 时返回 `(任务, {"project": 项目名, "unblocked": [...]})`：
+    智能体侧的回复要报"这个任务在哪个项目"，而它不该为此在临界区外再读一整份数据。
+    `unblocked` 是这次改动**新解锁**的任务 —— 把前置做成"已完成"之后，代理若不额外
+    问一遍 `kanban_next_task` 就不知道自己刚放行了哪条活（agendum 的 `pm_done` 就报这个）。
     """
     box: dict = {}
 
     def apply(t: dict, p: dict) -> None:
+        # 基线只在"可能解锁别人"的那次改动前取：executable_tasks 是遍历依赖图的活
+        before = ({x.get("id") for x in executable_tasks(p.get("tasks") or [])}
+                  if changes.get("status") == "已完成" else None)
         _apply_task(t, p, tid, _merge_into(TaskIn, t, changes))
         box["project"] = p.get("name", "")
+        if before is not None:
+            box["unblocked"] = [{"id": x.get("id"), "title": x.get("title")}
+                                for x in executable_tasks(p.get("tasks") or [])
+                                if x.get("id") not in before]
 
     t = mutate_task(tid, apply)
     if t is None:
         raise HTTPException(404, "任务不存在")
-    return (t, box.get("project", "")) if with_project else t
+    if not with_project:
+        return t
+    return t, {"project": box.get("project", ""), "unblocked": box.get("unblocked", [])}
+
+
+@app.get("/api/tasks/{tid}")
+def get_task(tid: str):
+    """按任务 id 反查任务与所属项目。
+
+    以前只能"先知道项目、再在项目里找任务"，而 AI 指令回传的操作常常只带 `task_id`
+    （列表接口不含任务，前端无法从 id 反查项目），于是明明有 id 却报"找不到对应任务"。
+    id 是智能体唯一确定持有的东西，这条读路径本来就该有。
+    """
+    data = get_projects_data()
+    for p in data.get("projects", []):
+        for t in p.get("tasks", []):
+            if t.get("id") == tid:
+                return {"task": t, "project_id": p.get("id"), "project_name": p.get("name")}
+    raise HTTPException(404, "任务不存在")
 
 
 @app.put("/api/tasks/{tid}")
@@ -1281,9 +1387,41 @@ def _budget_note(text: str) -> str:
     return f"\n\n—— 本包约 {b['lines']} 行 / {b['kb']} KB，{hint}。"
 
 
-def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None) -> str:
+HANDOFF_SECTIONS = ("git", "journal", "memories", "refs", "done")
+_SECTION_CN = {"git": "代码现状", "journal": "任务过程记录", "memories": "已沉淀记忆",
+               "refs": "涉及代码位置", "done": "已完成任务"}
+
+
+def parse_handoff_sections(raw, *, param: str) -> set[str]:
+    """解析"要省略哪些小节"。不认识的名字**必须报错**，不能静默忽略 ——
+    静默忽略等于调用方以为自己裁掉了、实际整包原样发出去。"""
+    if raw is None or raw == "":
+        return set()
+    items = raw if isinstance(raw, (list, tuple)) else [x for x in str(raw).replace(" ", ",").split(",")]
+    out = set()
+    for x in items:
+        name = str(x).strip().lower()
+        if not name:
+            continue
+        if name not in HANDOFF_SECTIONS:
+            raise HTTPException(400, f"{param} 不认识「{name}」，可选：{'、'.join(HANDOFF_SECTIONS)}")
+        out.add(name)
+    return out
+
+
+def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None,
+                            redact: bool = False, omit: set[str] | None = None) -> str:
     """`memory_rows` = 这个项目的记忆列表。批量导出（export-all）必须一次读盘后传进来：
-    逐个项目各自 `_load_memories()` 会让 memories.json 的读取次数等于项目数。"""
+    逐个项目各自 `_load_memories()` 会让 memories.json 的读取次数等于项目数。
+
+    `redact=True` 时正文里那三条实时直链也要带上 `?redact=1`：否则一份"已脱敏"的交接物
+    递给对方的同时递了三条取原文的路 —— 掩码盖住了正文，链接却指向未盖的那份。
+
+    `omit` = 要省掉的小节（见 `HANDOFF_SECTIONS`）。`_budget_note` 会告诉智能体"本包偏长、
+    建议裁剪"，以前却没有任何一条路能真的裁 —— 光有警告没有解法。省掉什么必须在文末留痕，
+    否则接手方会把"没写"读成"没有"。
+    """
+    omit = omit or set()
     lines = []
     lines.append(f"# {p['name']} · 项目交接摘要")
     lines.append("")
@@ -1294,6 +1432,13 @@ def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None) -> s
         lines.append(f"- **代码路径**：`{p['repo_path']}`")
     lines.append(f"- **最近更新**：{p.get('updated_at', '')}")
     lines.append("")
+    if omit:
+        # 放在开头而不是结尾：接手方必须在**读之前**就知道这里少了什么，
+        # 否则它会把"按请求省掉了"读成"这个项目没有记忆/没有未完成任务"。
+        lines.append("> ⚠️ 本包按调用方请求省略了这些小节："
+                     + "、".join(_SECTION_CN[x] for x in HANDOFF_SECTIONS if x in omit)
+                     + "。要完整版就别带 omit_sections 参数重新取一次。")
+        lines.append("")
     if p.get("background"):
         lines.append("## 项目背景")
         lines.append("")
@@ -1309,7 +1454,9 @@ def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None) -> s
         lines.append("")
         lines.append(p["next_action"])
         lines.append("")
-    git_block = _git_line_for_handoff(p)
+    # 省掉 git 小节要连子进程一起省：`_git_line_for_handoff` 每次都要跑 git，
+    # 裁剪时若还去取，就白付了这份开销。
+    git_block = "" if "git" in omit else _git_line_for_handoff(p)
     if git_block:
         lines.append("## 代码现状（git）")
         lines.append("")
@@ -1317,12 +1464,14 @@ def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None) -> s
         lines.append("")
     tasks = topo_order(p.get("tasks", []) or [])      # 按依赖排序：接手的人照着做就行
     by_id = {t.get("id"): t for t in (p.get("tasks") or [])}
+    shown = [t for t in tasks if not ("done" in omit and t.get("status") == "已完成")]
     if tasks:
-        lines.append("## 任务清单（按依赖排序）")
-        lines.append("")
-        lines.append("| 任务 | 状态 | 优先级 | 负责AI | 前置 | 描述 |")
-        lines.append("| --- | --- | --- | --- | --- | --- |")
-        for t in tasks:
+        if shown:
+            lines.append("## 任务清单（按依赖排序）")
+            lines.append("")
+            lines.append("| 任务 | 状态 | 优先级 | 负责AI | 前置 | 描述 |")
+            lines.append("| --- | --- | --- | --- | --- | --- |")
+        for t in shown:
             title = (t.get("title") or "").replace("|", "\\|").replace("\n", " ")
             desc = (t.get("desc") or "").replace("|", "\\|").replace("\n", " ")
             deps = [d for d in (t.get("depends_on") or []) if d in by_id]
@@ -1330,9 +1479,9 @@ def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None) -> s
             lines.append(f"| {title} | {t['status']} | {t['priority']} | {t.get('agent','') or '—'} "
                          f"| {dep_txt} | {desc} |")
         lines.append("")
-        journaled = [(t, t.get("journal") or []) for t in tasks]
+        journaled = [(t, t.get("journal") or []) for t in shown]
         journaled = [(t, j) for t, j in journaled if j]
-        if journaled:
+        if journaled and "journal" not in omit:
             lines.append("### 任务过程记录（每个任务最近 3 条）")
             lines.append("")
             for t, j in journaled:
@@ -1342,14 +1491,14 @@ def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None) -> s
                 lines.append("")
         mems = memory_rows if memory_rows is not None else \
             [m for m in _load_memories() if m.get("pid") == p.get("id")]
-        if mems:
+        if mems and "memories" not in omit:
             lines.append("### 已沉淀记忆（结构化要点）")
             lines.append("")
             for m in mems[-15:]:
                 lines.append(f"- 【{m.get('type', '事实')}】[{m.get('time', '')}] {m.get('text', '')}")
             lines.append("")
-        with_refs = [t for t in tasks if t.get("refs")]
-        if with_refs:
+        with_refs = [t for t in shown if t.get("refs")]
+        if with_refs and "refs" not in omit:
             lines.append("### 涉及代码位置")
             lines.append("")
             for t in with_refs:
@@ -1361,9 +1510,10 @@ def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None) -> s
     lines.append("本看板是本机服务，上面内容是导出那一刻的快照。同一台机器上的智能体可以直接取最新的：")
     lines.append("")
     pid = p.get("id") or ""
-    lines.append(f"- 结构化接手包（喂给智能体）：`{_local_url('/api/context/' + pid)}`")
-    lines.append(f"- Markdown 交接包：`{_local_url('/api/export/' + pid)}`")
-    lines.append(f"- 自包含接手页（人看的单文件网页）：`{_local_url('/api/export/page/' + pid)}`")
+    suffix = "?redact=1" if redact else ""
+    lines.append(f"- 结构化接手包（喂给智能体）：`{_local_url('/api/context/' + pid)}{suffix}`")
+    lines.append(f"- Markdown 交接包：`{_local_url('/api/export/' + pid)}{suffix}`")
+    lines.append(f"- 自包含接手页（人看的单文件网页）：`{_local_url('/api/export/page/' + pid)}{suffix}`")
     lines.append("")
     lines.append("服务没开时这三个链接取不到，用上面的快照即可。")
     lines.append("")
@@ -1373,11 +1523,12 @@ def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None) -> s
 
 
 @app.get("/api/export/{pid}")
-def export_handoff(pid: str, redact: int = 0):
+def export_handoff(pid: str, redact: int = 0, omit_sections: str = ""):
     found = find_project(pid)
     if not found:
         raise HTTPException(404, "项目不存在")
-    md = _build_handoff_markdown(found[1])
+    omit = parse_handoff_sections(omit_sections, param="omit_sections")
+    md = _build_handoff_markdown(found[1], redact=bool(redact), omit=omit)
     if redact:
         md = redact_text(md)
     return PlainTextResponse(md, media_type="text/markdown; charset=utf-8")
@@ -1510,8 +1661,8 @@ def save_export(body: SaveExportBody):
         if not target.is_absolute():
             raise HTTPException(400, "请填写绝对路径（含盘符），例如 D:\\work\\demo\\AGENTS.md")
         suffix = target.suffix.lower()
-        if suffix not in (".md", ".txt", ".markdown", ".agentsmd"):
-            raise HTTPException(400, "仅支持保存为 .md / .txt / .markdown / .agentsmd 文件")
+        if suffix not in EXPORT_SUFFIXES:
+            raise HTTPException(400, "仅支持保存为 " + " / ".join(EXPORT_SUFFIXES) + " 文件")
         if _is_forbidden_target(target):
             raise HTTPException(400, "不允许写入系统目录，请换一个路径")
         if target.exists() and not body.overwrite:
@@ -1538,7 +1689,7 @@ def save_export(body: SaveExportBody):
     raise HTTPException(500, "保存失败，无法写入任何位置")
 
 
-def build_export_all(redact: bool = False) -> str:
+def build_export_all(redact: bool = False, omit: set[str] | None = None) -> str:
     """全项目合并交接包的正文。
 
     单独一个函数是为了让 MCP 的 `kanban_export_all` 复用同一份渲染，
@@ -1550,14 +1701,17 @@ def build_export_all(redact: bool = False) -> str:
     head = f"# AI 交接看板 · 全项目交接包\n\n> 共 {len(projects)} 个项目 · 导出时间 {now_str()}\n"
     parts = [head]
     for p in projects:
-        md = _build_handoff_markdown(p, mems_by_pid.get(p.get("id"), []))
+        md = _build_handoff_markdown(p, mems_by_pid.get(p.get("id"), []),
+                                     redact=redact, omit=omit)
         parts.append("\n\n---\n\n" + (redact_text(md) if redact else md))
     return "".join(parts)
 
 
 @app.get("/api/export-all")
-def export_all(redact: int = 0):
-    return PlainTextResponse(build_export_all(bool(redact)), media_type="text/markdown; charset=utf-8")
+def export_all(redact: int = 0, omit_sections: str = ""):
+    omit = parse_handoff_sections(omit_sections, param="omit_sections")
+    return PlainTextResponse(build_export_all(bool(redact), omit),
+                             media_type="text/markdown; charset=utf-8")
 
 
 @app.get("/api/today")
@@ -1613,12 +1767,13 @@ def export_handoff_page(pid: str, redact: int = 0):
     if not found:
         raise HTTPException(404, "项目不存在")
     p = found[1]
-    md = _build_handoff_markdown(p)
+    md = _build_handoff_markdown(p, redact=bool(redact))
     page = build_handoff_page(
         p, md,
         git_block=_git_line_for_handoff(p),
         port=SERVICE_PORT,
         generated_at=now_str(),
+        link_suffix="?redact=1" if redact else "",
     )
     if redact:
         page = redact_text(page)
@@ -1710,14 +1865,17 @@ def _generate_agents_md(p: dict) -> tuple[str, str, str]:
         "4) 命令若有不确定，写'请查看仓库 README 或 package.json scripts'，不要编造。\n"
         "直接输出 AGENTS.md 正文，不要任何额外说明。"
     )
-    user_msg = "项目信息：\n" + json.dumps({
+    # 送给模型的那一份**必须脱敏**：这条不是"用户点名让润色自己写的文本"那个豁免档，
+    # 而是把整份项目状态被动推给远端模型去写文档。以前 `redact` 只作用于返回体，
+    # 送出侧的 background/handoff_note/next_action/任务标题全是原文 —— 密钥照样出本机。
+    user_msg = "项目信息：\n" + redact_text(json.dumps({
         "name": p["name"], "repo_path": p.get("repo_path", ""),
         "status": p.get("status", ""), "progress": p.get("progress", 0),
         "background": p.get("background", ""), "handoff_note": p.get("handoff_note", ""),
         "next_action": p.get("next_action", ""),
         "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", "")}
                   for t in (p.get("tasks") or [])],
-    }, ensure_ascii=False, indent=1)
+    }, ensure_ascii=False, indent=1))
     try:
         cfg = llm.load_config()
         text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg},
@@ -1907,6 +2065,7 @@ def export_all_data():
     data = get_projects_data()
     return {
         "app": "ai-kanban",
+        "schema_version": SCHEMA_VERSION,
         "version": APP_VERSION,
         "exported_at": now_str(),
         "projects": data.get("projects", []),
@@ -1956,6 +2115,13 @@ def import_all_data(body: ImportBody):
         return True, {"ok": True, "imported": len(projects)}
 
     result = mutate(worker)[1]
+    declared = parsed.get("schema_version")
+    if isinstance(declared, int) and declared > SCHEMA_VERSION:
+        # 只说话、不拒绝：这份导出多半来自更新的看板，字段是超集，硬挡等于把用户关在门外。
+        # 但"导入的东西比本程序新一版"必须让人看见，而不是事后发现某些字段被规范化掉了。
+        result["schema_note"] = (f"导入文件声明结构 v{declared}，本看板认得 v{SCHEMA_VERSION}，"
+                                 "较新的字段可能被规范化掉")
+    result["schema_version"] = SCHEMA_VERSION
     if mem_items is not None:
         # 与 projects 分属两个文件，只能各自进临界区替换（中间断电最坏是"项目已换、
         # 记忆还是旧的"，不会互相写坏）；快照已在上面留好，可回滚。
@@ -2701,6 +2867,35 @@ def project_git(pid: str, limit: int = 10):
     return snap
 
 
+@app.get("/api/projects/{pid}/graph")
+def project_graph(pid: str, theme: str = "dark"):
+    """任务依赖图（内联 SVG），给应用内的详情页画"这堆活的形状"。
+
+    **复用接手页那份 `dep_graph_svg`，不在前端再画第二遍** —— 本项目反复出问题的形状
+    就是"同一件事两套实现"（两份 `_projects_brief`、MCP 重算一遍 `/next`）。
+    没有依赖时它返回空串，这里如实报 `empty` + 原因，别让调用方拿空串去猜是"坏了"还是"没依赖"。
+    """
+    found = find_project(pid)
+    if not found:
+        raise HTTPException(404, "项目不存在")
+    tasks = found[1].get("tasks") or []
+    light = theme.strip().lower() == "light"
+    svg = dep_graph_svg(tasks,
+                        node_fill="#FFFFFF" if light else "#1E1E22",
+                        text_fill="#1F2430" if light else "#E8E6E1")
+    if not svg:
+        return {"svg": "", "empty": True, "nodes": len(tasks),
+                "reason": "还没有任务" if not tasks else "任务之间还没设前置依赖"}
+    # 层级超过 MAX_COLS 时更深的节点被并进末列 —— 那两条在图上看着像并行，
+    # 其实有前后关系。不说的话图就在撒谎。
+    depth = _graph_layers(tasks[:GRAPH_MAX_NODES]) if tasks else {}
+    collapsed = bool(depth) and max(depth.values()) >= GRAPH_MAX_COLS
+    return {"svg": svg, "empty": False, "nodes": len(tasks),
+            "shown": min(len(tasks), GRAPH_MAX_NODES),
+            "truncated": len(tasks) > GRAPH_MAX_NODES,
+            "collapsed": collapsed}
+
+
 def _git_line_for_handoff(p: dict) -> str:
     """交接包里的一行代码现状；读不到就返回空串，不影响导出"""
     snap = git_snapshot(p.get("repo_path", ""), limit=5)
@@ -2723,9 +2918,11 @@ def _git_line_for_handoff(p: dict) -> str:
 def _projects_brief(projects: list[dict]) -> list[dict]:
     """给 LLM 的精简项目数据（含代码现状，便于发现"看板说有进展、代码其实没动"）
 
-    自由文本（背景 / 下一步 / 过程记录 / 记忆）过一道脱敏再送出去：这些是要离开本机
+    自由文本（背景 / 下一步 / 任务标题 / 过程记录 / 记忆）过一道脱敏再送出去：这些是要离开本机
     到模型那边的内容，而用户从会话里抄进看板的凭据很常见。
-    id / 标题 / 状态 / 分支名原样保留 —— 模型要把它们回传用来对齐项目与任务。
+    id / 状态 / 分支名原样保留 —— 模型要把它们回传用来对齐项目与任务。
+    标题现在能盖，是因为**每条任务都带 id**：以前简报里没有任务 id，提示词只能写
+    "任务用现有标题匹配"，盖了标题就把建议对不回任务了（见 `ai_command` 的规则 1）。
     """
     mems_by_pid = _memories_by_pid()
     brief = []
@@ -2739,7 +2936,9 @@ def _projects_brief(projects: list[dict]) -> list[dict]:
             "tags": p.get("tags", []),
             "next_action": redact_text((p.get("next_action") or ""))[:300],
             "background": redact_text((p.get("background") or ""))[:300],
-            "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", ""),
+            "tasks": [{"id": t.get("id"),
+                       "title": redact_text(t.get("title") or ""),
+                       "status": t.get("status", ""), "priority": t.get("priority", ""),
                        **({"due_date": t["due_date"]} if t.get("due_date") else {}),
                        **({"refs": t["refs"]} if t.get("refs") else {}),
                        **({"recent_journal": [(e.get("time", ""),
@@ -2762,7 +2961,7 @@ def _projects_brief(projects: list[dict]) -> list[dict]:
                 "branch": snap.get("branch", ""),
                 "last_commit": (snap.get("head") or {}).get("hash", ""),
                 "last_commit_at": (snap.get("head") or {}).get("date", ""),
-                "last_commit_subject": (snap.get("head") or {}).get("subject", ""),
+                "last_commit_subject": redact_text((snap.get("head") or {}).get("subject", "")),
                 "days_since_commit": snap.get("days_since_commit"),
                 "uncommitted_files": snap.get("dirty_count", 0),
             }
@@ -2968,10 +3167,18 @@ def ai_analyze():
 def ai_reports():
     out = []
     for f in sorted(reports_dir().glob("*.json"), reverse=True):
+        # 文件名不合法规的就直接跳过：详情端点是按 `_REPORT_ID_RE` + 文件名取文件的，
+        # 列出来等于发一个点进去必然 404 的条目（手工塞进 reports/ 的文件、
+        # 或上一版留下的旧命名都会踩到）
+        if not _REPORT_ID_RE.match(f.stem):
+            continue
         try:
             r = json.loads(f.read_text(encoding="utf-8"))
             out.append({
-                "id": r.get("id"), "created_at": r.get("created_at"),
+                # 用**文件名**当 id，不用正文里的 `id` 字段：详情端点是按文件名取文件的
+                # （`reports/{rid}.json` + `_REPORT_ID_RE`），两边口径不一致时，
+                # 列表就会发一个点进去必然 404 的 id（2026-09-20 造夹具时真撞到一次）。
+                "id": f.stem, "created_at": r.get("created_at"),
                 "trigger": r.get("trigger"), "endpoint": r.get("endpoint"),
                 "summary": (r.get("summary") or "")[:120],
                 "insight_count": len(r.get("insights", [])),
@@ -3008,30 +3215,62 @@ class SuggestionUpdate(BaseModel):
     value: str = ""
 
 
+MAX_SUGGESTION_VALUE = 2000   # 单条建议值的上限。整份 JSON 每次请求都整读整写，
+                              # 模型抽风吐 40 万字符就会永久长在数据里（实测：改前能落 40 万字）
+
+# 监管报告"建议回传"允许改的字段。比 `ai_command` 那份清单（AI_EDITABLE_PROJECT_FIELDS）
+# 窄是**有意**的：这条是"模型建议 + 人点一下应用"的通道，只放自由文本与状态/优先级；
+# 改 name / tags / progress 得走用户自己打出来的显式指令。
+SUGGESTION_FIELDS = ("next_action", "handoff_note", "background", "priority", "status")
+
+
 @app.post("/api/ai/apply-suggestions")
-def ai_apply_suggestions(body: list[SuggestionUpdate]):
-    allowed_field = ("next_action", "handoff_note", "background", "priority", "status")
+def ai_apply_suggestions(body: list[SuggestionUpdate], dry_run: int = 0):
+    """把模型的回传建议落地。`?dry_run=1` 只报"每条会怎样"，一个字节都不写。
+
+    逐条回执而不是只给两个计数：一批 8 条里 2 条没落地时，光看 `applied=6` 的人
+    不知道**是哪两条**、也不知道为什么（字段不在清单 / 项目不存在 / 值过长 / 带掩码）。
+    `applied` 与 `skipped_masked` 两个老键保留，前端照旧能读。
+    """
 
     def worker(data: dict):
-        ok, masked = 0, 0
-        for u in body:
-            if u.field not in allowed_field:
+        results = []
+        for i, u in enumerate(body):
+            val = u.value or ""
+            base = {"index": i, "project_id": u.project_id, "field": u.field}
+            if u.field not in SUGGESTION_FIELDS:
+                results.append(dict(base, ok=False, reason="字段不在建议回传清单内"))
                 continue
-            if MASK_MARK in (u.value or ""):
+            if MASK_MARK in val:
                 # 送给模型的背景是脱敏过的，它可能把 `********` 当成原文抄回来。
                 # 照写就是把用户真内容换成一串星号（而且看不出丢过什么）——
-                # 宁可不落地，也要把这个数报出去，让用户去原处看一眼。
-                masked += 1
+                # 宁可不落地，也要报出来，让用户去原处看一眼。
+                results.append(dict(base, ok=False, reason="值里带掩码，可能是把星号当原文抄回来了"))
                 continue
-            for p in data.get("projects", []):
-                if p.get("id") == u.project_id:
-                    p[u.field] = u.value
-                    p["updated_at"] = now_str()
-                    ok += 1
-                    break
-        # 直接写字段可能带进非法状态/优先级，交给统一规范化收口
-        _sanitize(data)
-        return ok > 0, {"applied": ok, "skipped_masked": masked}
+            if len(val) > MAX_SUGGESTION_VALUE:
+                results.append(dict(base, ok=False,
+                                    reason=f"值过长（{len(val)} 字，上限 {MAX_SUGGESTION_VALUE}）"))
+                continue
+            target = next((p for p in data.get("projects", []) if p.get("id") == u.project_id), None)
+            if target is None:
+                results.append(dict(base, ok=False, reason="项目不存在"))
+                continue
+            results.append(dict(base, ok=True, would_write=not dry_run))
+            if not dry_run:
+                target[u.field] = val
+                target["updated_at"] = now_str()
+        applied = sum(1 for r in results if r["ok"])
+        if applied and not dry_run:
+            # 直接写字段可能带进非法状态/优先级，交给统一规范化收口
+            _sanitize(data)
+        return (applied > 0 and not dry_run), {
+            "applied": applied,
+            "skipped_masked": sum(1 for r in results if "掩码" in r.get("reason", "")),
+            "skipped_other": sum(1 for r in results if not r["ok"]
+                                 and "掩码" not in r.get("reason", "")),
+            "dry_run": bool(dry_run),
+            "results": results,
+        }
 
     _, result = mutate(worker)
     return result
@@ -3102,9 +3341,13 @@ def ai_command(body: CommandBody):
         "你是任务看板的自然语言操作助手。用户会用中文下达操作指令，请把它解析成结构化操作。"
         f"支持的操作类型：{_CMD_TYPES}\n"
         "输出 JSON（不要输出其他内容）：\n"
-        '{"actions": [{"type": "create_task", "project_id": "...", "title": "...", "desc": "...", "priority": "高/中/低", "status": "待办/进行中/已完成/阻塞", "agent": "..."}, ...]}\n'
-        "规则：1) 项目用 id 标识，任务用项目下现有任务标题匹配；2) 若指令信息不足无法确定操作，"
-        '输出 {"need_clarification": "具体需要用户补充什么"}; 3) 不要编造不存在的项目 id；'
+        '{"actions": [{"type": "create_task", "project_id": "...", "title": "...", "desc": "...", "priority": "高/中/低", "status": "待办/进行中/已完成/阻塞", "agent": "..."}, '
+        '{"type": "update_task", "project_id": "...", "task_id": "...", "field": "...", "value": "..."}, ...]}\n'
+        "规则：1) **项目与任务一律用 id 标识** —— 看板数据里每条任务都带 `id`，"
+        "改/删任务时同时回传 `project_id` 与 `task_id`；标题可能带脱敏掩码，"
+        "**不要拿标题当匹配键**；"
+        "2) 若指令信息不足无法确定操作，"
+        '输出 {"need_clarification": "具体需要用户补充什么"}; 3) 不要编造不存在的项目 id 或任务 id；'
         "4) 删除类操作必须能明确匹配到目标才输出；5) 一次指令可能包含多个操作，按顺序列出。"
     )
     user_msg = "看板数据：\n" + json.dumps(projects, ensure_ascii=False, indent=1) + "\n\n用户指令：" + body.text

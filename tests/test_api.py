@@ -357,11 +357,13 @@ def test_patch_task_rejects_illegal_values_and_reads_once(app_client, monkeypatc
     assert back["tasks"][0]["status"] == "进行中", "校验失败不能写坏数据"
 
 
-def test_context_endpoint_can_redact_prose_only(app_client):
+def test_context_redact_covers_task_titles_too(app_client):
     """`/api/context/{pid}` 是**推荐给智能体直接取**的入口，以前偏偏没有脱敏开关。
 
-    开了 `?redact=1` 之后：自由文本盖掉，id / 标题 / 状态 / 分支原样留着
-    —— 模型要靠这些把建议对回项目。
+    开了 `?redact=1` 之后：自由文本盖掉，id / 状态 / 分支原样留着 —— 模型要靠这些
+    把建议对回项目。标题曾经被当成"结构化字段"整条放行，于是把密钥写在任务标题里
+    （最常见的写法）就从 redact 开关底下漏出去了。掩码只替换凭据那一段，
+    所以"干净标题逐字不变"和"脏标题认得出来"要同时成立。
     """
     secret = "api_key=abcd1234efgh5678"
     status, proj = app_client.create_project("接手包脱敏")
@@ -372,16 +374,23 @@ def test_context_endpoint_can_redact_prose_only(app_client):
         "next_action": "带 key 的任务"})
     app_client.post(f"/api/projects/{pid}/tasks",
                     {"title": "配密钥", "desc": f"用 {secret} 配置", "status": "待办"})
+    app_client.post(f"/api/projects/{pid}/tasks",
+                    {"title": "轮换 sk-abcd1234efgh5678 这把", "desc": "标题里带 Key",
+                     "status": "待办"})
 
     _, raw = app_client.get(f"/api/context/{pid}")
     assert "abcd1234efgh5678" in str(raw), "默认行为不变（不传 redact 就是原文）"
 
     _, safe = app_client.get(f"/api/context/{pid}?redact=1")
     blob = str(safe)
-    assert "abcd1234efgh5678" not in blob, "背景与任务描述里的密钥漏了"
+    assert "abcd1234efgh5678" not in blob, "背景/描述/**标题**里的密钥都漏了"
     assert "ops@corp.example.com" not in blob
     assert safe["project"]["id"] == pid and safe["project"]["name"] == "接手包脱敏"
-    assert any(t["title"] == "配密钥" for t in safe["tasks"]["todo"]), "标题不能被盖掉"
+    titles = [t["title"] for t in safe["tasks"]["todo"]]
+    assert "配密钥" in titles, "不带凭据的标题必须逐字不变（模型要用它对任务）"
+    dirty = [t for t in titles if t != "配密钥"]
+    assert dirty and dirty[0] == "轮换 sk-******** 这把", dirty[0]
+    assert safe["tasks"]["todo"][1]["id"], "标题盖了也不能把 id 一起弄丢"
 
 
 def test_context_reports_why_code_reality_is_missing(app_client):
@@ -531,3 +540,246 @@ def test_today_skips_projects_with_nothing_actionable(server):
     assert body["project_count"] == 1
     assert body["total"] == 1
 
+
+def test_handoff_links_follow_the_same_redact_choice(app_client):
+    """`?redact=1` 的交接包，正文里那三条实时直链必须同样带 `?redact=1`。
+
+    正文盖住了、链接却指向原文版，等于递出一份"已脱敏"的交接物、同时递三条取原文的路。
+    """
+    secret = "sk-handoffabcdef123456"
+    _, proj = app_client.create_project("直链口径")
+    pid = proj["id"]
+    app_client.put(f"/api/projects/{pid}", {
+        "name": "直链口径", "status": "进行中", "background": f"网关密钥 {secret}"})
+
+    _, plain = app_client.get(f"/api/export/{pid}")
+    assert secret in plain and "?redact=1" not in plain, "默认口径不该被改动"
+
+    _, safe = app_client.get(f"/api/export/{pid}?redact=1")
+    assert secret not in safe, "正文要盖"
+    for path in (f"/api/context/{pid}", f"/api/export/{pid}", f"/api/export/page/{pid}"):
+        assert path + "?redact=1" in safe, f"直链 {path} 没跟上脱敏口径"
+
+    # 全项目包同样：它是逐个项目渲染的，漏一个项目就是漏一条
+    _, all_pkg = app_client.get("/api/export-all?redact=1")
+    assert f"/api/context/{pid}?redact=1" in all_pkg
+
+
+def test_handoff_page_links_follow_the_same_redact_choice(app_client):
+    """接手页是"发给别人看"的那一份，它的直链更要跟正文同一口径"""
+    _, proj = app_client.create_project("接手页直链")
+    pid = proj["id"]
+    _, plain = app_client.get(f"/api/export/page/{pid}")
+    assert f"/api/context/{pid}" in plain and "?redact=1" not in plain
+    _, safe = app_client.get(f"/api/export/page/{pid}?redact=1")
+    assert f"/api/context/{pid}?redact=1" in safe
+    assert f"/api/export/page/{pid}?redact=1" in safe
+
+
+def test_long_client_refs_do_not_collide(app_client):
+    """幂等键以前静默截到 80 字符：两条前 80 相同的请求会撞成同一个键，
+    第二次直接拿回**别人那条**的 id —— 静默返回错的东西比报错严重。"""
+    ref_a = "R" * 80 + "-first-request"
+    ref_b = "R" * 80 + "-SECOND-request"
+    _, p1 = app_client.request("POST", "/api/projects?client_ref=" + ref_a, {"name": "长键甲"})
+    _, p2 = app_client.request("POST", "/api/projects?client_ref=" + ref_b, {"name": "长键乙"})
+    assert p1["id"] != p2["id"], "两条不同请求撞成了同一个键"
+    assert p2["name"] == "长键乙", "撞车时会返回第一条的名字"
+    assert "client_ref_replayed" not in p1, "首次创建不该带标记"
+
+    _, again = app_client.request("POST", "/api/projects?client_ref=" + ref_a, {"name": "重试甲"})
+    assert again["id"] == p1["id"] and again["client_ref_replayed"] is True, "重放要能被认出来"
+    _, stored = app_client.get(f"/api/projects/{p1['id']}")
+    assert "client_ref_replayed" not in stored, "标记只能出现在响应里，不能落盘"
+
+
+def test_apply_suggestions_reports_every_item(app_client):
+    """一批建议里 5 条只落地 1 条时，光给 `applied=1` 等于没说**是哪四条、为什么**。
+
+    逐条回执顺带补上以前静默跳过的两类：字段不在清单、项目不存在。
+    """
+    _, p = app_client.create_project("建议回执")
+    pid = p["id"]
+    s, body = app_client.post("/api/ai/apply-suggestions", [
+        {"project_id": pid, "field": "next_action", "value": "正常一条"},
+        {"project_id": pid, "field": "name", "value": "清单外字段"},
+        {"project_id": "不存在的项目", "field": "next_action", "value": "没这条项目"},
+        {"project_id": pid, "field": "background", "value": "带着 ******** 的抄回来"},
+        {"project_id": pid, "field": "handoff_note", "value": "长" * 2001},
+    ])
+    assert s == 200, body
+    assert body["applied"] == 1 and body["skipped_masked"] == 1 and body["skipped_other"] == 3
+    reasons = {r["index"]: r.get("reason", "") for r in body["results"]}
+    assert len(body["results"]) == 5
+    assert "清单" in reasons[1] and "项目不存在" in reasons[2]
+    assert "掩码" in reasons[3] and "过长" in reasons[4], reasons
+    _, back = app_client.get(f"/api/projects/{pid}")
+    assert back["next_action"] == "正常一条"
+    assert back["name"] == "建议回执", "清单外字段不能被动过"
+    assert not back.get("handoff_note"), "超长的值不该落盘"
+
+
+def test_apply_suggestions_dry_run_writes_nothing(app_client):
+    """`?dry_run=1`：先看"会改成什么"，一个字节都不写"""
+    _, p = app_client.create_project("试运行")
+    pid = p["id"]
+    s, body = app_client.request("POST", "/api/ai/apply-suggestions?dry_run=1",
+                                 [{"project_id": pid, "field": "next_action",
+                                   "value": "会改成这个"}])
+    assert s == 200 and body["applied"] == 1 and body["dry_run"] is True
+    assert body["results"][0]["would_write"] is False
+    _, back = app_client.get(f"/api/projects/{pid}")
+    assert back["next_action"] == "", "试运行连 updated_at 都不该推进"
+    s, body = app_client.post("/api/ai/apply-suggestions",
+                              [{"project_id": pid, "field": "next_action", "value": "会改成这个"}])
+    assert body["results"][0]["would_write"] is True
+    _, back = app_client.get(f"/api/projects/{pid}")
+    assert back["next_action"] == "会改成这个"
+
+
+def test_machine_readable_packages_declare_schema_version(app_client):
+    """接手包与换机导出文件都要声明**结构版本**：那是"字段形状是哪一版"，
+    与发布号 APP_VERSION 不是一回事。导入更新的导出文件时只说话、不挡人。"""
+    import app.main as kanban
+    _, p = app_client.create_project("契约版本")
+    pid = p["id"]
+    _, ctx = app_client.get(f"/api/context/{pid}")
+    assert ctx["schema_version"] == kanban.SCHEMA_VERSION
+    _, doc = app_client.get("/api/data/export")
+    assert doc["schema_version"] == kanban.SCHEMA_VERSION
+
+    future = {"app": "ai-kanban", "schema_version": kanban.SCHEMA_VERSION + 1,
+              "projects": [{"id": "x1", "name": "未来的项目", "status": "进行中", "tasks": []}]}
+    s, res = app_client.post("/api/data/import",
+                             {"content": json.dumps(future, ensure_ascii=False)})
+    assert s == 200 and res["imported"] == 1, "不能因为版本号更高就把导入挡在门外"
+    assert "结构" in res.get("schema_note", ""), res
+
+
+def test_context_package_field_set_is_pinned(app_client):
+    """接手包是给别的程序读的：字段集合变了必须是有意为之，不能顺手。"""
+    import app.main as kanban
+    _, p = app_client.create_project("字段快照")
+    _, ctx = app_client.get(f"/api/context/{p['id']}")
+    assert set(ctx) == {"app", "schema_version", "generated_at", "usage_hint", "project",
+                        "memories", "code_reality", "start_here", "tasks", "readiness"}
+    assert set(ctx["project"]) == {"id", "name", "status", "progress", "priority", "tags",
+                                   "repo_path", "background", "handoff_note", "next_action"}
+    assert set(ctx["tasks"]) == {"todo", "in_progress", "blocked", "done_count"}
+    assert ctx["schema_version"] == kanban.SCHEMA_VERSION
+
+
+def test_handoff_sections_can_be_omitted_over_http(app_client):
+    """`_budget_note` 一直说"本包偏长，建议裁剪"，但以前没有任何一条路能真的裁 ——
+    光有警告没有解法。现在 `?omit_sections=` 能裁，且裁了什么必须在正文里留痕。"""
+    _, p = app_client.create_project("裁剪小节", background="背景正文")
+    pid = p["id"]
+    app_client.post(f"/api/projects/{pid}/tasks",
+                    {"title": "做完的", "status": "已完成", "refs": ["a.py:1"]})
+    app_client.post(f"/api/projects/{pid}/tasks", {"title": "还没做的", "status": "待办"})
+    app_client.post("/api/memories", {"pid": pid, "type": "坑", "text": "记忆正文"})
+
+    _, full = app_client.get(f"/api/export/{pid}")
+    assert "做完的" in full and "记忆正文" in full and "a.py:1" in full
+
+    _, cut = app_client.get(f"/api/export/{pid}?omit_sections=done,memories,refs")
+    assert "做完的" not in cut and "还没做的" in cut, "该裁的没裁、不该裁的裁了"
+    assert "记忆正文" not in cut and "a.py:1" not in cut
+    assert "省略" in cut and "已完成任务" in cut, "裁掉的东西要在开头留痕，否则接手方会读成「没有」"
+
+    s, body = app_client.get(f"/api/export/{pid}?omit_sections=背景")
+    assert s == 400 and "omit_sections" in str(body), "不认识的名字要报错，不能静默整包发出去"
+
+    _, all_full = app_client.get("/api/export-all")
+    _, all_cut = app_client.get("/api/export-all?omit_sections=memories")
+    assert "记忆正文" in all_full and "记忆正文" not in all_cut
+    assert all_cut.count("按调用方请求省略") == 1, "每个项目都要各自留痕"
+
+
+def test_incremental_ops_reject_fields_the_object_does_not_have(app_client):
+    """`refs_add` 用在项目上、`tags_add` 用在任务上，都是调用方的错，
+    必须明确报错 —— 静默收下就是"看起来成功了，其实什么都没落"。"""
+    import app.main as kanban
+    _, p = app_client.create_project("增量守卫")
+    _, t = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "甲"})
+
+    with pytest.raises(kanban.HTTPException) as e:
+        kanban.patch_project(p["id"], {"refs_add": ["a.py:1"]})
+    assert e.value.status_code == 400 and "refs" in str(e.value.detail)
+
+    with pytest.raises(kanban.HTTPException) as e:
+        kanban.patch_task(t["id"], {"tags_add": ["x"]})
+    assert e.value.status_code == 400 and "tags" in str(e.value.detail)
+
+    # 空白项与不认识的名字：一个该被跳过，一个必须报错，都不能静默整包发出去
+    assert kanban.parse_handoff_sections("git, ,journal", param="omit_sections") == {"git", "journal"}
+    with pytest.raises(kanban.HTTPException):
+        kanban.parse_handoff_sections("git,背景", param="omit_sections")
+
+
+def test_graph_endpoint_reports_empty_reason_and_escapes(app_client):
+    """依赖图端点是给应用内渲染用的（SVG 走 innerHTML），所以两件事必须钉住：
+    ①"没有依赖"与"读不到"要能分清；② 任务标题里的 HTML 不能原样进 SVG。"""
+    _, empty = app_client.create_project("图-空项目")
+    _, r = app_client.get(f"/api/projects/{empty['id']}/graph")
+    assert r["empty"] is True and r["reason"] == "还没有任务", r
+
+    _, notask = app_client.create_project("图-无依赖")
+    app_client.post(f"/api/projects/{notask['id']}/tasks", {"title": "各干各的"})
+    _, r = app_client.get(f"/api/projects/{notask['id']}/graph")
+    assert r["empty"] is True and "前置依赖" in r["reason"], r
+
+    _, p = app_client.create_project("图-有依赖")
+    _, a = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "前置"})
+    _, b = app_client.post(f"/api/projects/{p['id']}/tasks",
+                           {"title": "后置", "depends_on": [a["id"]]})
+    _, r = app_client.get(f"/api/projects/{p['id']}/graph")
+    assert r["empty"] is False and r["nodes"] == 2 and r["shown"] == 2
+    assert r["truncated"] is False and r["svg"].lstrip().startswith("<svg")
+    assert "url(#a)" in r["svg"], "依赖连线要有箭头，否则看不出方向"
+
+    # 浅色主题要真的换色（同一份实现服务两种主题，不复制第二份）
+    _, dark = app_client.get(f"/api/projects/{p['id']}/graph")
+    _, light = app_client.get(f"/api/projects/{p['id']}/graph?theme=light")
+    assert "#1E1E22" in dark["svg"] and "#1E1E22" not in light["svg"]
+    assert "#FFFFFF" in light["svg"]
+
+    # 标题里的 HTML 必须被转义：这张图会被前端塞进 innerHTML
+    _, c = app_client.post(f"/api/projects/{p['id']}/tasks",
+                           {"title": '<img src=x onerror=alert(1)>', "depends_on": [b["id"]]})
+    _, r = app_client.get(f"/api/projects/{p['id']}/graph")
+    assert "<img src=x" not in r["svg"] and "&lt;img" in r["svg"], r["svg"][:200]
+
+    assert app_client.get("/api/projects/nope-xyz/graph")[0] == 404
+
+
+def test_graph_reports_when_layers_get_collided(app_client):
+    """超过 4 层的节点被并进末列，图上那两条看着像并行、其实有前后关系 ——
+    不标注就是图在撒谎，所以要报 `collapsed`。"""
+    _, p = app_client.create_project("图-深链")
+    prev = None
+    for i in range(6):
+        body = {"title": f"第{i + 1}步", "status": "待办"}
+        if prev:
+            body["depends_on"] = [prev]
+        _, t = app_client.post(f"/api/projects/{p['id']}/tasks", body)
+        prev = t["id"]
+    _, r = app_client.get(f"/api/projects/{p['id']}/graph")
+    assert r["empty"] is False and r["collapsed"] is True, r
+
+    _, s = app_client.create_project("图-浅链")
+    _, a = app_client.post(f"/api/projects/{s['id']}/tasks", {"title": "甲", "status": "进行中"})
+    app_client.post(f"/api/projects/{s['id']}/tasks", {"title": "乙", "depends_on": [a["id"]]})
+    _, r = app_client.get(f"/api/projects/{s['id']}/graph")
+    assert r["collapsed"] is False, "两层不该报折叠，否则这句提示会一直亮着变成噪声"
+
+
+def test_task_can_be_looked_up_by_id_alone(app_client):
+    """`GET /api/tasks/{tid}` 以前不存在：只知道任务 id 时反查不到所属项目
+    （列表接口不含任务），于是明明手里有 id 却报"找不到对应任务"。"""
+    _, p = app_client.create_project("按id找任务")
+    _, t = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "唯一的那条"})
+    s, r = app_client.get("/api/tasks/" + t["id"])
+    assert s == 200 and r["task"]["title"] == "唯一的那条"
+    assert r["project_id"] == p["id"] and r["project_name"] == "按id找任务"
+    assert app_client.get("/api/tasks/nope-tid")[0] == 404

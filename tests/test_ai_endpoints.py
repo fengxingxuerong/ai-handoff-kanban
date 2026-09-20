@@ -247,3 +247,57 @@ def test_ai_config_endpoint_roundtrip(ai):
     assert status == 200 and after["ai"]["active_model"] == "stub-model"
     on_disk = json.loads((ai.data_dir / "config.json").read_text(encoding="utf-8"))
     assert on_disk["ai"]["endpoints"][0]["api_keys"] == ["sk-stub-000000000001"]
+
+def test_agentsmd_masks_what_it_sends_to_the_model(ai):
+    """AGENTS.md 生成以前是唯一一条"送进模型前不脱敏"的路：`redact` 只管返回体，
+    送出侧的 background/handoff_note/next_action 全是原文。
+
+    这条不属于"用户点名让润色自己写的交接说明"那个豁免档 —— 它是把整份项目状态
+    被动推给远端模型去写文档，密钥照样出本机。
+    """
+    secret = "sk-agentsmdabcdef123456"
+    pid = first_project(ai)["id"]
+    ai.put(f"/api/projects/{pid}", {
+        "name": "脱敏送出", "status": "进行中",
+        "background": f"第三方网关 {secret}，联系 dev@corp.example.com",
+        "next_action": "换掉 " + secret})
+    ai.stub.calls.clear()
+    ai.stub.push_text("# AGENTS.md\n\n## 构建命令\n\n`pytest -q`\n\n## 已知坑\n\n网关密钥需要轮换。")
+    status, body = ai.post(f"/api/export/agentsmd/{pid}")
+    assert status == 200 and body["source"] == "ai"
+    sent = json.dumps(ai.stub.calls[-1]["payload"], ensure_ascii=False)
+    assert secret not in sent, "原文被送进模型了"
+    assert "********" in sent and "dev@corp.example.com" not in sent
+
+
+def test_every_report_id_in_the_list_is_fetchable(ai):
+    """列表端点发出去的每个 id，都必须能被详情端点取回来。
+
+    以前列表回的是**正文里的 `id` 字段**，而详情是按**文件名**取文件 ——
+    两边口径不一致时，界面上"点一条历史报告"就必然 404（做前端历史入口时真撞到一次）。
+    """
+    import app.main as kanban
+    d = kanban.reports_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    # 故意让正文 id 与文件名不一致，模拟任何一边漂移
+    (d / "20990101_120000.json").write_text(json.dumps({
+        "id": "对不上", "created_at": "2099-01-01 12:00", "trigger": "手动",
+        "endpoint": "甲", "summary": "测试", "insights": [], "global_suggestions": []}),
+        encoding="utf-8")
+    _, lst = ai.get("/api/ai/reports")
+    ids = [r["id"] for r in lst["reports"]]
+    assert "20990101_120000" in ids, ids
+    for rid in ids:
+        s, body = ai.get("/api/ai/reports/" + rid)
+        assert s == 200, f"列表发了 {rid}，详情却取不到：{s} {body}"
+
+    # 文件名不合法规的一律不该出现在列表里（旧命名 / 手工塞进 reports/ 的文件）
+    (d / "2099-01-02-1300.json").write_text(json.dumps({
+        "id": "2099-01-02-1300", "created_at": "2099-01-02 13:00", "trigger": "手动",
+        "endpoint": "甲", "summary": "旧命名", "insights": [], "global_suggestions": []}),
+        encoding="utf-8")
+    _, lst2 = ai.get("/api/ai/reports")
+    ids2 = [r["id"] for r in lst2["reports"]]
+    assert "2099-01-02-1300" not in ids2, ids2
+    for rid in ids2:
+        assert ai.get("/api/ai/reports/" + rid)[0] == 200, rid

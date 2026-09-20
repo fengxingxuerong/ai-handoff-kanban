@@ -621,6 +621,25 @@
   .journal-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; max-height: 140px; overflow-y: auto; }
   .journal-list .j-row { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
   .journal-list .j-row b { color: var(--text-faint); font-weight: 400; margin-right: 4px; }
+  /* 看板自报进度 与 git 代码现实 并排放在同一视野里 —— 这个产品的核心目的
+     就是发现"看板说有进展、代码其实没动"，两边分在两个面板里就永远对不上眼 */
+  .cmp { display: flex; gap: 10px; flex-wrap: wrap; }
+  .cmp > div { flex: 1 1 210px; background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 11px; }
+  .cmp .t { font-size: 11px; color: var(--text-faint); margin-bottom: 5px; letter-spacing: .02em; }
+  .cmp .b { font-size: 12px; line-height: 1.8; color: var(--text-dim); }
+  .cmp .b b { color: var(--text); font-weight: 600; }
+  .verdict { margin-top: 9px; padding: 8px 11px; border-radius: 10px; font-size: 12px;
+    line-height: 1.65; border: 1px solid var(--border); color: var(--text-dim); }
+  .verdict.warn { border-color: rgba(251,191,36,.42); background: rgba(251,191,36,.07); }
+  .verdict.bad { border-color: rgba(248,113,113,.42); background: rgba(248,113,113,.07); }
+  .verdict.ok { border-color: rgba(52,211,153,.3); background: rgba(52,211,153,.06); }
+  /* 任务卡上的"在等谁 / 已放行"与"最后一次记录"：都是盘上已有的数据，
+     以前只出现在下载后的接手页里，看板上看不出来 */
+  .dep-line.wait { color: var(--orange); }
+  .dep-line.free { color: var(--green); }
+  .idle-chip { color: var(--text-faint); font-size: 11px; }
+  .idle-chip.long { color: var(--orange); }
   .usage-box { font-size: 12px; color: var(--text-dim); line-height: 1.9; }
   .usage-box b { color: var(--text); }
 
@@ -760,6 +779,14 @@
           </div>
         </div>
 
+        <div class="panel" id="reality-panel">
+          <h3 style="justify-content:space-between">⚖️ 看板说的 vs 代码里真发生的
+            <button class="btn small" data-act="loadGitInfo" title="展开分支、提交列表与未提交文件">提交明细</button>
+          </h3>
+          <div id="reality-body" class="cmp"></div>
+          <div id="reality-verdicts"></div>
+        </div>
+
         <div class="panel">
           <h3>📝 项目背景</h3>
           <div class="body dim" id="d-background"></div>
@@ -782,6 +809,12 @@
       </div>
 
       <div>
+        <div class="panel" id="graph-panel" style="display:none">
+          <h3 style="justify-content:space-between">🧬 依赖形状
+            <span id="graph-note" style="color:var(--text-faint);font-size:11px;font-weight:400;text-transform:none;letter-spacing:0"></span>
+          </h3>
+          <div id="graph-body" style="overflow-x:auto"></div>
+        </div>
         <div class="panel" style="margin-bottom:0">
           <h3>🗃 任务看板
             <span style="margin-left:auto; display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:0; font-weight:400">
@@ -913,6 +946,12 @@
     <span class="sub" id="report-meta"></span>
     <div class="spacer" style="flex:1"></div>
     <button class="btn" id="report-refresh-btn" data-act="openReport">🔄 重新分析</button>
+  </div>
+  <!-- 历史报告：后端一直把每次监管都落一份盘（最多 100 份），`openReport(rid)` 也早就支持
+       按 id 回看，但界面上从来没有一个入口给出 rid —— 等于整条历史链路是死的，只能每次现生成 -->
+  <div id="report-history" style="display:none;padding:9px 18px 0">
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:6px">历史报告 · 点一条回看</div>
+    <div id="report-history-list" style="display:flex;flex-wrap:wrap;gap:6px;padding-bottom:10px"></div>
   </div>
   <div class="r-body" id="report-body">
     <div class="r-loading"><div class="spinner"></div><div>AI 正在分析全部项目，请稍候…</div></div>
@@ -1407,7 +1446,9 @@ const ACTIONS = {
   // —— 顶部与总览 ——
   openProjectModal: () => openProjectModal(),
   openAICmd: () => openAICmd(),
-  openReport: () => openReport(),
+  // 要转发 data-arg：报告面板既能"现生成一份"（无参）也能回看某一份历史（带 rid）。
+  // 写成 `() => openReport()` 会把 rid 丢掉，点历史条目变成重新跑一次分析。
+  openReport: (arg) => openReport(arg),
   openAISettings: () => openAISettings(),
   setFilter: (arg, ev, el) => setFilter(el, arg),
   showOverview: () => showOverview(),
@@ -1525,6 +1566,9 @@ function setDetailState(mode, err, pid) {
 
 async function openDetail(pid) {
   currentPid = pid;
+  // 换项目看一眼就要一份现值：清掉上一份 git 缓存（同一次停留期间仍复用，
+  // 免得每存一个任务就去跑一次 git log）
+  gitCache = { pid: null, data: null, failed: null };
   document.getElementById("view-overview").style.display = "none";
   document.getElementById("view-detail").classList.add("active");
   setDetailState("loading");
@@ -1632,15 +1676,29 @@ function renderDetail() {
     const refHtml = (t.refs && t.refs.length)
       ? `<div class="td" style="font-family:Consolas,monospace;font-size:11px">📍 ${t.refs.map(r => esc(r)).join("、")}</div>`
       : "";
-    const depHtml = (t.depends_on && t.depends_on.length)
+    const depHtml = (t.depends_on && t.depends_on.length && t.status !== "已完成")
       ? (() => {
-          const titles = t.depends_on.map(d => {
+          // 光列「前置：A、B」没回答那个真正的问题：**这条现在能不能动手**。
+          // 后端在 /api/context 与 /api/projects/{pid}/next 里都算了 waiting_for，
+          // 界面上一直没有 —— 用户判断"下一步做哪条"只能自己对着四列看。
+          const pend = [], sat = [];
+          t.depends_on.forEach(d => {
             const x = (current.tasks || []).find(y => y.id === d);
-            return x ? x.title : d;
+            (x && x.status === "已完成" ? sat : pend).push(x ? x.title : d);
           });
-          return `<div class="td" style="font-size:11px">⛓ 前置：${titles.map(esc).join("、")}</div>`;
+          if (!pend.length) {
+            return `<div class="td dep-line free" style="font-size:11px">✓ ${sat.length} 条前置已完成，可以动手</div>`;
+          }
+          return `<div class="td dep-line wait" style="font-size:11px">在等 ${pend.length} 条前置：${pend.map(esc).join("、")}</div>`;
         })()
       : "";
+    // 「这条多久没动静了」：journal 是后端每次状态流转自动记一条的，天然就是活动时间线。
+    // 以前 journal 只在任务编辑弹窗里出现，卡片上看不出"这条今天还在动"还是"三周没人碰"。
+    const lastBeat = (t.journal && t.journal.length)
+      ? (t.journal[t.journal.length - 1].time || t.updated_at || "") : (t.updated_at || "");
+    const idleD = daysSince(lastBeat);
+    const idleHtml = (t.status !== "已完成" && idleD !== null && idleD >= 7)
+      ? `<span class="idle-chip long">⏱ ${idleD} 天没记录</span>` : "";
     const di = dueInfo(t);
     const dueHtml = di ? `<span class="due-badge ${di.cls}">📅 ${esc(di.text)}</span>` : "";
     el.innerHTML = `
@@ -1651,12 +1709,15 @@ function renderDetail() {
       <div class="tfoot">
         <span class="tag2 pri-${tpri}">${esc(tpri)}</span>
         ${t.agent ? `<span class="agent">🤖 ${esc(t.agent)}</span>` : ""}
+        ${idleHtml ? `<span style="margin-left:auto">${idleHtml}</span>` : ""}
       </div>`;
     document.getElementById(cols[tst] || "col-todo").appendChild(el);
   });
   for (const [k, v] of Object.entries(counts)) {
     document.getElementById("c-" + ({ "待办": "todo", "进行中": "doing", "已完成": "done", "阻塞": "blocked" }[k])).textContent = v;
   }
+  renderReality();
+  renderGraph();
 }
 
 // ============ 交接导出 ============
@@ -1736,7 +1797,19 @@ function resetTagChips(tags) {
   selTags.forEach(t => tagChip(t).classList.add("active"));
 }
 
-function openProjectModal(id) {
+function fillProjectForm(p) {
+  document.getElementById("f-name").value = p.name || "";
+  document.getElementById("f-status").value = p.status || "规划中";
+  document.getElementById("f-priority").value = p.priority || "中";
+  document.getElementById("f-progress").value = (p.progress === 0 || p.progress) ? p.progress : "0";
+  document.getElementById("f-repo").value = p.repo_path || "";
+  document.getElementById("f-bg").value = p.background || "";
+  document.getElementById("f-handoff").value = p.handoff_note || "";
+  document.getElementById("f-next").value = p.next_action || "";
+  resetTagChips(p.tags || []);
+}
+
+async function openProjectModal(id) {
   editProjectId = id || null;
   selTags = new Set();
   document.getElementById("proj-modal-title").textContent = id ? "编辑项目" : "新建项目";
@@ -1750,18 +1823,19 @@ function openProjectModal(id) {
   document.getElementById("f-next").value = "";
   resetTagChips([]);
   if (id) {
-    const p = projects.find(x => x.id === id);
-    if (p) {
-      document.getElementById("f-name").value = p.name;
-      document.getElementById("f-status").value = p.status;
-      document.getElementById("f-priority").value = p.priority;
-      document.getElementById("f-progress").value = p.progress;
-      document.getElementById("f-repo").value = p.repo_path || "";
-      document.getElementById("f-bg").value = p.background || "";
-      document.getElementById("f-handoff").value = p.handoff_note || "";
-      document.getElementById("f-next").value = p.next_action || "";
-      resetTagChips(p.tags);
+    // 编辑**必须**从 `/api/projects/{id}` 回填，不能用总览列表里那一份：
+    // 列表接口只给卡片要用的字段，不含 background / handoff_note，
+    // 而 PUT 是整体覆盖语义 —— 实测「从总览点编辑、只改一下进度、保存」
+    // 会把用户手写的三周项目背景和交接说明清空，且界面上毫无痕迹。
+    // 取不到详情就宁可不开这个表单，也不要开一个"保存即吞内容"的表单。
+    let full = null;
+    try { full = await api("/api/projects/" + id); } catch (e) { full = null; }
+    if (editProjectId !== id) return;          // 期间用户又点了别的项目
+    if (!full || !full.id) {
+      toast("读不到这个项目的详情，已阻止打开编辑（直接保存会清空背景与交接说明）");
+      return;
     }
+    fillProjectForm(full);
   }
   openModal("proj-modal");
 }
@@ -2008,10 +2082,33 @@ async function testAI() {
 // ============ AI 监管报告 ============
 let currentReport = null;
 
+async function loadReportHistory() {
+  const wrap = document.getElementById("report-history");
+  const list = document.getElementById("report-history-list");
+  if (!wrap || !list) return;
+  try {
+    const r = await api("/api/ai/reports");
+    const items = (r && r.reports) || [];
+    if (!items.length) { wrap.style.display = "none"; list.innerHTML = ""; return; }
+    list.innerHTML = items.slice(0, 12).map(x => {
+      const tip = `${x.trigger || "手动"} · ${x.endpoint || "未知端点"} · ${x.insight_count} 条洞察`
+        + (x.summary ? `｜${String(x.summary).slice(0, 80)}` : "");
+      return `<button class="btn small" data-act="openReport" data-arg="${esc(x.id)}" `
+        + `title="${esc(tip)}">${esc(String(x.created_at || "").slice(5, 16))}</button>`;
+    }).join("");
+    wrap.style.display = "block";
+  } catch (e) {
+    // 拿不到历史就说一句，别整条静默消失——那和"从来没有过历史报告"长得一模一样
+    wrap.style.display = "block";
+    list.innerHTML = `<span style="font-size:11px;color:var(--red)">历史报告读不到：${esc(e.message)}</span>`;
+  }
+}
+
 async function openReport(rid) {
   const panel = document.getElementById("report-panel");
   document.getElementById("report-mask").classList.add("show");
   panel.classList.add("show");
+  loadReportHistory();
   const rb = panel.querySelector(".r-body");
   if (rb) rb.scrollTop = modalScroll.get("report-panel") || 0;
   focusInto(panel);
@@ -2093,12 +2190,13 @@ async function applySuggestion(btn) {
       method: "POST",
       body: JSON.stringify([{ project_id: pid, field: "next_action", value: txt }]),
     });
-    // 服务端可能一条都没写（项目已被删；或内容里带着脱敏掩码，写进去就是拿星号覆盖真内容）。
+    // 服务端可能一条都没写（项目已被删；内容带着脱敏掩码；字段不在清单；值过长）。
     // 原来这里不看返回值直接宣布"已应用 ✓"，于是点了个按钮、什么也没发生、界面还说成功了。
     if (!r || !r.applied) {
-      toast(r && r.skipped_masked
-        ? "未写入：这条建议里带着脱敏掩码，请到项目里核对原文后手动补"
-        : "未写入：没找到对应项目（可能已被删除）");
+      const why = r && r.results && r.results[0] && r.results[0].reason;
+      toast("未写入：" + (why || (r && r.skipped_masked
+        ? "这条建议里带着脱敏掩码，请到项目里核对原文后手动补"
+        : "没找到对应项目（可能已被删除）")));
       return;
     }
     btn.classList.add("done");
@@ -2275,6 +2373,14 @@ async function resolveTaskId(a) {
 
 async function findProjectOfTask(a) {
   if (a.project_id) return api("/api/projects/" + a.project_id);
+  // 只有 task_id 时按 id 反查所属项目：简报里的任务标题现在带脱敏掩码，
+  // 拿标题当匹配键已经不可靠了，id 才是稳的那个
+  if (a.task_id) {
+    try {
+      const hit = await api("/api/tasks/" + a.task_id);
+      if (hit && hit.project_id) return api("/api/projects/" + hit.project_id);
+    } catch (e) { return null; }
+  }
   // 按名称匹配
   if (a.project_name) {
     const all = await api("/api/projects");
@@ -2696,7 +2802,9 @@ async function saveAgentsMD(ev) {
   if (!content.trim()) { toast("内容为空，先点「生成」"); return; }
   let path = document.getElementById("agentsmd-path").value.trim();
   if (!path) { toast("请填写保存路径"); return; }
-  if (!/\.(md|txt|agentsmd)$/i.test(path)) { toast("路径需以 .md / .txt 结尾"); return; }
+  // 与后端保存白名单一字不差（app/main.py 的 `save_export`）：以前少一条 `.markdown`，
+  // 后端明明允许，却被前端挡在门外 —— 两条路给不同答案的最小一例。
+  if (!/\.(md|txt|markdown|agentsmd)$/i.test(path)) { toast("路径需以 .md / .txt / .markdown / .agentsmd 结尾"); return; }
   const btn = (ev && ev.currentTarget) || document.getElementById("agentsmd-save-btn");
   btn.classList.add("ai-loading-btn");
   try {
@@ -2711,22 +2819,174 @@ async function saveAgentsMD(ev) {
   btn.classList.remove("ai-loading-btn");
 }
 
-// ============ 代码现状（git） ============
+// ============ 代码现状（git）与「看板 vs 现实」对照 ============
+function daysSince(s) {
+  if (!s) return null;
+  const t = new Date(String(s).trim().replace(" ", "T"));
+  return isNaN(t.getTime()) ? null : Math.floor((Date.now() - t.getTime()) / 86400000);
+}
+
+function boardLastTouch(p) {
+  // 看板「最后一次真动过」= 任务 journal 的时间与项目 updated_at 里最新的那个。
+  // 只看 updated_at 不够：它会被「只把下拉框里的优先级点了一下」顶上去。
+  let best = p.updated_at || "";
+  (p.tasks || []).forEach(t => (t.journal || []).forEach(e => {
+    if ((e.time || "") > best) best = e.time;
+  }));
+  return best;
+}
+
+// 详情页每次重绘都会跑 renderDetail，而 /api/projects/{pid}/git 是**故意不缓存**的
+// （它是给人点的，要现值）。所以这里自己按 pid 存一份，只有点「提交明细」才强制刷新。
+let gitCache = { pid: null, data: null, failed: null };
+
+async function fetchGit(pid, force) {
+  if (!pid || (!force && gitCache.pid === pid && (gitCache.data || gitCache.failed))) {
+    return gitCache.data;
+  }
+  // 没填代码路径就别发这个请求：后端必然回 400，控制台里那条"资源加载失败"
+  // 会把真正该被看见的报错淹掉
+  if (!(current && current.repo_path)) {
+    gitCache = { pid, data: null, failed: null };
+    return null;
+  }
+  try {
+    const g = await api(`/api/projects/${pid}/git?limit=8`);
+    gitCache = { pid, data: g, failed: null };
+  } catch (e) {
+    gitCache = { pid, data: null, failed: e.message };
+  }
+  return gitCache.data;
+}
+
+/**
+ * 分歧判据。以前这里只写「days>=7 且 dirty==0」两个常数，却打出
+ * 「看板还在推进，代码却停了？」—— 判据里根本没有一项关于看板是否推进，
+ * 于是 progress 停在 0%、三个月没动的项目同样会喊这句话。
+ * 现在两边都要成立才下结论：代码侧停滞 + 看板侧确实有动静。
+ */
+function realityVerdicts(p, g) {
+  const out = [];
+  const tasks = p.tasks || [];
+  const done = tasks.filter(t => t.status === "已完成").length;
+  const idle = daysSince(boardLastTouch(p));
+  if (!p.repo_path) {
+    return [["", "没填代码路径，无法核对代码现实。填上才能把「看板写的进度」和「git 里真发生的提交」"
+                  + "放在一起看 —— 这件事正是这个看板存在的理由。"]];
+  }
+  if (!g) {
+    return [["", gitCache.failed ? ("代码现状读不到：" + esc(gitCache.failed)
+             + "（确认路径存在且是个 git 仓库）") : "代码现状读取中…"]];
+  }
+  const codeIdle = g.days_since_commit, dirty = g.dirty_count || 0;
+  if (codeIdle !== null && codeIdle !== undefined && codeIdle >= 7 && dirty === 0
+      && idle !== null && idle <= 6) {
+    out.push(["bad", `看板这边 ${idle} 天内还记过动静，代码却已经 ${codeIdle} 天没提交、工作区也是干净的`
+                   + ` —— 要么进度是估的，要么改动没进 git。`]);
+  }
+  if (codeIdle !== null && codeIdle !== undefined && codeIdle <= 2 && idle !== null && idle >= 7) {
+    out.push(["warn", `代码 ${codeIdle} 天前刚提交过，看板却停在 ${idle} 天前 —— 接手的人会低估进度。`
+                   + `顺手更新一下 progress / next_action。`]);
+  }
+  if (tasks.length && p.progress >= 60 && done === 0) {
+    out.push(["warn", `进度条写 ${p.progress}%，但 ${tasks.length} 条任务里没有一条已完成 —— `
+                   + "两边对不上，接手方不知道该信哪个。"]);
+  }
+  if (tasks.length && done / tasks.length >= 0.6 && p.progress <= 25) {
+    out.push(["warn", `${done}/${tasks.length} 条任务已完成，进度条却只有 ${p.progress}% —— 对不上`
+                   + "（也可能是还有活没登记，那就把任务补进来）。"]);
+  }
+  if (!out.length) out.push(["ok", "两边节奏对得上：看板记录的动静与提交记录没有互相打脸。"]);
+  return out;
+}
+
+async function renderReality() {
+  const box = document.getElementById("reality-body");
+  const vbox = document.getElementById("reality-verdicts");
+  if (!box || !current || !currentPid) return;
+  const pid = currentPid;
+  const p = current;
+  const tasks = p.tasks || [];
+  const done = tasks.filter(t => t.status === "已完成").length;
+  const blocked = tasks.filter(t => t.status === "阻塞").length;
+  const idle = daysSince(boardLastTouch(p));
+  const board = [];
+  board.push(`完成进度 <b>${p.progress}%</b> · 任务 <b>${done}/${tasks.length}</b> 已完成`
+             + (blocked ? ` · <b>${blocked}</b> 阻塞` : ""));
+  board.push(idle === null ? "看板还没有任何动静记录"
+                           : `最后记下动静：<b>${idle}</b> 天前`);
+  box.innerHTML = `<div><div class="t">📋 看板自报</div><div class="b">${board.join("<br>")}</div></div>`
+    + `<div><div class="t">🌿 代码现实</div><div class="b" id="reality-code">读取中…</div></div>`;
+  // 先占一行再等 git：否则这段时间里面板是"两块卡片 + 没有结论"，
+  // 读的人会把"还没算完"当成"没查出问题"
+  vbox.innerHTML = '<div class="verdict">正在核对两边节奏…</div>';
+  const g = await fetchGit(pid);
+  if (currentPid !== pid) return;                 // 期间切到别的项目了，别把上一份贴回来
+  const code = document.getElementById("reality-code");
+  if (g) {
+    const head = g.head || {};
+    code.innerHTML = `分支 <b>${esc(g.branch || "(detached)")}</b>`
+      + ` · 距上次提交 <b>${g.days_since_commit === null ? "?" : g.days_since_commit}</b> 天`
+      + `<br>未提交改动 <b>${g.dirty_count}</b> 个`
+      + (head.subject ? `<br>HEAD ${esc(head.hash)} ${esc(String(head.subject).slice(0, 40))}` : "");
+  } else {
+    code.innerHTML = p.repo_path ? '<span style="color:var(--red)">读不到</span>' : "未填代码路径";
+  }
+  vbox.innerHTML = realityVerdicts(p, g).map(v =>
+    `<div class="verdict ${v[0]}">${v[1]}</div>`).join("");
+}
+
+/**
+ * 依赖图：画的是"这堆活的形状"，SVG 由后端那份 `dep_graph_svg` 生成
+ * （前端不再画第二遍 —— 同一件事两套实现是本项目反复栽的形状）。
+ * 没有依赖时整块隐藏：那是"确实没有"，不是"读不到"，两者不能混成同一种沉默，
+ * 所以请求失败时反过来——必须显形。
+ */
+async function renderGraph() {
+  const panel = document.getElementById("graph-panel");
+  const body = document.getElementById("graph-body");
+  const note = document.getElementById("graph-note");
+  if (!panel || !currentPid || !current) return;
+  const pid = currentPid;
+  const theme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  try {
+    const g = await api(`/api/projects/${pid}/graph?theme=${theme}`);
+    if (currentPid !== pid) return;
+    if (g.empty) {
+      panel.style.display = "none";
+      body.innerHTML = "";
+      return;
+    }
+    body.innerHTML = g.svg;
+    const bits = [g.truncated ? `共 ${g.nodes} 条，只画前 ${g.shown} 条` : `${g.nodes} 条任务`];
+    // 末列里可能混着"第 5 层"的节点，图上看着像并行、其实有前后关系 —— 不标注就是图在撒谎
+    if (g.collapsed) bits.push("深于 4 层的已并入末列，末列内可能仍有先后");
+    note.textContent = bits.join(" · ");
+    panel.style.display = "block";
+  } catch (e) {
+    if (currentPid !== pid) return;
+    panel.style.display = "block";
+    body.innerHTML = `<span style="color:var(--red)">依赖图画不出来：${esc(e.message)}</span>`;
+    note.textContent = "";
+  }
+}
+
 async function loadGitInfo() {
   if (!currentPid) return;
   const panel = document.getElementById("git-panel");
   const box = document.getElementById("git-body");
   panel.style.display = "block";
   box.innerHTML = "读取中…";
+  const pid = currentPid;
   try {
-    const g = await api(`/api/projects/${currentPid}/git?limit=8`);
+    // force：这个按钮的语义就是"给我看现值"，不能吐上一次缓存
+    const g = await fetchGit(pid, true);
+    if (!g) throw new Error(gitCache.failed || "读不到");
     const head = g.head || {};
-    const days = g.days_since_commit;
-    const stale = days !== null && days >= 7 && g.dirty_count === 0;
     const rows = [];
     rows.push(`分支 <b>${esc(g.branch || "(detached)")}</b> · 工作区${g.dirty_count === 0 ? "干净" : `有 ${g.dirty_count} 个未提交改动`}`);
-    if (head.hash) rows.push(`HEAD ${esc(head.hash)} · ${esc(head.date)} · ${esc(head.subject || "")}`);
-    if (days !== null) rows.push(`距上次提交 <b>${days}</b> 天${stale ? " —— 看板还在推进，代码却停了？" : ""}`);
+    if (head.hash) rows.push(`HEAD ${esc(head.hash)} · ${esc(head.date)} · ${esc(head.subject || "")}${head.author ? ` · ${esc(head.author)}` : ""}`);
+    if (g.days_since_commit !== null) rows.push(`距上次提交 <b>${g.days_since_commit}</b> 天`);
     rows.push('<div style="margin-top:6px;color:var(--text-faint)">最近提交</div>');
     (g.commits || []).forEach(c => rows.push(`${esc(c.hash)} ${esc(c.date)} ${esc(c.subject || "")}`));
     if (g.dirty_files && g.dirty_files.length) {
@@ -2734,6 +2994,7 @@ async function loadGitInfo() {
       g.dirty_files.forEach(f => rows.push(esc(f)));
     }
     box.innerHTML = rows.join("<br>");
+    renderReality();          // 强制刷新后，上面的对照块也换成同一份现值
   } catch (e) {
     box.innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`
       + '<div style="margin-top:4px;color:var(--text-faint)">先在项目里填对「代码路径」，并确认它是个 git 仓库</div>';
@@ -2863,7 +3124,14 @@ async function onImportFilePicked(ev) {
   if (!confirm(`导入会【覆盖】现有全部项目（导入前会自动做一份备份）。\n\n文件：${file.name}\n确定继续？`)) return;
   try {
     const r = await api("/api/data/import", { method: "POST", body: JSON.stringify({ content: text }) });
-    toast(`已导入 ${(r.projects || []).length} 个项目 ✓`);
+    // 后端返回的是 `{ok, imported}`，没有 `projects` 这个键 —— 以前这里读
+    // `(r.projects || []).length`，于是导入明明成功，界面永远提示"已导入 0 个项目 ✓"。
+    const n = (r && typeof r.imported === "number") ? r.imported : 0;
+    let msg = `已导入 ${n} 个项目 ✓`;
+    if (r && typeof r.memories === "number") msg += `、${r.memories} 条记忆`;
+    // 文件声明的结构版本比本看板新：字段可能被规范化掉了，这句话必须让用户看到
+    if (r && r.schema_note) msg += "｜" + r.schema_note;
+    toast(msg);
     await loadOverview();
   } catch (e) { toast("导入失败：" + e.message); }
 }
@@ -2972,6 +3240,7 @@ async function runGlobalSearch(q) {
         <span style="flex:1">${esc(t.title)}</span>
         <span class="tag2 pri-${priCls(t.priority)}">${esc(priCls(t.priority))}</span>
         ${t.due_date ? `<span class="due-badge due-ok">📅 ${esc(t.due_date.slice(5))}</span>` : ""}
+        ${t.agent ? `<span class="agent" title="这条由哪个智能体负责">🤖 ${esc(t.agent)}</span>` : ""}
         <span style="font-size:11px;color:var(--text-faint);flex-shrink:0">${esc(t.project_name)}</span>
       </div>`).join("");
     box.querySelectorAll(".gs-item").forEach(el => {
@@ -3013,6 +3282,8 @@ function applyTheme(t) {
 function toggleTheme() {
   const cur = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
   applyTheme(cur === "light" ? "dark" : "light");
+  // 依赖图的填色是服务端算好的，换主题不重画就会出现"浅底上一块深卡片"
+  renderGraph();
 }
 
 (function initTheme() {
@@ -3099,7 +3370,7 @@ async function renderMemories(pid) {
         <div class="memory-item">
           <span class="m-type">${esc(m.type || "事实")}</span>
           <span class="m-text">${esc(m.text)}</span>
-          <span class="m-time">${esc((m.time || "").slice(5, 10))}</span>
+          <span class="m-time" title="来源：${esc(m.source || "手动")}">${esc(m.source || "手动")} · ${esc((m.time || "").slice(5, 10))}</span>
           <button class="m-del" title="删除" data-act="deleteMemory" data-mid="${esc(m.id)}">✕</button>
         </div>`).join("")
       : '<div style="font-size:12px;color:var(--text-faint)">暂无记忆。会话提炼会自动沉淀决策/坑/约定，也可手动添加。</div>';
@@ -3297,9 +3568,13 @@ async function loadUsage() {
     const u = await api("/api/usage");
     const t = u.totals || {};
     const feats = Object.entries(u.by_feature || {}).sort((a, b) => b[1].calls - a[1].calls);
+    // 后端一直按模型聚合（by_model），界面上以前只报功能分布 —— 多端点/多模型时
+    // "谁在花钱、谁在失败"恰恰是要按模型看的那一维
+    const models = Object.entries(u.by_model || {}).sort((a, b) => b[1].calls - a[1].calls);
     box.innerHTML = `
       调用 <b>${t.calls || 0}</b> 次（失败 ${t.failed || 0}） · Token <b>${(t.prompt_tokens || 0).toLocaleString()}</b> + <b>${(t.completion_tokens || 0).toLocaleString()}</b><br>
       ${feats.length ? "按功能：" + feats.map(([k, v]) => `${esc(k)} ${v.calls}次/${v.tokens.toLocaleString()}tk`).join(" · ") : "暂无记录（AI 功能调用后自动记录）"}
+      ${models.length ? `<br>按模型：${models.map(([k, v]) => `${esc(k)} ${v.calls}次/${v.tokens.toLocaleString()}tk`).join(" · ")}` : ""}
       ${t.failed ? `<br><span style="color:var(--red)">最近有失败调用，详情见 usage.jsonl</span>` : ""}`;
   } catch (e) { box.innerHTML = "加载失败：" + esc(e.message); }
 }
@@ -3308,8 +3583,11 @@ async function loadUsage() {
 async function loadVersion() {
   try {
     const h = await api("/api/health");
+    // 数据文件到底落在哪，是排查"我改的这份是谁的板子"时第一个要问的问题；
+    // 后端一直返回 data_file，界面上以前从不显示
     document.getElementById("app-version").textContent =
       `AI 交接看板 v${h.version} · build ${h.build_time} · ${h.frozen ? "打包版" : "源码运行"}`;
+    document.getElementById("app-version").title = "数据文件：" + (h.data_file || "未知");
   } catch (e) {
     document.getElementById("app-version").textContent = "版本信息读取失败";
   }

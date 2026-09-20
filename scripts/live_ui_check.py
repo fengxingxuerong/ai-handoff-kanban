@@ -62,25 +62,44 @@ def main() -> int:
 
     with sync_playwright() as pw:
         browser = None
-        for channel in ("msedge", "chrome"):
+        # 三级降级：系统 Edge → 系统 Chrome → Playwright 自带 chromium。
+        # CI 容器里前两个都不存在，只装了 `playwright install chromium`；
+        # 没有第三级时这条门禁会在 CI 上直接判失败，而不是"这台机器没浏览器"地跳过。
+        for channel in ("msedge", "chrome", None):
             try:
                 browser = pw.chromium.launch(channel=channel, headless=True)
-                print(f"（用系统 {channel}）")
+                print(f"（用 {'Playwright 自带 chromium' if channel is None else channel}）")
                 break
             except Exception:                                  # noqa: BLE001
                 browser = None
         if browser is None:
-            print("没有可用的 Edge/Chrome，无法做界面校验")
+            print("没有可用的浏览器（Edge / Chrome / playwright chromium 都起不来）；"
+                  "CI 上请先 `python -m playwright install --with-deps chromium`")
             return 1
 
         ctx = browser.new_context(viewport={"width": 1440, "height": 900})
         page = ctx.new_page()
         errors: list[str] = []
+        # 「代码现实」读不到时后端**故意**回 400（带可行动提示），面板也已经把原因显示出来了。
+        # 把它和真正的页面故障混在一起，会让本门禁在任何"仓库路径不在这台机器上"的数据上假红。
+        # 所以单独收一路，并反过来断言"它被解释了"。
+        git_unreadable: list[str] = []
+
+        def _on_response(r):
+            if r.status < 400 or "favicon" in r.url:
+                return
+            if r.status == 400 and r.url.split("?")[0].endswith("/git"):
+                git_unreadable.append(r.url)
+            else:
+                errors.append(f"HTTP {r.status}: {r.url}")
+
         page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
+        # 只收真正的脚本错误。"Failed to load resource" 是浏览器对同一次 4xx/5xx 的重复播报，
+        # 且**不带 URL** —— 上面的 response 已经按 URL 记了更精确的一份，这里收两遍只会让人
+        # 去查同一条线索两次。
         page.on("console", lambda m: errors.append(f"console.error: {m.text}")
-                if m.type == "error" and "favicon" not in m.text else None)
-        page.on("response", lambda r: errors.append(f"HTTP {r.status}: {r.url}")
-                if r.status >= 400 and "favicon" not in r.url else None)
+                if m.type == "error" and "Failed to load resource" not in m.text else None)
+        page.on("response", _on_response)
 
         t0 = time.time()
         page.goto(BASE + "/", wait_until="domcontentloaded")
@@ -117,6 +136,44 @@ def main() -> int:
             check("看板四列都在", all(page.locator(c).count() == 1 for c in cols))
             check("详情页有内容（不是空壳）",
                   len(page.locator("#view-detail").inner_text()) > 50)
+
+            # 「看板说的 vs 代码里真发生的」是详情页的核心一块：它一坏，
+            # 界面就退回"只能看自报进度"，而这正是这个产品要解决的问题。
+            page.wait_for_function(
+                "() => (document.getElementById('reality-body')?.innerText || '').length > 10",
+                timeout=10000)
+            reality = page.locator("#reality-body").inner_text()
+            check("看板/代码现实两侧都渲染了",
+                  "看板自报" in reality and "代码现实" in reality, reality.replace("\n", " ")[:90])
+            # 结论要等 git 回来才算完，所以等的是"已经不是占位那句"，
+            # 而不是"存在一行 verdict"——占位那一行本身就会让它平凡通过
+            page.wait_for_function(
+                "() => { const v = document.querySelectorAll('#reality-verdicts .verdict');"
+                "  return v.length >= 1 && !/正在核对/.test(v[0].innerText); }", timeout=15000)
+            check("对照给了一句结论（有分歧要说、没分歧也要说）",
+                  page.locator("#reality-verdicts .verdict").count() >= 1,
+                  page.locator("#reality-verdicts").inner_text().replace("\n", " ")[:90])
+
+            # 依赖图：真实板子上可能确实没有依赖，所以断言的是"接口口径自洽"，
+            # 而不是硬要求画出一张图来（后者会让门禁在多数板子上假红）
+            g = api("/api/projects/" + projects[0]["id"] + "/graph") if names else None
+            if g is not None:
+                ok_shape = (g.get("empty") and g.get("reason")) or (
+                    not g.get("empty") and g.get("svg", "").lstrip().startswith("<svg"))
+                check("依赖图接口口径自洽（空要有原因，非空要是 SVG）", bool(ok_shape),
+                      f"empty={g.get('empty')} reason={g.get('reason')} nodes={g.get('nodes')}")
+                shown = page.locator("#graph-panel").is_visible()
+                check("界面与接口对'有没有图'的判断一致", shown == (not g.get("empty")),
+                      f"面板可见={shown} 接口 empty={g.get('empty')}")
+            if git_unreadable:
+                # 这个 400 是**预期内**的（路径不在这台机器上），但预期内不等于可以不解释：
+                # 面板必须说清"读不到"，不能留白、也不能永远停在"读取中…"
+                code_txt = page.locator("#reality-code").inner_text()
+                verdict_txt = page.locator("#reality-verdicts").inner_text()
+                check("仓库读不到时面板说了原因（不是空白、不是卡在读取中）",
+                      ("读不到" in code_txt or "不存在" in code_txt)
+                      and "读取中" not in code_txt and "正在核对" not in verdict_txt,
+                      (code_txt + " || " + verdict_txt).replace("\n", " ")[:110])
 
             page.click("[data-act='showOverview']")
             page.wait_for_selector(".pcard", timeout=10000)

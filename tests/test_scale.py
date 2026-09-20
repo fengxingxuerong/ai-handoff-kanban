@@ -236,3 +236,50 @@ def test_llm_brief_says_when_it_drops_tasks(app_client):
     assert len(by_id["p1"]["tasks"]) == 40
     assert "55" in by_id["p1"]["tasks_note"] and "40" in by_id["p1"]["tasks_note"], by_id["p1"]
     assert "tasks_note" not in by_id["p2"], "没截断就别多塞一个键"
+
+
+def test_projects_brief_masks_the_commit_subject(monkeypatch):
+    """`_projects_brief` 里 next_action / background / journal / memories 四处都过了脱敏，
+    以前独独 `git.last_commit_subject` 是原文 —— commit 正文同样是自由文本，
+    而且这是**整板内容被动随一次分析请求外出**的那条路。"""
+    import app.main as k
+    monkeypatch.setattr(k, "_memories_by_pid", lambda: {})
+    monkeypatch.setattr(k, "git_snapshot", lambda *a, **kw: {
+        "ok": True, "branch": "main", "days_since_commit": 0, "dirty_count": 0,
+        "head": {"hash": "abc1234", "date": "2026-09-19",
+                 "subject": "接入网关，先用 sk-gitsubjectabcdef12 试"}})
+    brief = k._projects_brief([{"id": "p1", "name": "甲", "status": "进行中",
+                                "progress": 0, "priority": "中", "tags": [], "tasks": []}])
+    subject = brief[0]["git"]["last_commit_subject"]
+    assert "sk-gitsubjectabcdef12" not in subject, subject
+    assert "********" in subject and "接入网关" in subject, "只盖凭据，别把整条抹了"
+
+
+def test_projects_brief_gives_task_ids_and_masks_titles():
+    """简报里的任务现在**带 id**，标题也进脱敏 —— 两者是一件事的两半：
+    以前简报里的任务没有 id，提示词只能写"按标题匹配"，于是标题不敢盖（盖了就对不回任务），
+    而"密钥写在任务标题里"恰恰是最常见的写法。有了 id，标题才盖得动。"""
+    import app.main as kanban
+    secret = "sk-brieftitleabcdef12"
+    brief = kanban._projects_brief([{
+        "id": "p1", "name": "甲", "status": "进行中", "progress": 10, "priority": "中",
+        "tags": [], "next_action": "", "tasks": [
+            {"id": "t1", "title": f"轮换 {secret} 这把", "status": "待办", "priority": "高",
+             "refs": [], "journal": []},
+            {"id": "t2", "title": "不带凭据的标题", "status": "进行中", "priority": "中",
+             "refs": [], "journal": []}]}])
+    tasks = brief[0]["tasks"]
+    assert [t["id"] for t in tasks] == ["t1", "t2"], "任务必须带 id，模型才有稳定的回传键"
+    assert secret not in json.dumps(brief, ensure_ascii=False), "标题里的密钥漏出去了"
+    assert tasks[0]["title"] == "轮换 sk-******** 这把", tasks[0]["title"]
+    assert tasks[1]["title"] == "不带凭据的标题", "干净标题逐字不变"
+
+
+def test_ai_command_prompt_keys_on_ids_not_titles():
+    """提示词必须让模型按 id 回传。只要它还写着"按标题匹配"，简报里的标题就盖不得 ——
+    这条测试钉的是那个因果链的前提。"""
+    import app.main as kanban
+    import inspect
+    src = inspect.getsource(kanban.ai_command)
+    assert "task_id" in src and "不要拿标题当匹配键" in src
+    assert "任务用项目下现有任务标题匹配" not in src, "又退回按标题匹配了 —— 标题脱敏会立刻失效"
