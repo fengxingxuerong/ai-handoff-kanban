@@ -48,6 +48,19 @@ rem 测试（pytest 自动起隔离环境并回收；带覆盖率，门檻 90%�
 .venv\Scripts\python.exe -m pytest -v
 set KANBAN_LIVE=1 && .venv\Scripts\python.exe -m pytest tests\test_ai.py -v
 
+rem 一条命令跑完所有门禁（自己起隔离实例，绝不碰 ~/.ai-kanban）
+rem 这是 CI 的本地等价物，也是**发版前的唯一判据**；--with-exe 会重新打包并跑冻结版冒烟
+.venv\Scripts\python.exe scripts\ci_local.py
+.venv\Scripts\python.exe scripts\ci_local.py --quick
+.venv\Scripts\python.exe scripts\ci_local.py --with-exe
+
+rem 依赖可复现：requirements*.txt 写的是兼容下限，requirements.lock.txt 是实测闭包
+.venv\Scripts\python.exe scripts\make_lock.py        # 在跑过全量测试的 venv 里重新生成
+.venv\Scripts\python.exe -m pip install -r requirements.lock.txt   # 换机 / CI / 出包用
+
+rem exe 版本资源（右键属性看得到版本与构建时间；由 build.bat 第 5 步自动调用）
+.venv\Scripts\python.exe scripts\make_versionfile.py
+
 rem 只跑前端真实点击测试（复用系统 Edge/Chrome，无需下载 Chromium）
 .venv\Scripts\python.exe -m pytest tests\test_frontend_e2e.py -v
 
@@ -147,6 +160,66 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 14. **反馈分工**：AI 指令窗里的**过程**留在聊天气泡（那是转录，有历史价值），
     但**结果**必须再走一次 `toast()` —— toast 是全站唯一的 `aria-live` 区域，
     而且弹窗会被关掉。少了这句，"确认执行"到底成没成，键盘/读屏用户无从得知。
+15. **整页只有一段内联脚本，它一崩所有 `data-act` 全部失效、界面变成一块死面板，
+    而任何 Python 测试都不会红**。2026-09-20 实测：在 JS 里写了 Python 风格的相邻字符串
+    拼接（`"甲" "乙"` —— **JS 没有隐式拼接**），500 多条测试全绿，直到真开浏览器才现形为
+    `ReferenceError: openDetail is not defined`。门禁：`test_inline_script_is_syntactically_valid_js`
+    抽出每段 `<script>` 交给 `node --check`。改完前端别只跑 pytest，至少开一次真浏览器
+    （`scripts/live_ui_check.py` 就是干这个的）。
+16. **编辑表单必须从单项目接口回填，不能用总览列表里那一份**：
+    `GET /api/projects` 只给卡片要用的字段，**不含** `background` / `handoff_note`，
+    而 `PUT /api/projects/{pid}` 是整体覆盖语义 —— 从列表回填就等于"一保存就清空这两段"
+    （实测：从总览点编辑、只改一下进度、保存，用户手写的三周背景没了，界面毫无痕迹）。
+    取不到详情时**宁可拒绝打开表单**也不要开一个"保存即吞内容"的表单。
+    静态钉子：`test_project_edit_form_is_filled_from_the_single_project_endpoint`。
+17. **界面上任何"结论性文案"的判据必须真的包含它所断言的东西**。详情页的
+    「看板说的 vs 代码里真发生的」以前只写 `days>=7 && dirty==0` 两个常数，
+    却打出"看板还在推进，代码却停了？"—— 判据里根本没有一项关于看板是否推进，
+    于是 progress 停在 0%、三个月没动的项目同样喊这句话。现在两边各自成立才下结论
+    （代码侧停滞 **且** 看板侧近 7 天真有动静；反向"代码刚提交、看板停在几周前"同样要说），
+    并且**没分歧也要说一句对得上**（空白会被读成"没在检查"）。
+    同类：异步才算完的结论区要先占位（"正在核对…"），否则中间那半秒是"两块卡片、没有结论"，
+    会被读成"没查出问题"。
+18. **`data-act` 带 `data-arg` 时，处理器必须真的收参数**：分发器是 `fn(el.dataset.arg, ev, el)`，
+    写成 `openReport: () => openReport()` 会把 `rid` 丢掉 —— 而 `openReport(rid)` 里
+    `rid` 是"回看某份历史报告"与"重新跑一次分析"的唯一开关，丢掉后**按钮看着有反应，
+    做的却是另一件事**，截图都看不出差别。门禁：
+    `test_actions_that_receive_data_arg_actually_forward_it`。
+19. **"列表给的 id"必须能被"详情按 id 取"取回来**：`GET /api/ai/reports` 以前回的是
+    **正文里的 `id` 字段**，而 `GET /api/ai/reports/{rid}` 是按**文件名** + `_REPORT_ID_RE`
+    取文件的 —— 两边口径一分叉，界面上"点一条历史报告"就必然 404（做前端历史入口时真撞到）。
+    现在列表用 `f.stem` 当 id，且**跳过文件名不合法规的条目**（宁可不列，也不列一个点不开的）。
+    门禁：`test_every_report_id_in_the_list_is_fetchable`。
+20. **同一张图/同一份渲染只允许有一份实现**：应用内的依赖图走
+    `GET /api/projects/{pid}/graph`，它复用接手页那份 `handoff_page.dep_graph_svg`
+    （只是多了 `theme` 两个填色参数）。**不在前端再画第二遍 SVG** —— 本项目反复出问题的
+    形状就是"两条路给不同答案"（两份 `_projects_brief`、MCP 重算一遍 `/next`）。
+    图 SVG 全程 `html.escape`，可以安全进 `innerHTML`（钉子：标题里放 `<img onerror>` 断言不原样出现）。
+    另外两个诚实性细节：没有依赖时接口回 `empty` + **原因**（别让调用方拿空串猜是坏了还是没依赖）；
+    层级超过 `MAX_COLS` 时回 `collapsed`，界面注明"末列内可能仍有先后"—— 图上看着像并行。
+21. **发版判据只有一条命令：`scripts/ci_local.py`**。它自己起隔离实例（临时数据目录 + 空闲端口），
+    跑 pytest + 五道脚本门禁 + 真浏览器 + 真 MCP，**每步取真实退出码、中途失败不短路**，
+    最后打印一张表。别在外面手敲六条命令然后说"全绿"——那份清单没人能复算。
+    两个已踩过的前提：
+    - **包装层的 env 要分两套**。被测步骤用干净 env，只有"要起服务/要连服务"的步骤才带
+      `KANBAN_PORT`。把运行开关漏进被测 env，会造出与代码无关的假红
+      （`KANBAN_NO_SCHEDULER` 打死调度器测试、`KANBAN_PORT` 打死断言默认端口 18320 的直链测试）。
+    - **预期内的 4xx 要转成正向断言，不要过滤掉**。详情页自动读 git，路径不存在时后端故意回 400；
+      门禁以前因此假红。现在单独收这一路并断言"面板说清了读不到的原因"——
+      既不放走真故障，也不逼产品代码为了门禁改契约。
+22. **依赖声明两份文件各管一件事，别混**：`requirements*.txt` 是**兼容下限**（`>=`，人写的意图），
+    `requirements.lock.txt` 是**实测闭包**（`scripts/make_lock.py` 生成，换机/CI/出包用它）。
+    只留 `>=` 的话，"我这边是绿的"在别人机器上可能是另一套版本 —— 而这是个卖点是"交接"的工具。
+    CI 工作流（`.github/workflows/ci.yml`）**按锁文件装、跑同一条 `ci_local.py --with-exe`**，
+    且只在 `windows-latest` 上跑：发的是 Windows 桌面 exe，拿 ubuntu 测的是永不交付的路径。
+23. **exe 的版本资源与 `/api/health` 必须是同一个事实**。`scripts/make_versionfile.py` 从
+    `app/version.py` 取版本号、从 `make_stamp.py` 写的构建戳取时间，填进 PE 的
+    `FileVersion`/`PrivateBuild`，于是右键属性能看到的数字和程序里报的一致。
+    这里刚出过一个反例：第一版直接用了 `version.BUILD_TIME`，而它在源码态算的是
+    "源码最后修改时间"（这本身是对的），结果同一次构建里构建戳 17:30、版本资源 15:40 ——
+    **版本资源要的是"这个 exe 几点打的"**。验证要读回二进制（PowerShell `VersionInfo`），
+    别只看生成脚本没报错；且读中文资源值时路径要纯 ASCII，否则 PowerShell 会
+    非终止地报错却仍返回 0，把"验过了"变成空字符串蒙混过去。
 
 ## MCP 服务（让代理直接读写看板）
 
@@ -196,6 +269,27 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
     只读模式只摘写工具，资源与提示词照旧可用。
   - **创建类工具收 `client_ref`**（数据层约定 13）：智能体超时重试是常态，没有幂等键
     就会造出成对重复任务，而重复项会跟着进交接包和拓扑序。
+    键**超长要哈希不能截断**：以前 HTTP 侧静默 `[:80]`，两条前 80 字符相同的不同请求
+    撞成同一个键、第二次直接拿回别人那条的 id（实测）。命中与否还要在回执里说明，
+    "id 和上次一样"不构成可辨识的信号（以前新建与重放的文案一字不差）。
+  - **集合字段给三件套**：`tags` / `refs` / `depends_on` 除整体覆盖外另有 `<字段>_add` /
+    `<字段>_remove`。只有整体覆盖时，代理加一条就得"读整份 → 拼好 → 写回"，而那次读在
+    临界区**外** —— 期间桌面端加的条目会被整体写回抹掉，正是约定 1 的丢更新形状
+    （Backlog.md 的 `task_edit` 动词族、GitHub labels 的 PUT/POST/DELETE 同一解法）。
+    展开成整体值必须发生在 `patch_*` 的锁内（`_expand_ops`，由 `_merge_into` 调用）；
+    整体值与增量同时给 = 语义冲突，报 400 而不是猜；用在对象没有的字段上也报 400。
+  - **`_budget_note` 说"偏长建议裁剪"，就必须真有一条裁剪的路**：`kanban_handoff` /
+    `kanban_export_all` 与对应 HTTP 端点收 `omit_sections`（`git`/`journal`/`memories`/
+    `refs`/`done`，见 `HANDOFF_SECTIONS`）。不认识的名字要报错，不能静默当"没给"；
+    裁掉什么要在正文**开头**留一行说明，否则接手方会把"没写"读成"没有"。
+    `omit` 含 `git` 时连 `_git_line_for_handoff` 的子进程一起跳过。
+  - **改了状态要说清"放行了谁"**：`kanban_update_task` 把前置改成已完成时，回执带
+    `已解锁 …[id]`（`patch_task(with_project=True)` 在锁内前后各算一次 `executable_tasks`）。
+    代理否则要再问一遍 `kanban_next_task` 才知道下一步做什么。
+  - **清洗丢了东西要在回执里说话**：`_clean_notes(args, stored)` 比对"调用方给的"与
+    "盘上落下的"。规则本身（日期只认 `YYYY-MM-DD`、refs/depends_on 去重限量）是对的，
+    问题出在以前丢得毫无声音 —— 代理传 `due_date="下周三"` 会收到"已新增任务"，
+    它以为设上了。只在 MCP 侧报：前端是日期控件，HTTP 侧没有可行动的对象。
 
 自测（不需要客户端）：
 
@@ -283,6 +377,38 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
      都有 `redact`（默认 true，显式传 false 才拿原文），`/api/context/{pid}?redact=1` 同口径。
      理由：代理拿到的文本必然进别的机器上的上下文窗口，而"要不要脱敏"不该由客户端记得问。
      **`_validate_args` 会强制 boolean 类型** —— 别把它放宽成"什么都能塞"。
+     2026-09-20 补齐：`kanban_get_project` / `kanban_today` / `kanban_search_tasks` /
+     `kanban_next_task` 以前**连这个开关都没有**（而 `kanban_get_project` 正是
+     `initialize` 指引让代理第一个调的），现在四条统一走 `_agent_text()` 出口脱敏；
+     `kanban_list_projects` 的 `next_action` 也补上了。新增代理读路径时默认走 `_agent_text`，
+     schema 里的 `redact` 用共享常量 `REDACT_SCHEMA`（同一句描述写五遍必然漂）。
+     钉子：`test_every_agent_read_path_masks_by_default`。
+   - **模型简报里的任务标题现在会盖**，前提是 `_projects_brief` 的每条任务都带 `id`、
+     且 `ai_command` 的提示词要求"按 `project_id` + `task_id` 回传、不要拿标题当匹配键"。
+     这三件事是一个整体：**去掉任务 id 就会退回到按标题匹配，标题立刻盖不得**，
+     于是"密钥写在任务标题里"这条最常见的写法又会从模型路径漏出去。
+     配套：`GET /api/tasks/{tid}`（只有任务 id 时反查所属项目）、前端 `findProjectOfTask`
+     走它。钉子：`test_projects_brief_gives_task_ids_and_masks_titles` 与
+     `test_ai_command_prompt_keys_on_ids_not_titles`。
+   - **任务标题在所有"外出"路径上都是盖的**：接手包（`project_context` 的 `slim` /
+     `start_here` / `waiting_for`）、交接物（整篇 Markdown 后置盖）、模型简报（`_projects_brief`）。
+     以前曾经只盖 desc/journal，于是"轮换 sk-xxx 这把"这种标题（最常见的那种写法）
+     带着密钥从默认脱敏的出口漏出去；掩码只替换凭据那一段，标题照样认得出来，
+     对齐靠 id 而不是靠标题。
+     历史教训（2026-09-19 到 2026-09-20 之间）：简报这一度是**唯一留原文**的一条，
+     原因是提示词写着"任务用现有任务标题匹配"、而简报里的任务没有 id。
+     现在两边都改掉了 —— 别再以"要对齐标题"为理由把标题恢复成原文。
+   - **"送进模型之前"这一侧也算输出边界，不止返回体**：`_generate_agents_md` 以前只对
+     返回的正文盖掩码，送给模型的 `user_msg`（背景/交接说明/下一步/任务标题/仓库路径）
+     整份原文 —— 而这条是把项目状态**被动**推给远端模型去写文档，不属于"用户点名润色
+     自己写的文本"那个豁免档。钉子：`test_agentsmd_masks_what_it_sends_to_the_model`
+     （断言的是**发出去的 payload**，不是返回值 —— 只看返回值会放过整类缺陷）。
+     同类还有 `_projects_brief` 的 `git.last_commit_subject`：同函数四处都过了脱敏，
+     独它没有，而 commit 正文同样是自由文本。
+   - **脱敏文档里的直链必须同口径**：`_build_handoff_markdown(redact=True)` 与接手页
+     `build_handoff_page(link_suffix="?redact=1")` 都要给那三条实时直链带上后缀，
+     否则"已脱敏的交接物"递给对方的同时递了三条取原文的路。MCP 的 `kanban_context`
+     早就这么做了（`link_suffix`），HTTP 侧是后补的 —— 又是两条路给不同答案。
 10. **`usage.jsonl` 的追加与裁剪共用一把跨进程锁**（`llm._usage_locked` → `app/filelock.py`）。
     桌面 exe 与 MCP 是两条进程写同一份账，只有线程锁时 `_trim_usage` 的
     「整读 → 重写 → os.replace」会把读走之后别人刚追加的行一起替换掉（实测吞行），
@@ -307,6 +433,24 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
     键指向的记录被删了就顺手作废该键（否则重试会拿一个 404 的 id 当真）。
     导出/导入**不带**这张表：它是本进程的"刚才那次重试"窗口，跨机复活只会吞掉新创建。
     同一个键配不同正文按"重试"处理（与 Stripe 同口径）：返回第一次的结果，不覆盖。
+14. **机器可读出口要声明结构版本**：`SCHEMA_VERSION` 出现在 `/api/context/{pid}` 与
+    `/api/data/export` 的顶层，与发布号 `APP_VERSION` 是两件事（"字段形状是哪一版" vs
+    "看板第几版"）。导入时若文件声明的版本比本机高**只说话不拒绝**（`schema_note`）——
+    字段是超集，硬挡等于把用户关在门外，但事后发现字段被规范化掉更糟。
+    接手包顶层与 `project` / `tasks` 的字段集合由
+    `test_context_package_field_set_is_pinned` 钉住：加字段要有意为之。
+15. **同一条清单不许前后端各写一份**：导出扩展名白名单是 `EXPORT_SUFFIXES`（后端），
+    前端 `saveAgentsMD` 那条正则必须与它一字不差 —— 以前前端少一条 `.markdown`，
+    后端明明允许却被前端挡在门外，而提示文案同时漏了 `.agentsmd`。
+    对账钉子：`test_save_extension_whitelist_matches_the_backend`。
+16. **"模型建议 + 人点一下"这条通道的闸门**（`/api/ai/apply-suggestions`）：
+    白名单 `SUGGESTION_FIELDS` 比 `AI_EDITABLE_PROJECT_FIELDS` 窄是**有意**的（只放自由文本
+    与状态/优先级，改 name/tags/progress 要走用户自己打出的 `ai_command`）；
+    值有 `MAX_SUGGESTION_VALUE` 上限（整份 JSON 每次请求都整读整写，模型抽风吐 40 万字符
+    就会永久长在数据里 —— 实测改前能落 40 万字）；带 `MASK_MARK` 的值拒绝落地；
+    回执是**逐条**的 `results[{index,ok,reason}]`（只给 `applied=6` 的话，那 2 条没落地的
+    没人知道是哪两条、为什么），`?dry_run=1` 一个字都不写。
+    `applied` / `skipped_masked` 两个老键保留，前端照旧读、额外优先显示 `results[0].reason`。
 
 ## 多智能体入口文件（别退化成 N 份副本）
 

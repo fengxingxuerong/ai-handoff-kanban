@@ -1,0 +1,50 @@
+# 与本地**同一个入口**：`scripts/ci_local.py`。
+# 刻意不复刻一份步骤清单 —— 两处各写一遍必然漂，而这个项目已经为"两条路给不同答案"付过几次代价。
+#
+# ⚠️ 这份文件**从未真正执行过一次**（仓库目前没有远端）。第一次接上 GitHub 时预期可能要
+# 微调的地方，按可能性排序：
+#   1. Playwright 在 Windows runner 上找 Edge/Chrome：runner 镜像里两个都装了，
+#      但 `live_ui_check.py` 起不来时会退到 `playwright install chromium` 那份 —— 所以有这步安装。
+#   2. `requirements.lock.txt` 是在本机 Python 3.13 上生成的，这里钉同一个版本。
+#   3. PyInstaller 打包约 2–4 分钟，整条流水线预计 8–15 分钟。
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    # 只在 Windows 上跑：这个产品就是发 Windows 桌面 exe，锁文件也在 Windows 上生成，
+    # 拿 ubuntu 跑等于测一条永远不会交付的路径。
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: 按锁文件安装（可复现，不靠 >= 现场解析）
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock.txt
+
+      - name: 装 Playwright 自带 chromium（界面门禁的第三级降级）
+        run: python -m playwright install chromium
+
+      - name: 全部门禁 + 重新打包 + 冻结版冒烟
+        run: python scripts/ci_local.py --with-exe
+
+      - name: 上传 exe（每次 main 构建都留一份可核对的版本与构建时间）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-kanban-exe
+          path: dist/AI交接看板.exe
+          if-no-files-found: warn
