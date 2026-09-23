@@ -283,3 +283,45 @@ def test_ai_command_prompt_keys_on_ids_not_titles():
     src = inspect.getsource(kanban.ai_command)
     assert "task_id" in src and "不要拿标题当匹配键" in src
     assert "任务用项目下现有任务标题匹配" not in src, "又退回按标题匹配了 —— 标题脱敏会立刻失效"
+
+
+def test_git_snapshot_probes_a_repo_once_per_ttl_not_once_per_limit(tmp_path, monkeypatch):
+    """缓存键以前带 `limit`：同一次刷新里三个出口分别要 1 / 3 / 5 条提交，
+    于是同一个仓库被完整扫 3 遍。Windows 上 `git` 子进程一次约 30ms、一趟 5 个子进程
+    —— 实测一个仓库一次完整探测 **168ms**，所以"每档 limit 各扫一遍"是实打实的三倍。
+
+    现在按仓库缓存、按调用方切片。这条判据数的是**真跑了几个 git 子进程**，
+    不是"看起来快了"。
+    """
+    import app.main as kanban
+
+    repo = tmp_path / "r"
+    repo.mkdir()
+    calls: list[list[str]] = []
+    real = kanban._run_git
+
+    def counting(args, cwd, timeout=kanban.GIT_TIMEOUT):
+        calls.append(list(args))
+        return real(args, cwd, timeout)
+
+    monkeypatch.setattr(kanban, "_run_git", counting)
+    monkeypatch.setattr(kanban, "_git_cache", {})
+    kanban.subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    for i in range(6):        # 比测试里问到的最大 limit(5) 还多，否则"给不满"是正常行为不是缺陷
+        (repo / f"f{i}.txt").write_text(str(i), encoding="utf-8")
+        kanban.subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+        kanban.subprocess.run(["git", "-c", "user.email=a@b", "-c", "user.name=b",
+                               "commit", "-q", "-m", f"c{i}"], cwd=repo, check=True)
+
+    for want in (1, 3, 5):
+        snap = kanban.git_snapshot(str(repo), limit=want)
+        assert snap["ok"] and len(snap["commits"]) == want, (want, len(snap["commits"]))
+    # 三档 limit 合计只该扫一遍仓库（缓存命中不再起子进程）
+    assert len(calls) <= 6, f"同一个仓库被扫了 {len(calls) // 5} 遍（{len(calls)} 次子进程）"
+    # 切片不能互相污染：拿过 limit=1 之后再要 5 条，必须真给 5 条
+    assert len(kanban.git_snapshot(str(repo), limit=5)["commits"]) == 5
+    # 而且调用方改返回体不该把缓存里那份一起改了
+    a = kanban.git_snapshot(str(repo), limit=2)
+    a["commits"].append({"hash": "脏", "date": "", "subject": "写进缓存"})
+    assert all(c.get("hash") != "脏" for c in kanban.git_snapshot(str(repo), limit=3)["commits"]), \
+        "返回的是缓存里那份列表本身"

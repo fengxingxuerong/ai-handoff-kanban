@@ -2897,6 +2897,12 @@ def _extract_json(text: str) -> dict | list:
 GIT_TIMEOUT = 6
 _git_cache: dict[str, tuple[float, dict]] = {}
 _GIT_CACHE_TTL = 60.0
+_GIT_LOG_WINDOW = 50          # 缓存里存这么宽的一份（与 `/api/.../git` 自己声明的上限同数）
+
+
+def _git_sliced(snap: dict, limit: int) -> dict:
+    """按调用方要的条数切一份返回。切出来的是新列表，缓存里那份动不到。"""
+    return {**snap, "commits": snap["commits"][:max(1, min(limit, _GIT_LOG_WINDOW))]}
 
 
 def _run_git(args: list[str], cwd: Path, timeout: int = GIT_TIMEOUT) -> tuple[int, str]:
@@ -2929,11 +2935,16 @@ def git_snapshot(repo_path: str, limit: int = 10, use_cache: bool = True) -> dic
     if not repo.is_dir():
         return {"ok": False, "error": f"代码路径不是目录：{raw}"}
 
-    cache_key = f"{repo}|{limit}"
+    # 缓存键里**不带 limit**：以前是 `f"{repo}|{limit}"`，而同一次刷新里三个出口分别要
+    # limit=1 / 3 / 5（`_projects_brief`、`project_context`、交接页），于是同一个仓库
+    # 在 60 秒 TTL 内被完整扫 3 遍 × 每次 5 个 git 子进程。改成"每次取满一窗、按人切片"：
+    # 窗口取 `/api/.../git` 自己声明的上限 50，所以任何调用方都不会拿到比它要的更少。
+    # 返回的是浅拷贝 + 切过的新列表 —— 不让调用方摸到缓存里那份。
+    cache_key = str(repo)
     if use_cache:
         hit = _git_cache.get(cache_key)
         if hit and time.time() - hit[0] < _GIT_CACHE_TTL:
-            return hit[1]
+            return _git_sliced(hit[1], limit)
 
     code, out = _run_git(["rev-parse", "--is-inside-work-tree"], repo)
     if code != 0 or out != "true":
@@ -2943,7 +2954,7 @@ def git_snapshot(repo_path: str, limit: int = 10, use_cache: bool = True) -> dic
     head_code, head_line = _run_git(
         ["log", "-1", "--date=format:%Y-%m-%d %H:%M", "--pretty=%h%x1f%ad%x1f%an%x1f%s"], repo)
     commits_code, log_out = _run_git(
-        ["log", f"-{max(1, min(limit, 50))}", "--date=format:%Y-%m-%d %H:%M",
+        ["log", f"-{_GIT_LOG_WINDOW}", "--date=format:%Y-%m-%d %H:%M",
          "--pretty=%h%x1f%ad%x1f%s"], repo)
     dirty_code, porcelain = _run_git(["status", "--porcelain"], repo)
 
@@ -2986,7 +2997,7 @@ def git_snapshot(repo_path: str, limit: int = 10, use_cache: bool = True) -> dic
     }
     if use_cache:
         _git_cache[cache_key] = (time.time(), snapshot)
-    return snapshot
+    return _git_sliced(snapshot, limit)
 
 
 @app.get("/api/projects/{pid}/next")

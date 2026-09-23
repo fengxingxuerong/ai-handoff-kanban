@@ -531,6 +531,18 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 性能基线（2026-09-19 复测，本机，`scripts/bench.py` 中位数 / 20 轮）
 
+> **2026-09-24 口径更正，读上面这张表之前先看这条**：表里所有数字都是在
+> `repo_path="D:\work\demo-{i}"` 下测的，而那种路径**不存在** —— `git_snapshot` 在
+> `repo.exists()` 就返回了。也就是说**这张表里 git 探测成本恒等于 0**，
+> 而"列表接口 >300ms 才考虑换存储层"这条判断线一直是它在撑。
+> `bench.py` 现在默认造真仓库（`--repos N`，各 3 条提交 + 1 个脏文件）并同时报
+> 「冷」（每轮清缓存 = TTL 全过期，生产上的上界）与「热」两份，git 不可用时**明说**而不是悄悄退回旧测法。
+> 实测一个仓库一次完整探测 = **168ms**（Windows 起 5 个 git 子进程），
+> 所以 200 项目 / 6 个真仓库下 `GET /api/export-all` 冷测 ≈1.2s、不带仓库时 13ms。
+> 同一轮把 `git_snapshot` 的缓存键从 `{repo}|{limit}` 改成只按 `{repo}`
+> （以前同一次刷新里三个出口要 limit=1/3/5 ⇒ 同一仓库被扫 3 遍 = 15 个子进程；
+> 判据数的是**真跑了几个子进程**，A/B 改回旧键立刻红）。
+
 数据层是「整份 JSON 读改写」，延迟随项目数线性增长。`scripts/bench.py` 可复现：
 
 | 数据集 | GET /api/projects | GET /api/stats | GET /api/projects/{pid} | GET /api/export-all | POST 新建任务 |
