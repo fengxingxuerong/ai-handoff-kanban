@@ -91,6 +91,32 @@ def default_config() -> dict:
     }
 
 
+def real_config_path() -> Path:
+    """真实数据目录里那份 config.json 的位置（`KANBAN_REAL_DATA_DIR` 可覆盖）。
+
+    活体测试与发版回归都需要"拿得到 Key，但一个字节都别写进用户的真板子"，
+    所以这个路径的解析口径必须只有一份 —— 两边各写一遍迟早漂成两种行为。
+    """
+    env = os.environ.get("KANBAN_REAL_DATA_DIR")
+    home = Path(env) if env else Path(os.environ.get("USERPROFILE") or str(Path.home())) / ".ai-kanban"
+    return home / "config.json"
+
+
+def usable_endpoints(config_path: Path | None = None) -> list[dict]:
+    """从某份 config 里取出**配了 Key** 的端点（原样返回，含 Key）。
+
+    调用方拿到后是通过 `PUT /api/ai/config` 灌进一个隔离实例的 —— Key 因此只存在于
+    那个临时目录里。读不到文件、没有端点都返回空列表：这是"跑不了就明说"，不是失败。
+    """
+    f = config_path or real_config_path()
+    try:
+        raw = json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    eps = (raw.get("ai") or {}).get("endpoints") or []
+    return [ep for ep in eps if isinstance(ep, dict) and ep.get("api_keys")]
+
+
 def load_config() -> dict:
     with _CFG_LOCK:
         f = config_file()

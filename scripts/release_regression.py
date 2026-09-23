@@ -26,6 +26,10 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# 借 app.llm 里那两个"取真实 config / 筛带 Key 的端点"的函数：活体测试与发版回归
+# 要做的是同一件事，读法写两遍迟早漂成两种行为（同 scripts/mcp_server.py 的引法）
+sys.path.insert(0, str(ROOT))
+from app import llm                                    # noqa: E402
 PORT = 18399
 BASE = f"http://127.0.0.1:{PORT}"
 NO_AI = "--no-ai" in sys.argv
@@ -134,21 +138,14 @@ def make_fake_session() -> tuple[Path, Path]:
 def sync_keys_to_instance() -> bool:
     """把真实 config 里的端点与 Key 同步给回归实例（仅写入临时数据目录，不落地项目）。
     真实 config 路径：--real-data 参数 > KANBAN_REAL_DATA_DIR 环境变量 > USERPROFILE/.ai-kanban"""
-    real_data = None
+    real_cfg = None
     if "--real-data" in sys.argv:
-        real_data = Path(sys.argv[sys.argv.index("--real-data") + 1])
-    elif os.environ.get("KANBAN_REAL_DATA_DIR"):
-        real_data = Path(os.environ["KANBAN_REAL_DATA_DIR"])
-    else:
-        home = Path(os.environ.get("USERPROFILE") or str(Path.home()))
-        real_data = home / ".ai-kanban"
-    real_cfg = real_data / "config.json"
-    if not real_cfg.exists():
-        print(f"  （提示：未找到真实配置 {real_cfg}，AI 步骤将无 Key 可用）")
-        return False
-    real = json.loads(real_cfg.read_text(encoding="utf-8"))
-    eps = [ep for ep in real.get("ai", {}).get("endpoints", []) if ep.get("api_keys")]
+        real_cfg = Path(sys.argv[sys.argv.index("--real-data") + 1]) / "config.json"
+    if real_cfg is None:
+        real_cfg = llm.real_config_path()
+    eps = llm.usable_endpoints(real_cfg)
     if not eps:
+        print(f"  （提示：未找到可用的端点与 Key（{real_cfg}），AI 步骤将无 Key 可用）")
         return False
     s, _ = req("PUT", "/api/ai/config", {"endpoints": eps})
     return s == 200

@@ -655,6 +655,19 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
     - 运算符优先级也是断言：`A and B or C` 那条形同只断言了 C（交接包整块丢任务清单照绿）。
     - 每条新判据都要做一次 **A/B**：把修法改回缺陷原样，看它是否真的变红，
       并把失败现场留在断言消息里（只报"哪个工具漏了"看不出漏在哪个字段）。
+16. **活体用例（`KANBAN_LIVE=1`）也必须隔离数据目录**：`tests/test_ai.py` 的 `live_server`
+    以前写的是 `env.pop("KANBAN_DATA_DIR")  # 用真实配置目录，才有 Key` —— 那句话直接
+    违反本条第 8 点，而违反一条约定最省事的后果就是**大家都不跑它**（这 6 条从写下起
+    一次都没执行过）。现在的做法：临时数据目录 + 把真实 Key 经 `PUT /api/ai/config`
+    灌进这台临时实例（`llm.usable_endpoints()` 与发版回归共用那份读取逻辑），
+    项目由夹具自己造，起服务后第一件事还是读 `/api/health` 的 `data_file` 自证。
+    跑法与成本：`KANBAN_LIVE=1 .venv\Scripts\python.exe -m pytest tests/test_ai.py`
+    ≈ **4-5 次真调用 / 半分钟**；2026-09-23 首跑 5 条全过，且跑前跑后对
+    `~/.ai-kanban` 里 `projects.json`/`usage.jsonl`/`config.json`/`reports/` 数一份哈希 ——
+    **一个字节都没变**，这句话要能复算，不能只是注释里写着。
+    同轮删掉一条恒真用例：`test_agents_md_has_local_fallback` 断言的是
+    `source in ("ai", "local")`（两个可能值全列上 = 永不会红），而本地兜底在
+    `test_ai_endpoints.py:137/222`、`test_agent_files.py:159` 已用假端点真断言过三次。
 15. **起实例后必须问它自己读的是哪份数据**：`ci_local` 现在在探活成功后读
     `/api/health` 的 `data_file`，与本次的临时目录不符就立刻停 —— 端口通了不等于起对了
     （Windows 上 `SO_REUSEADDR` 允许两个进程都"绑定成功"）。`delivery_drill` 早就这么做，
@@ -726,8 +739,8 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-23 收口）**：`pytest` 560 收集（554 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-26 个测试文件、529 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+**验证基线（2026-09-23 收口）**：`pytest` 559 收集（554 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
+26 个测试文件、528 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
 覆盖率 **93%** 且已经是**分支覆盖**（语句 2455 / 缺 139~144 / 分支 868 / 半覆盖 86~89 ——
 未覆盖数在 ±4 之间漂，是 `-n auto` 下时序类用例走了不同分支造成的，**别把它抄成一个精确值**；
 门槛 90，只统计 `app/`，`scripts/` 不进覆盖率 —— 原因见「测试约定 4」）。
@@ -739,6 +752,8 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 `release_regression --no-ai` 16 通过 + **2 项明确标"未验"**（`--no-ai` 下 AI 链路本就没跑，
 不许再算进"全部可用"）、`delivery_drill` 21/0、`live_check --mcp` 12/0、
 `frozen_smoke` 10/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 56 秒。
+> `release_regression` **去掉 `--no-ai` 实跑过一次：23 通过 / 0 失败**（2026-09-23，多花约 1 次真调用）
+> —— 那句"新功能链路全部可用"第一次是跑出来的，不是印出来的。
 `ci_local --with-exe` 全十步（含重打包与冻结版自查）实测约 90 秒；改过 `web/index.html` 之后
 必须走这一档，否则「产物内嵌的前端就是仓库这一份」那条会如实拦住你。
 ⚠️ 全量跑常常**打完覆盖率表就没有 summary 行**（见「测试约定 10」），判绿只认退出码。
