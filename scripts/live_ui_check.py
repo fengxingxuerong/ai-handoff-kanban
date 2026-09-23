@@ -152,10 +152,20 @@ def main() -> int:
         if names:
             cards.first.click()
             page.wait_for_selector("#view-detail.active", timeout=10000)
-            # 以前这句是 check(..., True)：进去的若是另一个项目，它照样绿
-            check("点卡片进的是刚点的那个项目的详情页",
-                  names[0] in page.locator("#view-detail").inner_text(),
-                  f"期望 {names[0]}")
+            # 以前这句是 check(..., True)：进去的若是另一个项目，它照样绿。
+            # 也不能"看到 active 就读一次文本"—— 详情内容是点完之后异步取的，
+            # 满载时那一瞬还挂着上一屏，会假红（2026-09-23 在 ci_local 里连撞两次）。
+            # 等到它真的换成我点的那个项目再断言：等不到就是 FAIL，那才是要抓的东西。
+            try:
+                page.wait_for_function(
+                    "(n) => (document.getElementById('view-detail')?.innerText || '').includes(n)",
+                    arg=names[0], timeout=15000)
+                landed = True
+            except Exception:                                      # noqa: BLE001
+                landed = False
+            check("点卡片进的是刚点的那个项目的详情页", landed,
+                  f"期望「{names[0]}」，等 15 秒后里面是："
+                  + page.locator("#view-detail").inner_text().replace("\n", " ")[:80])
             cols = [".kcol.k-todo", ".kcol.k-doing", ".kcol.k-done", ".kcol.k-blocked"]
             check("看板四列都在", all(page.locator(c).count() == 1 for c in cols))
             check("详情页有内容（不是空壳）",
