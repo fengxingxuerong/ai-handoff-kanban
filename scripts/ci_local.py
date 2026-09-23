@@ -64,10 +64,13 @@ def run(argv: list[str], env: dict, timeout: int = 900) -> tuple:
     except subprocess.TimeoutExpired:
         out, code = f"超时（>{timeout}s）", -1
     dt = time.time() - t0
-    # 取最后两行而不是最后一行：门禁的「N 通过 / M 失败 / K 未验」和「结论：…」
-    # 常常是两行，只截一行会把后半句丢掉 —— 那正是"18 通过"被当成"全部可用"的路径。
-    tail = [ln.strip() for ln in out.splitlines() if ln.strip()][-2:]
-    return code == 0, dt, (" ⏎ ".join(tail)[:170] if tail else f"exit={code}")
+    # 摘要要带现场，不能只留最后两行：门禁报"15 通过 / 1 失败"而不说失败的是哪一条，
+    # 等于把一次红变成还要再跑一遍才能开始查（2026-09-23 的 live_ui_check 就是这样）。
+    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    tail = [ln for ln in lines if "[FAIL]" in ln or "✗" in ln][:3]
+    note = " ⏎ ".join(tail + lines[-1:])[:300] if tail else \
+        (" ⏎ ".join(lines[-2:])[:170] if lines else f"exit={code}")
+    return code == 0, dt, note
 
 
 SEED = {

@@ -110,11 +110,22 @@ def main() -> int:
         page.goto(BASE + "/", wait_until="domcontentloaded")
         page.wait_for_selector("[data-act='openProjectModal']", timeout=20000)
         # 「不是白页」要量的是屏幕上真有东西，以前是 `check(..., True)` —— 恒绿
+        # 仪表盘是异步填的（打开页面后还要等 /api/stats 回来）。直接取一次文本会在
+        # 机器满载时拿到空壳 —— 2026-09-23 在 ci_local --with-exe 里就这样假红过一次
+        # （单独复跑 16/0，夹在全套门禁后面就 15/1）。先等它写完，再断言写对没有。
+        try:
+            page.wait_for_function(
+                "() => (document.getElementById('dash')?.innerText || '').trim().length > 10",
+                timeout=15000)
+            settled = True
+        except Exception:                                      # noqa: BLE001
+            settled = False        # 超时算一次干净的 FAIL 并留现场，别抛出去打断整条门禁
         shown = page.locator("body").inner_text().strip()
         dash = page.locator("#dash").inner_text().strip()
         check("页面加载完成（仪表盘真渲染出内容，不是白页）",
-              len(dash) > 10 and len(shown) > 200,
-              f"{int((time.time() - t0) * 1000)}ms / 仪表盘 {len(dash)} 字 / 整页 {len(shown)} 字")
+              settled and len(shown) > 200,
+              f"等仪表盘写入超时 / {int((time.time() - t0) * 1000)}ms"
+              f" / 仪表盘 {len(dash)} 字 / 整页 {len(shown)} 字")
 
         page.wait_for_selector(".pcard", timeout=20000) if names else None
         cards = page.locator(".pcard")

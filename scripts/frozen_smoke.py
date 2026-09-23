@@ -13,8 +13,11 @@
 """
 from __future__ import annotations
 
+import hashlib
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -82,10 +85,35 @@ def main() -> int:
         if health is None:
             return report(data_dir)
 
+        # 1b. 版本戳这条链必须真的一致：exe 自报的版本与构建时间要和仓库里那两份对得上。
+        # 以前这八项里没有一条看 build_time，"exe 是哪次构建的"只能靠人比 mtime ——
+        # 2026-09-20 就漂过一次（版本资源写的是源码 mtime，戳却是另一个时间点）。
+        def _read(p: Path) -> str:
+            try:
+                return p.read_text(encoding="utf-8")
+            except Exception:                                      # noqa: BLE001
+                return ""
+        stamp = re.search(r'STAMP = "([^"]*)"', _read(ROOT / "app" / "_build_stamp.py"))
+        ver = re.search(r'^__version__ = "([^"]*)"', _read(ROOT / "app" / "version.py"), re.M)
+        check("exe 自报版本与构建戳同源",
+              bool(stamp) and bool(ver)
+              and health.get("build_time") == stamp.group(1)
+              and health.get("version") == ver.group(1),
+              f"exe={health.get('version')}/{health.get('build_time')} "
+              f"仓库={ver and ver.group(1)}/{stamp and stamp.group(1)}")
+
         # 2. 首页与前端资源
         with opener.open(BASE + "/", timeout=8) as r:
             html = r.read().decode("utf-8", "replace")
         check("首页可访问且含看板标记", "AI 交接看板" in html)
+        # 产物里嵌的前端必须就是仓库里这一份：改完前端不重打包，测试全绿而用户看到的
+        # 还是旧界面 —— 这条比对是"重打 exe"这件事本身的门禁（不一致就得重新打包）。
+        src_html = ROOT / "web" / "index.html"
+        want = hashlib.sha256(src_html.read_bytes()).hexdigest() if src_html.exists() else ""
+        got = hashlib.sha256(html.encode("utf-8")).hexdigest()
+        check("exe 内嵌的前端就是仓库里这一份（不一致说明该重打包）",
+              bool(want) and got == want,
+              f"sha256 产物={got[:12]} 仓库={want[:12]}")
         check("内嵌前端为事件委托版本", "const ACTIONS = {" in html and 'data-act="' in html)
         check("内嵌前端无内联事件", "onclick=" not in html and "onkeydown=" not in html)
 
