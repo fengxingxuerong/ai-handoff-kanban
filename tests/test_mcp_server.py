@@ -126,46 +126,55 @@ def _registered_tools(server_src: str) -> set[str]:
 
 
 def test_no_agent_reply_can_carry_a_key_stored_in_the_board(mcp):
-    """把密钥写进板子的各个字段，然后**逐个工具**考一遍。
+    """把密钥写进板子的**存量字段**，然后逐个工具考一遍默认回执。
 
     AGENTS 约定 9 说"代理侧默认就是脱敏的"，而这条历史上一直接不住：读路径补完，
-    写回执漏了（`kanban_update_task` 的「已解锁 <标题>」、`kanban_log_progress` 的
-    <标题>）；`kanban_stats` 更是连 `redact` 参数都没有。逐条点名是补不完的，
-    所以这里覆盖的是"注册并广播的每一个工具"——新增一条没进这张表就直接红。
+    写回执漏了（`kanban_update_task` 的「已解锁 <别的任务标题>」、`kanban_log_progress`
+    的 <任务标题>）—— 标题里写"轮换 sk-xxx 这把"是最常见写法。逐条点名补不完，
+    所以覆盖的是"注册并广播的每一个工具"，新增一条没进这张表就直接红。
 
-    判据是"回执里没有原文"，不是"回执里有掩码"：后者会因为内容本来就不该出现
-    掩码而假绿。掩码只替换凭据那一段，所以 id / 状态 / 中文说明都不受影响。
+    两个刻意的讲究：
+    - 密钥只放在**调用方这次没有提供**的位置（项目名、任务标题、背景…）。往入参里
+      塞密钥再断言"回执没有原文"是错的判据 —— 把对方刚发给我的内容回读给我，
+      不构成外流（这一版一开始就踩了，A/B 时才发现三条"泄漏"全是回显输入）。
+    - 判据是"回执里没有原文"，不是"回执里有掩码"：后者会因为内容本来不该出现
+      掩码而假绿。掩码只替换凭据那一段，id / 状态 / 中文说明都不受影响。
     """
     secret = "sk-" + "AUDIT" + "0123456789abcdef"     # 拼起来写：不在仓库里留下完整形态
+    # 存量带密钥的项目名：`kanban_stats` 的低就绪度清单、`list_projects`、
+    # `find_project`、`delete_project` 的拒绝正文都会把它拼进回执
+    named = last_id(mcp.tool("kanban_create_project", {
+        "name": f"轮换 {secret} 的那件事"})[0])
     pid = last_id(mcp.tool("kanban_create_project", {
         "name": "审计用项目", "background": f"背景里写一把 {secret}",
         "handoff_note": f"交接说明里也写 {secret}"})[0])
     mcp.tool("kanban_update_project", {"project_id": pid, "next_action": f"下一步 {secret}"})
     tid = last_id(mcp.tool("kanban_add_task", {
-        "project_id": pid, "title": f"轮换 {secret}", "desc": f"描述 {secret}"})[0])
+        "project_id": pid, "title": f"收尾 {secret}", "desc": f"描述 {secret}"})[0])
     blocker = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "前置"})[0])
     mcp.tool("kanban_update_task", {"task_id": tid, "depends_on": [blocker]})
-    mcp.tool("kanban_log_progress", {"task_id": tid, "text": f"过程记录 {secret}"})
+    mcp.tool("kanban_log_progress", {"task_id": tid, "text": "过程记录一条"})
     mid = last_id(mcp.tool("kanban_memory_add", {"project_id": pid, "text": f"决策 {secret}"})[0])
+    # 这一步的回执会点名"刚被放行的是哪条任务" —— 那条任务的标题里就带着密钥
     mcp.tool("kanban_update_task", {"task_id": blocker, "status": "已完成"})
 
     calls: dict[str, dict] = {
         "kanban_list_projects": {}, "kanban_get_project": {"project_id": pid},
-        "kanban_find_project": {"query": "审计"}, "kanban_stats": {},
+        "kanban_find_project": {"query": "轮换"}, "kanban_stats": {},
         "kanban_handoff": {"project_id": pid}, "kanban_context": {"project_id": pid},
         "kanban_agents_md": {"project_id": pid},
-        "kanban_today": {}, "kanban_search_tasks": {"query": "轮换"},
+        "kanban_today": {}, "kanban_search_tasks": {"query": "收尾"},
         "kanban_next_task": {"project_id": pid}, "kanban_list_memories": {"project_id": pid},
         "kanban_export_all": {}, "kanban_list_backups": {},
-        "kanban_create_project": {"name": f"新建时带上 {secret}"},
-        "kanban_add_task": {"project_id": pid, "title": f"再加一条 {secret}"},
-        "kanban_update_project": {"project_id": pid, "priority": "高"},
+        "kanban_create_project": {"name": "回执只报新键名的工具"},
+        "kanban_add_task": {"project_id": pid, "title": "一条干净的新任务"},
+        "kanban_update_project": {"project_id": named, "priority": "高"},
         "kanban_update_task": {"task_id": tid, "status": "进行中"},
         "kanban_log_progress": {"task_id": tid, "text": "又记一笔"},
-        "kanban_memory_add": {"project_id": pid, "text": f"再记一条 {secret}"},
-        "kanban_backup": {}, "kanban_delete_memory": {"memory_id": mid},
-        "kanban_delete_task": {"task_id": tid},
-        "kanban_delete_project": {"project_id": pid, "confirm": True},
+        "kanban_memory_add": {"project_id": pid, "text": "一条新的决策"},
+        "kanban_backup": {},
+        "kanban_delete_memory": {"memory_id": mid}, "kanban_delete_task": {"task_id": tid},
+        "kanban_delete_project": {"project_id": named, "confirm": True},
     }
     registered = _registered_tools(SERVER.read_text(encoding="utf-8"))
     # 漏考 = 红，而不是静默少测一个
@@ -179,7 +188,7 @@ def test_no_agent_reply_can_carry_a_key_stored_in_the_board(mcp):
         if secret in text:
             # 断言消息里带上现场：只报"哪个工具漏了"看不出漏在哪个字段，等于还得再跑一遍
             leaked.append(f"{name} → {text.replace(secret, '‹密钥›')[:100]}")
-    assert not leaked, "这些工具的默认回执里出现了密钥原文：\n  " + "\n  ".join(leaked)
+    assert not leaked, "这些工具的默认回执里出现了存量密钥原文：\n  " + "\n  ".join(leaked)
 
 
 def test_every_registered_tool_is_advertised_and_actually_called(mcp):
