@@ -22,10 +22,10 @@
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
 | `scripts/live_check.py` | 对着**已在跑**的实例打接口做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
 | `scripts/live_ui_check.py` | 对着**已在跑**的实例开真浏览器做只读校验（Playwright + 系统 Edge/Chrome）：证明界面真的渲染出来了，不是白屏。全程只点导航类操作，不写一个字节 |
-| `scripts/scenario_test.py` | 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据，可导出报告） |
-| `scripts/delivery_drill.py` | 交付演练：模拟换智能体接手，端到端 19 项（接手→执行→交接物→脱敏→迁移）。**不传参数时自起隔离实例**；传 base_url 则先读该实例 `/api/health` 的 `data_file` 自证不是真实数据目录，否则拒绝运行（演练会用 `/api/data/import` 整份覆盖） |
+| `scripts/scenario_test.py` | 真实场景测试 32 例（真服务 + 真 MCP + 真实业务数据，可导出报告） |
+| `scripts/delivery_drill.py` | 交付演练：模拟换智能体接手，端到端 21 项（接手→执行→交接物→脱敏→迁移）。**不传参数时自起隔离实例**；传 base_url 则先读该实例 `/api/health` 的 `data_file` 自证不是真实数据目录，否则拒绝运行（演练会用 `/api/data/import` 整份覆盖） |
 | `scripts/real_ai_test.py` | 真实模型 AI 功能测试：5 大功能 × 6 模型通道（消耗真实配额） |
-| `scripts/release_regression.py` | 发版回归：自起独立实例（不碰真实数据），v1.1 新功能全链路 18 项（`--no-ai`；带真实 AI 步骤为 23 项）；真实 Key 从 `KANBAN_REAL_DATA_DIR` 指向的配置读取 |
+| `scripts/release_regression.py` | 发版回归：自起独立实例（不碰真实数据），v1.1 新功能全链路（`--no-ai` 下 16 项真断言 + 2 项标「未验」；不带 `--no-ai` 才会跑 AI 链路）；真实 Key 从 `KANBAN_REAL_DATA_DIR` 指向的配置读取 |
 | `scripts/test_all_llm.py` | LLM 端点全量实测：端点×Key×模型 健康矩阵 |
 | `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑） |
@@ -257,6 +257,16 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
     包括 `boolean` —— 声明与实现不一致时，模型以为"要 150 条"而实际拿 50 条，
     它会当成"只有这么多"。
   - 写工具的"部分更新"不许在锁外读快照（见数据层约定 11，走 `kanban.patch_*`）。
+  - **代理侧的脱敏收口在 `tools/call` 的分发处（`_tool_content`），不在各个 handler 里**。
+    约定 9 说"代理侧默认脱敏"，而"23 个 handler 各自自觉"= 新增一条就漏一条：
+    实测摘掉这一层，`kanban_list_projects` / `find_project` / `stats` / `update_project` /
+    `delete_project` 立刻把带密钥的**项目名**原样回给代理（项目名那一路以前从来没盖过 ——
+    补标题、补 next_action 时谁也没想到它）。报错正文同样过出口。
+    handler 里原有的 `_agent_text` 保留：掩码对同一串重复施加是幂等的。
+    钉子：`test_no_agent_reply_can_carry_a_key_stored_in_the_board` 把密钥写进**存量**位置
+    （调用方这次没提供的那些字段），23 个工具逐个走真 `tools/call`；
+    表里漏考任何一个工具也直接红（这条当场抓出我少考了 `kanban_agents_md`）。
+    判据必须是"回执里没有原文"，不是"有掩码" —— 后者会因为内容本不该出现掩码而假绿。
   - **"现在能做什么"只有一份判定**：`kanban_next_task` 直接调 `next_tasks()`（也就是
     `GET /api/projects/{pid}/next`）。以前它自己 `_find()` 读一份 + `executable_tasks` +
     手搭 blocked —— 一次调用两次整份读盘，而且是第二套实现，改一边就会让代理看到的
@@ -451,6 +461,31 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
     回执是**逐条**的 `results[{index,ok,reason}]`（只给 `applied=6` 的话，那 2 条没落地的
     没人知道是哪两条、为什么），`?dry_run=1` 一个字都不写。
     `applied` / `skipped_masked` 两个老键保留，前端照旧读、额外优先显示 `results[0].reason`。
+17. **"整份覆盖"的两个入口共用同一道筛选**：`_writable_projects` / `_writable_memories`。
+    导入以前逐条筛 `id`/`name`、恢复只看"是不是列表" —— 于是从恢复这里放进一条缺 id 的项目，
+    之后**每一个读接口都 500**（读路径按 `p["id"]` 硬下标取值，而 `_sanitize` 明写不补 id），
+    主文件又是合法 JSON、自愈不介入：救命的退路变成一键变砖。丢掉的条目必须报出来
+    （`dropped_invalid` / `dropped_note`，恢复前的预览还先给 `unusable_count`）——
+    "少了两个项目"和"一个没少"在界面上长得一样。
+    同处两条：`projects.json.before-restore.bak` 是**正式恢复来源**（以前只在写入处硬编码一次，
+    白名单不认识它 = 界面向用户承诺的退路无路可走）；恢复**不复活** `_client_refs`
+    （约定 13：那是本进程的重试窗口，导入已经不带你了）。
+18. **部分更新只有一份实现**：`patch_project` / `patch_task`（补全发生在 `mutate` 锁内）。
+    MCP 的 `kanban_update_*` 与 HTTP 的 `PATCH /api/projects/{pid}`、
+    `PATCH /api/tasks/{tid}` 都走它们，集合字段的 `tags_add` / `refs_remove` 两侧一致可用。
+    **改一个字段绝不许"GET 整份 → 改一处 → PUT 整份"**：那次 GET 在临界区外，
+    期间另一方写进去的字段会被手里这份旧快照反向抹掉。前端因此必须用 PATCH
+    （拖卡片改 `status`、AI 指令改单字段、写交接说明 —— 2026-09-23 之前全都在发整份 PUT，
+    实盘复现过"拖一次卡片把智能体刚补的 refs/desc 清空，界面还提示 ✓"）。
+    `PUT` 保留给"表单本来就拥有全部字段"的整份保存（新建/编辑弹窗），别混用。
+19. **不认识的增量动词直接报错**：`_expand_ops` 先拒 `*_add` / `*_remove` 里基字段不存在于
+    `COLLECTION_OPS` 的键。`tag_add`（少个 s）以前一路走到"只认模型字段"那道过滤被丢掉 ——
+    200 加一句"已更新：tag_add"，谁都不说这个字段一个字没变。
+20. **"模型给一批 + 人点执行"这条通道的幂等键**：`/api/ai/command` 与 `/api/ai/summarize`
+    都回一个 `batch_ref`，前端在**进入执行时捕获一次**，建项目/任务时带
+    `client_ref = batch_ref:序号`。两个反例都踩过：不清键 → 下一次执行撞同一把键；
+    拿全局兜一个固定前缀 → **下一条**正常指令的第一条创建动作被判成重放而静默不建
+    （静默不建比重复建更难查）。拿不到 `batch_ref` 就不带键，退回"可能重复"。
 
 ## 多智能体入口文件（别退化成 N 份副本）
 
@@ -518,7 +553,16 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    - 夹具已经把页面打开了，用 API 造完数据要 `page.reload()` 才看得见；
      卡片按**更新时间倒序**，别用 `.first` 猜是哪张 —— 用 `.pcard:has-text('名字')` 定位。
 4. **覆盖率门槛写在 `pytest.ini`**（`fail_under = 90`；当前实测值见文末「验证基线」，
-   不在这里重复一个会漂的数字）。
+   不在这里重复一个会漂的数字）。**量的是分支覆盖**（`addopts` 里带 `--cov-branch`）：
+   以前只量行覆盖，`if 条件: 走对的那支` 单独就算满，而 else / except 那支
+   （缺陷常待的地方）压根不进分母。打开后 93% → 92%，门槛 90 不动，所以这不是
+   把数字调好看，是把数字调真。
+   别把 `branch = true` 写回 `[coverage:run]` —— pytest-cov 自己构造 source/开关，
+   实测放那里**不生效**（报告表头连 Branch 列都没有），只有 addopts 那条算数。
+   **覆盖率有一个必须说出来的盲区**：`scripts/mcp_server.py`（23 个工具的出口）是
+   **子进程**跑的，行覆盖量不到它 —— 加 `--cov=scripts/mcp_server.py` 连 TOTAL 都不变，
+   是惰性配置，别写进配置假装它在。它的契约靠 `tests/test_mcp_server.py` 走真
+   `tools/call` 逐工具验（见「MCP 契约纪律」那条全覆盖判据）。
    剩下的未覆盖行基本是 `_is_forbidden_target` 的异常分支、`Path.resolve()` 失败、
    `_scheduler_loop` 的常驻循环等难以稳定触发的路径 —— **别为了数字构造畸形环境硬凑**。
    `test_coverage_gaps.py` 里记着"哪些逻辑真但一直没测到"，新增这类补测往那放。
@@ -569,6 +613,25 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
     `test_readiness.py`（两份就绪度实现）、`test_agent_files.py`（入口文件目标集合）。
     **凡是"两边各写一份"的东西，都必须有一张测试把它们钉在一起**，否则改一边不会变红 ——
     这个项目已经为此反复出过事故（版本条手填时间、MCP 版本号漂在应用后面）。
+14. **门禁只有三档：通过 / 失败 / 未验，不许有第四种"默默算作通过"**
+    （2026-09-23 整轮收口就是把这一条建立起来）：
+    - `check(name, cond)` 的 `cond` 传**字符串**就是"这一项本轮没跑"，计入 SKIP 并印在
+      结果行里；`check(..., True)` 这种占位是**禁项** —— 它把"没验"伪装成"验过"。
+      `release_regression --no-ai` 以前这样报"18 通过 / 结论：新功能链路全部可用"，
+      而会话捕获→提炼→入库这条链在门禁里从未跑过。
+    - 空集合上的 `all(...)` 与 `not xs or all(...)` 一律不算通过：CI 起的实例本来是空的，
+      "项目字段齐全"因此恒绿过好几次。要么**先播种**（`ci_local` 现在给常驻实例播一块
+      含合成 Key 的小板子），要么明说 SKIP。
+    - 阈值按**实测值**钉，不按"大概十几个"钉：ACTIONS `>=60`（实测 60）、工具数 `>=23`。
+      门槛定在 30/10 时砍掉一半仍然全绿，那种门等于没有；要缩减就连带改这一行，
+      这正是想要的摩擦。
+    - 运算符优先级也是断言：`A and B or C` 那条形同只断言了 C（交接包整块丢任务清单照绿）。
+    - 每条新判据都要做一次 **A/B**：把修法改回缺陷原样，看它是否真的变红，
+      并把失败现场留在断言消息里（只报"哪个工具漏了"看不出漏在哪个字段）。
+15. **起实例后必须问它自己读的是哪份数据**：`ci_local` 现在在探活成功后读
+    `/api/health` 的 `data_file`，与本次的临时目录不符就立刻停 —— 端口通了不等于起对了
+    （Windows 上 `SO_REUSEADDR` 允许两个进程都"绑定成功"）。`delivery_drill` 早就这么做，
+    现在这条纪律推广到 CI。
 
 ## 容易踩的坑
 
@@ -636,14 +699,19 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-19 收口）**：`pytest` 500 收集（494 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-覆盖率 94%（语句 2278 / 缺 141，门槛 90，余量 4 个点；只统计 `app/`，`scripts/` 不进覆盖率）。
-公开接口面：HTTP 47 条端点（`method+path` 计 48，多的那条是框架自带的 `/openapi.json`）
+**验证基线（2026-09-23 收口）**：`pytest` 549 收集（543 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+26 个测试文件、518 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+覆盖率 **93%** 且已经是**分支覆盖**（语句 2442 / 缺 140~144 / 分支 862 / 半覆盖 87~89 ——
+未覆盖数在 ±4 之间漂，是 `-n auto` 下时序类用例走了不同分支造成的，**别把它抄成一个精确值**；
+门槛 90，只统计 `app/`，`scripts/` 不进覆盖率 —— 原因见「测试约定 4」）。
+公开接口面：HTTP 51 条自有端点（`method+path` 计 52，多的那条是框架自带的 `/openapi.json`），
+其中 2026-09-23 新增 `PATCH /api/projects/{pid}`、`PATCH /api/tasks/{tid}` 两条（见数据层约定 18）
 + MCP 23 个工具，另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
   4 类 uri）与提示词（`prompts/list` / `prompts/get`，3 个）。
-门禁脚本：`release_regression --no-ai` 18/0、`delivery_drill`（自起隔离实例）19/0、
-`scenario_test` 33/33、`live_check --mcp` 12/12、`frozen_smoke` 8/0。
-并行（`-n auto`，已写进 `pytest.ini`）冷跑约 50 秒、热跑约 20 秒。
+门禁脚本：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
+`release_regression --no-ai` 16 通过 + **2 项明确标"未验"**（`--no-ai` 下 AI 链路本就没跑，
+不许再算进"全部可用"）、`delivery_drill` 21/0、`live_check --mcp` 12/0、
+`frozen_smoke` 8/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 55 秒。
 ⚠️ 全量跑常常**打完覆盖率表就没有 summary 行**（见「测试约定 10」），判绿只认退出码。
 
 > 1.1.0 一次加了会话捕获 / 过程轨迹 / 记忆层 / 用量追踪 / 提醒 / 只读模式六个面，

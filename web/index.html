@@ -2021,6 +2021,9 @@ document.addEventListener("keydown", e => {
 // ============ AI 设置 ============
 let aiConfig = null;
 let pendingActions = [];
+// 这一批 AI 指令的身份证号：创建类动作拿它当幂等键前缀。
+// 以前"执行"没有键，同一条指令再点一次（或失败后重试）就把项目/任务建成一对。
+let cmdBatchRef = "";
 
 async function openAISettings() {
   try {
@@ -2294,6 +2297,7 @@ async function sendCommand() {
   try {
     const r = await api("/api/ai/command", { method: "POST", body: JSON.stringify({ text }) });
     const parsed = r.parsed || {};
+    cmdBatchRef = r.batch_ref || "";
     if (parsed.need_clarification) {
       cmdAddMsg("ai", "🤔 需要补充：" + esc(parsed.need_clarification));
       document.getElementById("cmd-exec-row").style.display = "none";
@@ -2315,9 +2319,11 @@ async function executeActions() {
   btn.classList.add("ai-loading-btn");
   btn.textContent = "执行中…";
   let ok = 0, fail = 0;
-  for (const a of pendingActions) {
+  const batch = cmdBatchRef;       // 进入时捕获一次，两次连点用的是同一批键
+  for (let i = 0; i < pendingActions.length; i++) {
+    const a = pendingActions[i];
     try {
-      await execSingleAction(a);
+      await execSingleAction(a, i, batch);
       ok++;
     } catch (e) {
       fail++;
@@ -2352,33 +2358,40 @@ function assertAiField(allowed, field, type) {
   if (!allowed.includes(field)) throw new Error(`${type} 不支持修改字段「${field}」`);
 }
 
-async function execSingleAction(a) {
+async function execSingleAction(a, i, batch) {
   const type = a.type;
+  // 创建类动作带幂等键：这一批（同一次解析结果）里的第 i 条，键由调用方在执行开始时
+  // 一次性捕获（见 executeActions），不要在循环里读全局 —— 全局会被上一次的执行清空，
+  // 那时再兜一个固定前缀就会跨命令撞键：**下一条**正常指令的第一条创建动作会被
+  // 判成"重放"而一个字都不落盘，那比建两遍更难查。
+  // 拿不到 batch_ref（服务端是旧的）就不带键，退回"可能重复"而不是"静默不建"。
+  const qs = batch ? "?client_ref=" + encodeURIComponent(batch + ":" + i) : "";
   if (type === "create_project") {
-    await api("/api/projects", { method: "POST", body: JSON.stringify({
+    await api("/api/projects" + qs, { method: "POST", body: JSON.stringify({
       name: a.name || "新项目", status: a.status || "规划中", priority: a.priority || "中",
       progress: Number(a.progress) || 0, next_action: a.next_action || "", handoff_note: a.handoff_note || "", background: a.background || "",
     }) });
   } else if (type === "update_project") {
     assertAiField(AI_PROJECT_FIELDS, a.field, "update_project");
-    const p = await api("/api/projects/" + a.project_id);
-    p[a.field] = a.value;
-    await api("/api/projects/" + a.project_id, { method: "PUT", body: JSON.stringify(p) });
+    // PATCH：以前是 GET 整份 → 改一个字段 → PUT 整份，而那次 GET 在临界区外 ——
+    // 期间智能体写进这个项目的 next_action / 交接说明会被手里这份旧快照抹掉。
+    await api("/api/projects/" + a.project_id, { method: "PATCH",
+      body: JSON.stringify({ [a.field]: a.value }) });
   } else if (type === "delete_project") {
     await api("/api/projects/" + a.project_id, { method: "DELETE" });
   } else if (type === "create_task") {
-    await api("/api/projects/" + a.project_id + "/tasks", { method: "POST", body: JSON.stringify({
+    await api("/api/projects/" + a.project_id + "/tasks" + qs, { method: "POST", body: JSON.stringify({
       title: a.title || "新任务", desc: a.desc || "", priority: a.priority || "中",
       status: a.status || "待办", agent: a.agent || "",
     }) });
   } else if (type === "update_task") {
     assertAiField(AI_TASK_FIELDS, a.field, "update_task");
     const tid = await resolveTaskId(a);
-    const project = await findProjectOfTask(a);
-    if (!tid || !project) throw new Error("找不到对应任务");
-    const task = project.tasks.find(t => t.id === tid);
-    task[a.field] = a.value;
-    await api("/api/tasks/" + tid, { method: "PUT", body: JSON.stringify(task) });
+    if (!tid) throw new Error("找不到对应任务");
+    // 不再为了改一个字段先整份读回项目、改完再 PUT 回去（同 update_project 的理由；
+    // 顺带省掉一次全量读盘 —— resolveTaskId 里该读的那一次已经读了）
+    await api("/api/tasks/" + tid, { method: "PATCH",
+      body: JSON.stringify({ [a.field]: a.value }) });
   } else if (type === "delete_task") {
     const tid = await resolveTaskId(a);
     if (!tid) throw new Error("找不到对应任务");
@@ -2440,9 +2453,8 @@ async function applyHandoff() {
   if (!text) { toast("内容为空，先点「生成」试试"); return; }
   if (!confirm("将生成的交接说明写入项目并覆盖现有内容？")) return;
   try {
-    const p = await api("/api/projects/" + currentPid);
-    p.handoff_note = text;
-    await api("/api/projects/" + currentPid, { method: "PUT", body: JSON.stringify(p) });
+    await api("/api/projects/" + currentPid, { method: "PATCH",
+      body: JSON.stringify({ handoff_note: text }) });
     toast("交接说明已更新 ✓");
     closeModal("ai-handoff-modal");
     current = await api("/api/projects/" + currentPid);
@@ -2484,14 +2496,13 @@ function dueInfo(t) {
 }
 
 async function moveTaskTo(tid, status) {
+  // 拖一次卡片只意味着"改一个 status"。以前这里从页面缓存 `current` 里挑出整条任务
+  // 再 PUT 回去，而 `current` 是打开详情时取的（页面不轮询）—— 中间智能体经 MCP 补的
+  // refs / depends_on / desc 会被手里这份旧快照整体抹掉，界面上还提示"已移至进行中 ✓"。
   const t = (current.tasks || []).find(x => x.id === tid);
   if (!t || t.status === status) return;
   try {
-    await api("/api/tasks/" + tid, { method: "PUT", body: JSON.stringify({
-      title: t.title, desc: t.desc || "", status, priority: t.priority,
-      agent: t.agent || "", due_date: t.due_date || "",
-      refs: t.refs || [], depends_on: t.depends_on || [],
-    }) });
+    await api("/api/tasks/" + tid, { method: "PATCH", body: JSON.stringify({ status }) });
     toast(`任务已移至「${status}」✓`);
     current = await api("/api/projects/" + currentPid);
     renderDetail();
@@ -3089,15 +3100,17 @@ async function applySummarize(modalId) {
   // 以前会把全局 currentPid 一起改掉，于是屏幕上还停在 A、之后点的每一件事都落在 B。
   const target = summarizeTargetPid || currentPid;
   let ok = 0, fail = 0, memFail = 0;
+  // 进入时捕获一次：连点两下用的是同一批键；而下一次**重新提炼**会连同 summarizeData
+  // 一起换掉它。不要在循环里读全局、也不要事后清空 —— 那会让"另一批提炼"的第 0 条
+  // 撞上兜底键，被判成重放而一个字都不落盘（静默不建比重复建更难查）。
+  const batch = summarizeBatchRef;
   try {
     const tasks = summarizeData.new_tasks || [];
     for (let i = 0; i < tasks.length; i++) {
       const t = tasks[i];
       try {
-        // client_ref = 这一次提炼的身份证 + 序号：同一个弹窗里连点两次「应用到项目」
-        // 以前会原样建两遍（弹窗没关掉、按钮还在），现在第二次只是重放第一次的结果。
-        const ref = (summarizeBatchRef || "apply-" + target) + ":" + i;
-        await api(`/api/projects/${target}/tasks?client_ref=${encodeURIComponent(ref)}`,
+        const qs = batch ? `?client_ref=${encodeURIComponent(batch + ":" + i)}` : "";
+        await api(`/api/projects/${target}/tasks${qs}`,
           { method: "POST", body: JSON.stringify({
             title: t.title || "提炼任务", desc: t.desc || "", priority: t.priority || "中",
             status: t.status || "待办", agent: "" }) });
@@ -3105,15 +3118,18 @@ async function applySummarize(modalId) {
       } catch (e) { fail++; }
     }
     const p = await api("/api/projects/" + target);
-    let changed = false;
+    // 只把这次真要改的两个字段发回去（PATCH），别拿刚读的整份再 PUT 一次：
+    // 读与写之间智能体可能已经动过这个项目，整份写回会把那一段抹掉。
+    const patch = {};
     if (summarizeData.next_action && summarizeData.next_action !== p.next_action) {
-      p.next_action = summarizeData.next_action; changed = true;
+      patch.next_action = summarizeData.next_action;
     }
     if (summarizeData.handoff_note_updates) {
       const note = (p.handoff_note || "") + (p.handoff_note ? "\n\n" : "") + "**会话提炼补充**：" + summarizeData.handoff_note_updates;
-      if (note !== p.handoff_note) { p.handoff_note = note; changed = true; }
+      if (note !== p.handoff_note) patch.handoff_note = note;
     }
-    if (changed) await api("/api/projects/" + target, { method: "PUT", body: JSON.stringify(p) });
+    if (Object.keys(patch).length) await api("/api/projects/" + target, { method: "PATCH",
+      body: JSON.stringify(patch) });
     // 会话中的决策/坑/约定自动沉淀为结构化记忆
     for (const m of (summarizeData.memories || [])) {
       if (!m.text) continue;
@@ -3127,7 +3143,6 @@ async function applySummarize(modalId) {
     // 关的是**发起这次应用的那个弹窗**：会话捕获的按钮在 session-modal 里，
     // 以前写死关 summarize-modal，于是捕获弹窗不关、按钮还在，再点一次就是第二遍。
     closeOneModal(modalId || "summarize-modal");
-    summarizeBatchRef = "";            // 这批已经落地了，别拿同一把键去建下一批
     if (target === currentPid) {
       current = await api("/api/projects/" + currentPid);
       renderDetail();

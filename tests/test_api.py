@@ -783,3 +783,65 @@ def test_task_can_be_looked_up_by_id_alone(app_client):
     assert s == 200 and r["task"]["title"] == "唯一的那条"
     assert r["project_id"] == p["id"] and r["project_name"] == "按id找任务"
     assert app_client.get("/api/tasks/nope-tid")[0] == 404
+
+
+# ---------------- PATCH：只改点名的字段 ----------------
+
+def test_patch_task_keeps_fields_it_was_not_given(app_client):
+    """`PUT` 要求调用方先读一份再整份写回，而那次读在临界区**外**。
+
+    实盘复现过的形状：详情页开着 → 智能体经 MCP 给任务补了 refs/desc →
+    用户把卡片拖一列（前端当时发的是整份 PUT）→ 只提示"已移至进行中 ✓"，
+    对方刚写的 refs/desc 被旧快照抹掉，journal 里只留下"状态：待办→进行中"，
+    事后从痕迹上看不出丢过东西。PATCH 把补全挪进锁内，改一个字段就只动一个字段。
+    """
+    _, p = app_client.create_project("拖拽会抹字段的项目")
+    _, t = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "会被波及的任务"})
+    tid = t["id"]
+    app_client.patch(f"/api/tasks/{tid}", {"refs": ["D:/x/a.py"], "desc": "智能体刚补的上下文"})
+
+    st, after = app_client.patch(f"/api/tasks/{tid}", {"status": "进行中"})
+    assert st == 200, after
+    assert after["status"] == "进行中"
+    assert after["refs"] == ["D:/x/a.py"], f"点名字段之外的东西被抹掉了：{after}"
+    assert after["desc"] == "智能体刚补的上下文"
+    assert after["title"] == "会被波及的任务"
+
+
+def test_patch_project_keeps_fields_it_was_not_given(app_client):
+    """同一个道理在项目侧：改 progress 不该把别人写的交接说明清成空串。"""
+    _, p = app_client.create_project("改进度会牵连别的项目")
+    pid = p["id"]
+    app_client.put(f"/api/projects/{pid}", {**app_client.get(f"/api/projects/{pid}")[1],
+                                           "handoff_note": "必须活下来的一段话"})
+    st, after = app_client.patch(f"/api/projects/{pid}", {"progress": 77})
+    assert st == 200, after
+    assert after["progress"] == 77
+    assert after["handoff_note"] == "必须活下来的一段话", after
+
+
+def test_collection_ops_work_over_http_too(app_client):
+    """`tags_add` / `refs_remove` 这些增量操作以前**只有 MCP 能用**，
+    HTTP 侧只能整份覆盖 —— 同一个能力两条路两套口径，前端就永远拿不到"只加一条"。
+    现在两条路共用 `patch_*`，所以 HTTP 上也得能用，且行为一致。
+    """
+    _, p = app_client.create_project("增量操作", tags=["全栈"])
+    pid = p["id"]
+    st, after = app_client.patch(f"/api/projects/{pid}", {"tags_add": ["待复核"]})
+    assert st == 200 and set(after["tags"]) == {"全栈", "待复核"}, after
+    st, after = app_client.patch(f"/api/projects/{pid}", {"tags_remove": ["全栈"]})
+    assert st == 200 and after["tags"] == ["待复核"], after
+    # 用在没有这个字段的结构上必须报错，而不是静默成功
+    assert app_client.patch(f"/api/projects/{pid}", {"nonsense_add": ["x"]})[0] == 400
+
+
+def test_empty_patch_is_rejected(app_client):
+    """空 PATCH 什么都不点名 —— 那不是"部分更新"，是调用方写错了。
+
+    放它过去就等于给"整份读出来再原样写回"留了个入口，而那正是 PATCH 要消灭的形状。
+    """
+    _, p = app_client.create_project("空 PATCH")
+    st, body = app_client.patch(f"/api/projects/{p['id']}", {})
+    assert st == 400, (st, body)
+    _, t = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "一条"})
+    assert app_client.patch(f"/api/tasks/{t['id']}", {})[0] == 400

@@ -1064,6 +1064,15 @@ def _expand_ops(model, current: dict, changes: dict) -> dict:
     """
     fields = set(model.model_fields)
     out = dict(changes)
+    # 拼错的动词必须先报错，不能让它走到下面被"只认模型字段"那道过滤顺手丢掉：
+    # `tag_add`（少个 s）以前是 200 + 一句"已更新：tag_add"，两边谁都没说这个字段
+    # 一个字都没变 —— 与 `due_date="下周三"` 静默变空串是同一类说谎的回执。
+    for k in sorted(out):
+        base = k[:-4] if k.endswith("_add") else k[:-7]
+        if (k.endswith("_add") or k.endswith("_remove")) and base not in COLLECTION_OPS:
+            raise HTTPException(
+                400, f"不认识的操作「{k}」：支持增删动词的集合字段只有 "
+                     f"{'、'.join(sorted(f'{b}_add / {b}_remove' for b in COLLECTION_OPS))}")
     for base, add_key in COLLECTION_OPS.items():
         rm_key = add_key.replace("_add", "_remove")
         if add_key not in out and rm_key not in out:
@@ -1110,6 +1119,21 @@ def patch_project(pid: str, changes: dict) -> dict:
     if p is None:
         raise HTTPException(404, "项目不存在")
     return p
+
+
+@app.patch("/api/projects/{pid}")
+def patch_project_http(pid: str, body: dict):
+    """部分更新项目：只改你点名的字段，其余保持**盘上此刻的值**。
+
+    这条路由存在的理由不是"少写几个字段方便"：`PUT` 要求调用方先读一份、改完再整份写回，
+    而那次读发生在临界区**外面** —— 桌面端与智能体同时动同一个项目时，后提交的一方
+    会拿手里的旧值把对方刚写的字段抹掉。把补全挪进 `mutate` 里面才是解法，
+    所以这里直接复用 `patch_project`：与 MCP 的 `kanban_update_project` 同一套实现，
+    两侧不会漂，集合字段的 `tags_add` / `tags_remove` 也一并能用。
+    """
+    if not body:
+        raise HTTPException(400, "PATCH 至少要点名一个字段（整体覆盖请用 PUT）")
+    return patch_project(pid, body)
 
 
 @app.put("/api/projects/{pid}")
@@ -1269,6 +1293,18 @@ def get_task(tid: str):
             if t.get("id") == tid:
                 return {"task": t, "project_id": p.get("id"), "project_name": p.get("name")}
     raise HTTPException(404, "任务不存在")
+
+
+@app.patch("/api/tasks/{tid}")
+def patch_task_http(tid: str, body: dict):
+    """部分更新任务。理由与 `PATCH /api/projects/{pid}` 同：拖一张卡片只意味着改一个
+    `status`，不该把智能体刚补进去的 `refs` / `depends_on` / `desc` 按旧快照写回去。
+
+    返回体与 `PUT` 一致（就是那条任务），不在同一个资源上给两种形状。
+    """
+    if not body:
+        raise HTTPException(400, "PATCH 至少要点名一个字段（整体覆盖请用 PUT）")
+    return patch_task(tid, body)
 
 
 @app.put("/api/tasks/{tid}")
@@ -3437,11 +3473,12 @@ def ai_command(body: CommandBody):
         "4) 删除类操作必须能明确匹配到目标才输出；5) 一次指令可能包含多个操作，按顺序列出。"
     )
     user_msg = "看板数据：\n" + json.dumps(projects, ensure_ascii=False, indent=1) + "\n\n用户指令：" + body.text
+    cmd_batch = uuid.uuid4().hex      # 前端执行这批动作时当幂等键前缀用，理由同会话提炼
     try:
         cfg = llm.load_config()
         text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}], temperature=0.1, feature="自然语言指令")
         parsed = _extract_json(text)
-        return {"parsed": parsed, "endpoint": ep}
+        return {"parsed": parsed, "endpoint": ep, "batch_ref": cmd_batch}
     except llm.LLMError as e:
         raise HTTPException(502, f"AI 调用失败：{e}")
     except Exception as e:

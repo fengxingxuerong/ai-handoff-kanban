@@ -422,8 +422,11 @@ def test_session_ingest_does_not_reassign_current_pid():
     """
     fn = re.search(r"async function ingestSession\(\).*?\n}", HTML, re.S)
     assert fn, "找不到 ingestSession"
-    assert "currentPid = pid" not in fn.group(0), "入库时不要动全局 currentPid"
-    assert "summarizeTargetPid" in fn.group(0), "入库目标应记在 summarizeTargetPid 上"
+    # 先剥掉行注释：函数里那段说明**引用了旧写法本身**，不剥的话这条判据会被
+    # 自己的注释绊倒（第一版就是这么红的 —— 断言没错，错在拿全文做子串匹配）。
+    code = re.sub(r"//[^\n]*", "", fn.group(0))
+    assert "currentPid =" not in code, "入库时不要动全局 currentPid（改它要连着排查所有读它的地方）"
+    assert "summarizeTargetPid" in code, "入库目标应记在 summarizeTargetPid 上"
 
 
 # 输入框上那句提示里的中文标签 → 过滤器实际读的字段

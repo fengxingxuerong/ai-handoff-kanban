@@ -184,7 +184,7 @@ build.bat
 ├── scripts/live_check.py   # 对着已跑起来的实例做只读体检（打接口，不写数据）
 ├── scripts/live_ui_check.py # 对着已跑起来的实例开真浏览器只读校验（证明界面没白屏）
 ├── scripts/make_stamp.py   # 打包前生成构建戳（版本条显示的"打包时间"）
-├── scripts/scenario_test.py # 真实场景测试 33 例（真服务 + 真 MCP + 真实业务数据）
+├── scripts/scenario_test.py # 真实场景测试 32 例（真服务 + 真 MCP + 真实业务数据）
 ├── scripts/frozen_smoke.py # 冻结版自查：启动 dist 里的 exe 真打一遍接口
 ├── scripts/mcp_server.py   # MCP 服务（stdio）：让 AI 代理直接读写看板
 ├── scripts/bench.py        # 读写性能基准（先量再改）

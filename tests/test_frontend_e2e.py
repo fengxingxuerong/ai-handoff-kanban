@@ -309,6 +309,63 @@ def test_ai_command_needs_confirmation_before_writing(ai_ui):
     assert [t["title"] for t in tasks] == ["指令加的任务"], "确认后应该真的落库"
 
 
+def test_executing_the_same_ai_command_twice_creates_once(ai_ui):
+    """「▶ 执行」连点两次不能把那批操作做两遍。
+
+    AI 指令的创建类动作以前不带幂等键：一次解析结果点两下执行，项目/任务就成对出现，
+    而重复项会跟着进交接包与拓扑序，事后只能靠"标题一样"手工分辨。
+    现在同一次解析共享一个 batch_ref（第 i 条 = `ref:i`），第二次只是重放。
+    """
+    page, api, stub, _ = ai_ui
+    pid = make_project(api, "指令重复执行的项目")["id"]
+    stub.push_json({"actions": [
+        {"type": "create_task", "project_id": pid, "title": "指令建的一条"},
+        {"type": "create_project", "name": "指令建的项目"},
+    ], "reply": "好"})
+    page.click("[data-act='openAICmd']")
+    page.wait_for_selector("#cmd-input", timeout=10000)
+    page.fill("#cmd-input", "建一条任务，再顺手开一个叫「指令建的项目」的项目")
+    page.click("#cmd-send-btn")
+    page.wait_for_selector("#cmd-exec-row:visible", timeout=15000)
+    page.on("dialog", lambda d: d.accept())
+
+    page.eval_on_selector("[data-act='executeActions']", "el => { el.click(); el.click(); }")
+    page.wait_for_timeout(1800)
+    names = [p["name"] for p in api.get("/api/projects")[1]["projects"]]
+    assert names.count("指令建的项目") == 1, f"项目被建了两遍：{names}"
+    tasks = api.get(f"/api/projects/{pid}")[1]["tasks"]
+    assert [t["title"] for t in tasks].count("指令建的一条") == 1, tasks
+
+
+def test_ai_command_update_sends_a_patch_not_a_read_modify_put(ai_ui):
+    """AI 指令改一个字段，不能再"读整份 → 改一处 → PUT 整份"。
+
+    那次读发生在临界区外：期间智能体或桌面端写进这个项目的其它字段，会被这次
+    带回来的旧值反向抹掉（约定 1 的形状）。现在只 PATCH 点名的那一个字段。
+    """
+    page, api, stub, _ = ai_ui
+    pid = make_project(api, "指令只改进度的项目", handoff_note="这一句不该被牵连")["id"]
+    stub.push_json({"actions": [{"type": "update_project", "project_id": pid,
+                                 "field": "progress", "value": 66}], "reply": "好"})
+    page.click("[data-act='openAICmd']")
+    page.wait_for_selector("#cmd-input", timeout=10000)
+    page.fill("#cmd-input", "把「指令只改进度的项目」进度改成 66%")
+    page.click("#cmd-send-btn")
+    page.wait_for_selector("#cmd-exec-row:visible", timeout=15000)
+    page.on("dialog", lambda d: d.accept())
+
+    put_seen = []
+    page.on("request", lambda r: put_seen.append(r.method + " " + r.url)
+            if r.method == "PUT" else None)
+    page.click("[data-act='executeActions']")
+    page.wait_for_selector("#cmd-chat:has-text('执行完成')", timeout=15000)
+    p = api.get(f"/api/projects/{pid}")[1]
+    assert p["progress"] == 66, p["progress"]
+    assert p["handoff_note"] == "这一句不该被牵连", f"改进度牵连了别的字段：{p['handoff_note']}"
+    assert not [u for u in put_seen if f"/api/projects/{pid}" in u], \
+        f"单字段改动却发了整份 PUT：{put_seen}"
+
+
 def test_ai_summarize_then_apply(ai_ui):
     """会话粘贴提炼：提炼结果要能一键落到项目上"""
     page, api, stub, _ = ai_ui
@@ -430,6 +487,33 @@ def test_import_button_really_replaces_data(ui, tmp_path):
 
 
 # ---------------- 拖拽改状态 ----------------
+
+def test_dragging_a_card_does_not_wipe_what_an_agent_wrote_in_between(ui):
+    """详情页开着 → 智能体经 MCP 给这条任务补 refs/desc → 用户拖一列。
+
+    以前拖拽发的是"从页面缓存里挑出的整条任务"做 PUT（`current` 只在打开详情时取过，
+    页面也不轮询），于是对方刚写进去的 refs / depends_on / desc 被手里这份旧快照
+    整体抹掉，界面只提示"已移至进行中 ✓"，journal 里也只看得到一次状态变化。
+    实盘复现过（refs=[a.py] + desc → 拖一次 → refs=[] desc=''），修法是改发 PATCH。
+    """
+    page, api, _ = ui
+    pid = make_project(api, "拖拽会牵连别人的项目")["id"]
+    tid = api.post(f"/api/projects/{pid}/tasks", {"title": "被拖的这条"})[1]["id"]
+    page.reload(wait_until="domcontentloaded")
+    page.locator(".pcard").first.click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.wait_for_selector(".kcol.k-todo .tcard", timeout=10000)
+
+    # 页面快照取过之后，另一个写入方（智能体走的就是这条 PATCH/patch_task 路径）补了内容
+    api.patch(f"/api/tasks/{tid}", {"refs": ["app/main.py:42"], "desc": "智能体补的上下文"})
+    page.drag_and_drop(".kcol.k-todo .tcard", ".kcol.k-doing")
+    page.wait_for_selector(".kcol.k-doing:has-text('被拖的这条')", timeout=15000)
+
+    after = api.get("/api/tasks/" + tid)[1]["task"]
+    assert after["status"] == "进行中", f"拖拽没生效：{after['status']}"
+    assert after["refs"] == ["app/main.py:42"], f"拖一次卡片把别人写的 refs 抹了：{after['refs']}"
+    assert after["desc"] == "智能体补的上下文", after["desc"]
+
 
 def test_drag_task_between_columns(ui):
     """四列看板拖拽：把任务从「待办」拖到「进行中」，状态要真的落到服务端"""
