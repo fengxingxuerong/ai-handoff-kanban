@@ -340,7 +340,40 @@ def test_ai_summarize_then_apply(ai_ui):
     assert detail["next_action"] == "先补部署文档"
 
 
-def test_ai_test_connection_button(ai_ui):
+def test_applying_a_summary_twice_builds_the_tasks_once(ai_ui):
+    """连点两次「✅ 应用到项目」不能把那批任务建两遍。
+
+    2026-09-23 实盘查到的形状：`applySummarize` 结尾写死 `closeModal("summarize-modal")`，
+    而会话捕获那个按钮在 **session-modal** 里 —— 弹窗不关、按钮还在，再点一次就是第二遍，
+    交接说明也被追加两遍；而这条链建任务时不带幂等键。两层一起修：
+    关的是发起那次应用的弹窗，任务键 = 本次提炼的 batch_ref + 序号。
+    """
+    page, api, stub, _ = ai_ui
+    pid = make_project(api, "双击会建两遍的项目")["id"]
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    stub.push_json({
+        "summary": "两件事", "new_tasks": [{"title": "接入回调", "priority": "高"},
+                                           {"title": "补迁移脚本", "priority": "中"}],
+        "next_action": "先接回调", "memories": [], "handoff_note_updates": "",
+    })
+    page.locator(".pcard").first.click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.click("[data-act='openSummarize']")
+    page.wait_for_selector("#summarize-text", timeout=10000)
+    page.fill("#summarize-text", "决定用事件驱动补回调，迁移脚本单独一轮交付，下周一验收。" * 2)
+    page.click("#summarize-btn")
+    page.wait_for_selector("#summarize-result:visible", timeout=20000)
+    page.on("dialog", lambda d: d.accept())
+
+    # 同一次事件循环里连发两次点击 = 手抖双击的真实形状（第一次还在 await 里）
+    page.eval_on_selector("#summarize-apply-btn", "el => { el.click(); el.click(); }")
+    page.wait_for_selector("#col-todo:has-text('接入回调')", timeout=15000)
+    page.wait_for_timeout(1200)                     # 给第二次点击落盘的机会：它不该建出东西
+    titles = [t["title"] for t in api.get(f"/api/projects/{pid}")[1]["tasks"]]
+    assert sorted(titles) == ["接入回调", "补迁移脚本"], f"建出了重复任务：{titles}"
+    # 而且应用完必须把弹窗关掉：按钮一直留在屏幕上，下一次误点只是时间问题
+    assert page.locator("#summarize-modal").get_attribute("class").find("show") < 0, "弹窗没关"
     """设置面板的「测试连接」要走通（端点挂了很常见，这个按钮是排查入口）"""
     page, _, _, _ = ai_ui
     page.click("[data-act='openAISettings']")

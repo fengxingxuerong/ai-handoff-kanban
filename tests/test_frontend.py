@@ -388,3 +388,39 @@ def test_actions_that_receive_data_arg_actually_forward_it():
         if not m.group(1).strip():
             bad.append(f"{name}: ACTIONS 处理器不收参数，data-arg 会被丢掉")
     assert not bad, bad
+
+
+def test_apply_summarize_buttons_name_their_own_modal():
+    """「✅ 应用到项目」有两个按钮，分别住在 `summarize-modal`（粘贴提炼）和
+    `session-modal`（会话捕获）里，共用同一个 `applySummarize`。
+
+    2026-09-23 的缺陷：处理器写死 `closeModal("summarize-modal")` —— 从捕获弹窗应用完，
+    自己的弹窗不关、按钮还在，再点一次同一批任务又建一遍。截图与人工点一遍都很难看出
+    "关的是另一个窗"，所以这里静态对账：**带 applySummarize 的按钮，data-arg 必须
+    等于它所在弹窗的 id**。少一个按钮、写错 id、又冒出第三个按钮，都会红。
+    """
+    chunks = HTML.split('<div class="modal-mask" id="')[1:]
+    found: list[tuple[str, str | None]] = []
+    for chunk in chunks:
+        modal_id = chunk.split('"', 1)[0]
+        # 下一个 modal-mask 之前的内容都属于这个弹窗（弹窗不嵌套）
+        body = chunk.split('<div class="modal-mask"')[0]
+        for m in re.finditer(r'<button[^>]*data-act="applySummarize"[^>]*>', body):
+            arg = re.search(r'data-arg="([^"]+)"', m.group(0))
+            found.append((modal_id, arg.group(1) if arg else None))
+    assert len(found) == 2, f"应恰好两个「应用到项目」按钮，找到 {len(found)} 个：{found}"
+    wrong = [(where, arg) for where, arg in found if arg != where]
+    assert not wrong, f"这些按钮要关的弹窗不是它自己所在的那个：{wrong}"
+
+
+def test_session_ingest_does_not_reassign_current_pid():
+    """会话捕获里选"入库到哪个项目"以前直接写 `currentPid = pid`。
+
+    屏幕还停在 A，全局指针却去了 B —— 之后在 A 上点「＋ 新建任务」、拖卡片、
+    自动刷新，每一件都落在 B 上，而且没有任何提示。入库目标属于"这次提炼"，
+    不属于"当前正在看谁"，所以它必须是另一个变量。这条静态判据防的是有人改回去。
+    """
+    fn = re.search(r"async function ingestSession\(\).*?\n}", HTML, re.S)
+    assert fn, "找不到 ingestSession"
+    assert "currentPid = pid" not in fn.group(0), "入库时不要动全局 currentPid"
+    assert "summarizeTargetPid" in fn.group(0), "入库目标应记在 summarizeTargetPid 上"

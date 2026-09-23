@@ -216,6 +216,22 @@ def _agent_text(body: str, args: dict) -> str:
     return kanban.redact_text(body) if _redact_arg(args) else body
 
 
+def _tool_content(text, args: dict, is_error: bool = False) -> dict:
+    """代理侧**唯一**的出口：所有 tools/call 的正文（连报错正文一起）都从这儿走。
+
+    为什么收在分发点、而不是让 23 个 handler 各自记得盖：AGENTS 约定 9 说的是
+    "代理侧默认脱敏"，而"各自自觉"= 新增一条就漏一条。2026-09-23 实测漏掉的正好是
+    回执类 —— `kanban_update_task` 的「已解锁 <别的任务标题>」、`kanban_log_progress`
+    的 <任务标题>、`kanban_stats` 的项目名清单（它连 redact 参数都没有）、
+    `kanban_delete_project` 的拒绝正文。标题里写"轮换 sk-xxx 这把"是最常见写法。
+
+    各 handler 里原有的 `_agent_text` 保留：掩码只替换凭据那一段，对同一串重复施加
+    是幂等的，不会把已经盖好的再盖一层。
+    """
+    return {"content": [{"type": "text", "text": _agent_text(str(text), args)}],
+            "isError": is_error}
+
+
 REDACT_SCHEMA = {"type": "boolean", "default": True,
                  "description": "先把密钥/令牌/邮箱打掩码再返回（默认 true）；确实需要原文时显式传 false"}
 
@@ -363,8 +379,13 @@ def t_update_task(args: dict) -> str:
     # 报"你刚放行了哪几条"：不然代理得再问一遍 kanban_next_task 才知道下一步做什么
     unblock = ("；已解锁 " + "、".join(f"{x['title']} [{x['id']}]" for x in un[:5])
                + ("…" if len(un) > 5 else "")) if un else ""
-    return (f"任务 [{tid}] 已更新为 {updated['status']}/{updated['priority']}"
-            f"（所属项目 {info.get('project', '')}）{tail}{unblock}")
+    # 整条回执走 `_agent_text`：`unblock` 里是**别的任务的标题**、`info['project']` 是
+    # 项目名，都是这次调用方没有提供、也不该原样拿到的存量内容 ——
+    # 而"轮换 sk-xxx 这把"写在任务标题里是最常见的写法。
+    # 分发点那层也会再盖一次（幂等），这里盖是因为**源头就不该出明文**。
+    return _agent_text(
+        f"任务 [{tid}] 已更新为 {updated['status']}/{updated['priority']}"
+        f"（所属项目 {info.get('project', '')}）{tail}{unblock}", args)
 
 
 def t_next_task(args: dict) -> str:
@@ -548,7 +569,8 @@ def t_log_progress(args: dict) -> str:
     except kanban.HTTPException as e:
         raise ValueError(f"{e.detail}（task_id={tid}）") from None
     entry = task["journal"][-1]
-    return f"已记录到任务 [{tid}]（{task.get('title')}）：{entry.get('text')}"
+    # 同上：括号里是**存量任务标题**，不是这次调用方给的内容（正文才是），所以必须过出口
+    return _agent_text(f"已记录到任务 [{tid}]（{task.get('title')}）：{entry.get('text')}", args)
 
 
 def t_memory_add(args: dict) -> str:
@@ -1281,12 +1303,11 @@ def handle(msg: dict) -> dict | None:
             return _err(mid, -32602, "params.arguments 必须是对象")
         try:
             _validate_args(TOOL_BY_NAME[name].get("inputSchema") or {}, args)
-            text = handler(args)
-            return _ok(mid, {"content": [{"type": "text", "text": text}], "isError": False})
+            return _ok(mid, _tool_content(handler(args), args))
         except Exception as e:
             log(f"工具 {name} 执行失败：{traceback.format_exc()}")
             detail = getattr(e, "detail", None) or str(e) or type(e).__name__
-            return _ok(mid, {"content": [{"type": "text", "text": f"执行失败：{detail}"}], "isError": True})
+            return _ok(mid, _tool_content(f"执行失败：{detail}", args, is_error=True))
 
     if method == "resources/list":
         return _ok(mid, {"resources": list_resources(), "ttlMs": 60000, "cacheScope": "public"})

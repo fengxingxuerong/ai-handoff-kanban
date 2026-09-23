@@ -120,20 +120,81 @@ def test_server_discover(mcp):
     assert res["serverInfo"]["name"] == "ai-kanban" and len(res["tools"]) >= 23
 
 
+def _registered_tools(server_src: str) -> set[str]:
+    block = server_src.split("HANDLERS = {", 1)[1].split("\n}", 1)[0]
+    return set(re.findall(r'^\s*"(kanban_[a-z_]+)":', block, re.M))
+
+
+def test_no_agent_reply_can_carry_a_key_stored_in_the_board(mcp):
+    """把密钥写进板子的各个字段，然后**逐个工具**考一遍。
+
+    AGENTS 约定 9 说"代理侧默认就是脱敏的"，而这条历史上一直接不住：读路径补完，
+    写回执漏了（`kanban_update_task` 的「已解锁 <标题>」、`kanban_log_progress` 的
+    <标题>）；`kanban_stats` 更是连 `redact` 参数都没有。逐条点名是补不完的，
+    所以这里覆盖的是"注册并广播的每一个工具"——新增一条没进这张表就直接红。
+
+    判据是"回执里没有原文"，不是"回执里有掩码"：后者会因为内容本来就不该出现
+    掩码而假绿。掩码只替换凭据那一段，所以 id / 状态 / 中文说明都不受影响。
+    """
+    secret = "sk-" + "AUDIT" + "0123456789abcdef"     # 拼起来写：不在仓库里留下完整形态
+    pid = last_id(mcp.tool("kanban_create_project", {
+        "name": "审计用项目", "background": f"背景里写一把 {secret}",
+        "handoff_note": f"交接说明里也写 {secret}"})[0])
+    mcp.tool("kanban_update_project", {"project_id": pid, "next_action": f"下一步 {secret}"})
+    tid = last_id(mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": f"轮换 {secret}", "desc": f"描述 {secret}"})[0])
+    blocker = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "前置"})[0])
+    mcp.tool("kanban_update_task", {"task_id": tid, "depends_on": [blocker]})
+    mcp.tool("kanban_log_progress", {"task_id": tid, "text": f"过程记录 {secret}"})
+    mid = last_id(mcp.tool("kanban_memory_add", {"project_id": pid, "text": f"决策 {secret}"})[0])
+    mcp.tool("kanban_update_task", {"task_id": blocker, "status": "已完成"})
+
+    calls: dict[str, dict] = {
+        "kanban_list_projects": {}, "kanban_get_project": {"project_id": pid},
+        "kanban_find_project": {"query": "审计"}, "kanban_stats": {},
+        "kanban_handoff": {"project_id": pid}, "kanban_context": {"project_id": pid},
+        "kanban_agents_md": {"project_id": pid},
+        "kanban_today": {}, "kanban_search_tasks": {"query": "轮换"},
+        "kanban_next_task": {"project_id": pid}, "kanban_list_memories": {"project_id": pid},
+        "kanban_export_all": {}, "kanban_list_backups": {},
+        "kanban_create_project": {"name": f"新建时带上 {secret}"},
+        "kanban_add_task": {"project_id": pid, "title": f"再加一条 {secret}"},
+        "kanban_update_project": {"project_id": pid, "priority": "高"},
+        "kanban_update_task": {"task_id": tid, "status": "进行中"},
+        "kanban_log_progress": {"task_id": tid, "text": "又记一笔"},
+        "kanban_memory_add": {"project_id": pid, "text": f"再记一条 {secret}"},
+        "kanban_backup": {}, "kanban_delete_memory": {"memory_id": mid},
+        "kanban_delete_task": {"task_id": tid},
+        "kanban_delete_project": {"project_id": pid, "confirm": True},
+    }
+    registered = _registered_tools(SERVER.read_text(encoding="utf-8"))
+    # 漏考 = 红，而不是静默少测一个
+    assert set(calls) == registered, (
+        f"这张表没覆盖全部工具：没考 {sorted(registered - set(calls))}；"
+        f"多考 {sorted(set(calls) - registered)}")
+
+    leaked: list[str] = []
+    for name, args in calls.items():
+        text, _err = mcp.tool(name, args)
+        if secret in text:
+            # 断言消息里带上现场：只报"哪个工具漏了"看不出漏在哪个字段，等于还得再跑一遍
+            leaked.append(f"{name} → {text.replace(secret, '‹密钥›')[:100]}")
+    assert not leaked, "这些工具的默认回执里出现了密钥原文：\n  " + "\n  ".join(leaked)
+
+
 def test_every_registered_tool_is_advertised_and_actually_called(mcp):
     """工具面要三个方向都对得上，以前只数一个**个数**。
 
     - 注册了却没广播 = 智能体永远看不见，写了等于没写；
     - 广播了却没有任何一条用例真调用过 = 上线时没人知道它返什么形状；
     - 这个文件是**子进程**跑的，`pytest.ini` 那个百分比量不到它（实测加
-      `--cov=scripts/mcp_server.py` 连 TOTAL 都不动），所以这条判据必须自己能跑。
+      `--cov=scripts/mcp_server.py` 连 TOTAL 都不变），所以这条判据必须自己能跑。
 
     只查 registered ⊆ called，不查反向：`kanban_not_exist` 这类名字是故意写的
     负向探针（测"叫不存在的工具怎么报错"），拿反向断言会把它们判成缺陷。
     """
     src = SERVER.read_text(encoding="utf-8")
-    block = src.split("HANDLERS = {", 1)[1].split("\n}", 1)[0]
-    registered = set(re.findall(r'^\s*"(kanban_[a-z_]+)":', block, re.M))
+    registered = _registered_tools(src)
     advertised = {t["name"] for t in mcp.call("tools/list")["result"]["tools"]}
     assert registered == advertised, f"注册与广播不一致：{sorted(registered ^ advertised)}"
 

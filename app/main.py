@@ -447,6 +447,16 @@ def last_good_file() -> Path:
     return data_file().with_suffix(LAST_GOOD_SUFFIX)
 
 
+def before_restore_file() -> Path:
+    """每次恢复**之前**把当时的数据另存到这里 —— 恢复错了的那条退路。
+
+    单独一个函数是因为这个路径以前只在写入处硬编码过一次，于是"可恢复来源"的白名单
+    根本不认识它：界面向用户承诺"覆盖前会自动另存"，实际没有任何入口能把它拿回来。
+    只有一份（下一次恢复会覆盖），所以对外要说清是"最近一次恢复前"。
+    """
+    return data_dir() / "projects.json.before-restore.bak"
+
+
 def _load_data() -> dict:
     global _DATA_RECOVERED, _DATA_RECOVERED_FROM
     f = data_file()
@@ -2078,6 +2088,36 @@ class ImportBody(BaseModel):
     content: str = Field(..., min_length=2, max_length=10_000_000)
 
 
+def _writable_projects(projects: list) -> tuple[list, list[str]]:
+    """挑出"以后读得回来"的项目，并把丢掉的条目说清楚：返回 (可用列表, 丢弃说明)。
+
+    读路径是按 `p["id"]` / `p["name"]` 硬下标取值的，而 `_sanitize` 明写"没有 id 的条目
+    不补"（理由见 `_dedupe_ids`）—— 所以一条缺 id 的项目一旦落盘，**每一个读接口都会 500**，
+    而主文件仍是合法 JSON、自愈不会介入。凡是"整份覆盖"的入口（导入、恢复）都必须先过这道。
+
+    丢字必须报出来而不是悄悄少一个：用户以为恢复回来的是完整的一份，
+    而"少了两个项目"和"一个没少"在现在的界面上长得一模一样。
+    """
+    kept: list = []
+    dropped: list[str] = []
+    for i, p in enumerate(projects):
+        name = p.get("name") if isinstance(p, dict) else None
+        if isinstance(p, dict) and p.get("id") and name:
+            kept.append(p)
+            continue
+        why = ("不是对象" if not isinstance(p, dict)
+               else ("缺 id" if not p.get("id") else "缺名称"))
+        dropped.append(f"「{str(name)[:40]}」{why}" if name else f"第 {i + 1} 条：{why}")
+    return kept, dropped
+
+
+def _writable_memories(rows: list) -> list[dict]:
+    """记忆层的同一道筛选。导入以前要求 id+text、恢复只要求 id —— 同一个"整份覆盖"
+    两条路两套规则，正是这个项目反复出事的那个形状；一条空文本的记忆在两处都应该丢。
+    """
+    return [m for m in rows if isinstance(m, dict) and m.get("id") and m.get("text")]
+
+
 @app.post("/api/data/import")
 def import_all_data(body: ImportBody):
     try:
@@ -2095,12 +2135,12 @@ def import_all_data(body: ImportBody):
     projects = cleaned.get("projects")
     if not isinstance(projects, list):
         raise HTTPException(400, "文件里没有 projects 数据")
-    projects = [p for p in projects if isinstance(p, dict) and p.get("id") and p.get("name")]
+    projects, dropped = _writable_projects(projects)
     # 记忆层：老导出文件里没有这个键 —— 那就**不动**当前记忆，不能因为导入而清空
     raw_mem = cleaned.get("memories")
     mem_items = None
     if isinstance(raw_mem, list):
-        mem_items = [m for m in raw_mem if isinstance(m, dict) and m.get("id") and m.get("text")]
+        mem_items = _writable_memories(raw_mem)
 
     # 导入前自动留一份快照（零删除安全网，随时可从备份回滚）
     try:
@@ -2115,6 +2155,10 @@ def import_all_data(body: ImportBody):
         return True, {"ok": True, "imported": len(projects)}
 
     result = mutate(worker)[1]
+    if dropped:
+        result["dropped_invalid"] = dropped
+        result["dropped_note"] = (f"{len(dropped)} 条项目缺 id 或名称 —— 留下会让整个看板读不回来，"
+                                  "已跳过：" + "；".join(dropped[:5]))
     declared = parsed.get("schema_version")
     if isinstance(declared, int) and declared > SCHEMA_VERSION:
         # 只说话、不拒绝：这份导出多半来自更新的看板，字段是超集，硬挡等于把用户关在门外。
@@ -2523,8 +2567,11 @@ def _peek_projects(path: Path) -> dict:
         projects = data.get("projects")
         if not isinstance(projects, list):
             raise ValueError("不是看板数据结构")
+        _, unusable = _writable_projects(projects)
         return {
             "usable": True, "reason": "", "project_count": len(projects),
+            # 恢复前先让人看见"这份里有多少条是拿不回来的"，而不是恢复完才发现少了几项
+            "unusable_count": len(unusable), "unusable": unusable[:5],
             "task_count": sum(len(p.get("tasks") or []) for p in projects),
             "names": [p.get("name", "") for p in projects[:3]],
             "size": stat.st_size,
@@ -2533,6 +2580,7 @@ def _peek_projects(path: Path) -> dict:
     except Exception as e:
         return {"usable": False, "reason": f"无法解析：{str(e)[:100]}",
                 "project_count": 0, "task_count": 0, "names": [],
+                "unusable_count": 0, "unusable": [],
                 "size": stat.st_size,
                 "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")}
 
@@ -2544,6 +2592,9 @@ def _resolve_recoverable(source: str) -> Path | None:
         return p if p.exists() else None
     if source == "last-good":
         p = last_good_file()
+        return p if p.exists() else None
+    if source == "before-restore":
+        p = before_restore_file()
         return p if p.exists() else None
     if source.startswith("backup_") and "/" not in source and "\\" not in source:
         p = data_dir() / "backups" / source / "projects.json"
@@ -2559,6 +2610,11 @@ def list_recoverable():
     if lf.exists():
         out.append({"source": "last-good", "label": "最近一次正常保存（损坏时自动用它恢复）",
                     **_peek_projects(lf)})
+    br = before_restore_file()
+    if br.exists():
+        out.append({"source": "before-restore",
+                    "label": "最近一次恢复之前的现场（再做一次恢复会覆盖这份）",
+                    **_peek_projects(br)})
     bak = data_file().with_suffix(".json.bak")
     if bak.exists():
         out.append({"source": "bak", "label": "损坏文件留存（仅供取证，通常无法解析）",
@@ -2584,11 +2640,24 @@ def restore_data(body: RestoreBody):
         raise HTTPException(400, "该来源无法解析为数据文件，已放弃恢复")
     if not isinstance(restored.get("projects"), list):
         raise HTTPException(400, "该来源内容不是看板数据，已放弃恢复")
+    # 恢复与导入必须过同一道筛选：以前 import 逐条筛 id/名称、restore 只看"是不是列表"，
+    # 于是一条缺 id 的项目就能从这里进来 —— 之后**每一个读接口都 500**，
+    # 而主文件是合法 JSON，自愈不介入，等于把"救命的退路"变成"一键让看板变砖"。
+    kept, dropped = _writable_projects(restored["projects"])
+    if not kept:
+        raise HTTPException(400, f"该来源里没有任何可恢复的项目（{len(dropped)} 条都缺 id 或名称），"
+                                 "已放弃恢复；当前数据保持原样")
+    restored["projects"] = kept
+    # 约定 13：幂等键表是"本进程刚才那次重试"的窗口，导出/导入都不带它。
+    # 恢复同样是时间机器（`backup_*/projects.json` 里原样躺着当时整张表），
+    # 复活之后拿同一个键建**新**东西会被判成"重试"而一次落盘都不做。
+    revived_refs = len(restored.get(IDEM_KEY) or {})
+    restored.pop(IDEM_KEY, None)
 
     def worker(data: dict):
         try:
             if data_file().exists():
-                shutil.copy2(data_file(), data_dir() / "projects.json.before-restore.bak")
+                shutil.copy2(data_file(), before_restore_file())
         except Exception:
             pass
         data.clear()
@@ -2611,7 +2680,7 @@ def restore_data(body: RestoreBody):
         except Exception:
             loaded = None
         if isinstance(loaded, list):
-            payload = [m for m in loaded if isinstance(m, dict) and m.get("id")]
+            payload = _writable_memories(loaded)
 
             def wm(items: list[dict]):
                 items[:] = payload
@@ -2623,6 +2692,12 @@ def restore_data(body: RestoreBody):
     out = {"ok": True, "source": body.source,
            "project_count": len(restored["projects"]),
            "task_count": sum(len(p.get("tasks") or []) for p in restored["projects"])}
+    if dropped:
+        out["dropped_invalid"] = dropped
+        out["dropped_note"] = (f"{len(dropped)} 条项目缺 id 或名称，恢复回来会让整个看板读不回来，"
+                               "已跳过：" + "；".join(dropped[:5]))
+    if revived_refs:
+        out["idem_table_reset"] = revived_refs
     if memory_count >= 0:
         out["memory_count"] = memory_count
     return out
@@ -2660,6 +2735,7 @@ def _summarize_inner(pid: str, text: str) -> dict:
     user_msg = (f"项目：{p['name']}\n"
                 f"现有任务：{json.dumps(existing, ensure_ascii=False)}\n\n"
                 f"会话记录：\n{text}")
+    batch_id = uuid.uuid4().hex      # 这一次提炼的身份证号，见下面返回处的注释
     try:
         cfg = llm.load_config()
         text, ep = llm.chat(cfg, [
@@ -2669,7 +2745,10 @@ def _summarize_inner(pid: str, text: str) -> dict:
         parsed = _extract_json(text)
         if not isinstance(parsed, dict):
             raise ValueError("提炼结果格式不正确")
-        return {"parsed": parsed, "endpoint": ep}
+        # batch_ref：前端"应用到项目"拿它当幂等键前缀。同一个弹窗里手抖点两次
+        # 「✅ 应用到项目」，以前会把那批任务原样建两遍（2026-09-23 实测：弹窗关错门、
+        # 按钮还在，再点一次即重复），带上键之后第二次只是重放第一次的结果。
+        return {"parsed": parsed, "endpoint": ep, "batch_ref": batch_id}
     except llm.LLMError as e:
         raise HTTPException(502, f"AI 调用失败：{e}")
     except HTTPException:

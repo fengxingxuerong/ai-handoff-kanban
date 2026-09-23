@@ -1130,7 +1130,7 @@
     </div>
     <div class="mfoot">
       <button class="btn" id="session-ingest-btn" style="display:none" data-act="ingestSession">✨ AI 提炼</button>
-      <button class="btn primary" id="session-apply-btn" style="display:none" data-act="applySummarize">✅ 应用到项目</button>
+      <button class="btn primary" id="session-apply-btn" style="display:none" data-act="applySummarize" data-arg="session-modal">✅ 应用到项目</button>
     </div>
   </div>
 </div>
@@ -1188,7 +1188,7 @@
     </div>
     <div class="mfoot">
       <button class="btn" data-act="closeModal" data-arg="summarize-modal">取消</button>
-      <button class="btn primary" id="summarize-apply-btn" style="display:none" data-act="applySummarize">✅ 应用：创建任务并更新</button>
+      <button class="btn primary" id="summarize-apply-btn" style="display:none" data-act="applySummarize" data-arg="summarize-modal">✅ 应用：创建任务并更新</button>
     </div>
   </div>
 </div>
@@ -1497,7 +1497,7 @@ const ACTIONS = {
   scanSessions: () => scanSessions(),
   dismissReminder: () => dismissReminder(),
   ingestSession: () => ingestSession(),
-  applySummarize: () => applySummarize(),
+  applySummarize: arg => applySummarize(arg),
   showRecoverable: () => showRecoverable(),
   restoreData: (arg) => restoreData(arg),
   sendCommand: () => sendCommand(),
@@ -3003,6 +3003,11 @@ async function loadGitInfo() {
 
 // ============ 会话提炼 ============
 let summarizeData = null;
+// 这次提炼要落到哪个项目 / 这批任务的幂等键前缀。
+// 单独拿出来的理由：以前"选另一个项目入库"直接改全局 currentPid，屏幕还停在原项目，
+// 之后点「＋ 新建任务」却建进了另一个项目 —— 目标属于这次提炼，不属于"当前正在看谁"。
+let summarizeTargetPid = "";
+let summarizeBatchRef = "";
 
 async function openSummarize() {
   if (!currentPid) return;
@@ -3021,6 +3026,8 @@ async function runSummarize() {
   try {
     const r = await api("/api/ai/summarize", { method: "POST", body: JSON.stringify({ pid: currentPid, text }) });
     summarizeData = r.parsed;
+    summarizeTargetPid = currentPid;
+    summarizeBatchRef = r.batch_ref || "";
     renderSummarizeResult(r.parsed);
   } catch (e) { toast("提炼失败：" + e.message); }
   btn.classList.remove("ai-loading-btn");
@@ -3043,22 +3050,31 @@ function renderSummarizeResult(d) {
     ((d.new_tasks || []).length || d.next_action || d.handoff_note_updates) ? "block" : "none";
 }
 
-async function applySummarize() {
+async function applySummarize(modalId) {
   if (!summarizeData) return;
   if (!confirm("将创建提炼出的任务，并更新「下一步行动」与交接说明，确认？")) return;
   const btn = document.getElementById("summarize-apply-btn");
   btn.classList.add("ai-loading-btn");
-  let ok = 0, fail = 0;
+  // 入库目标跟着**这次提炼**走，不跟着 currentPid 走：会话捕获里选了别的项目时，
+  // 以前会把全局 currentPid 一起改掉，于是屏幕上还停在 A、之后点的每一件事都落在 B。
+  const target = summarizeTargetPid || currentPid;
+  let ok = 0, fail = 0, memFail = 0;
   try {
-    for (const t of (summarizeData.new_tasks || [])) {
+    const tasks = summarizeData.new_tasks || [];
+    for (let i = 0; i < tasks.length; i++) {
+      const t = tasks[i];
       try {
-        await api("/api/projects/" + currentPid + "/tasks", { method: "POST", body: JSON.stringify({
-          title: t.title || "提炼任务", desc: t.desc || "", priority: t.priority || "中", status: t.status || "待办", agent: "",
-        }) });
+        // client_ref = 这一次提炼的身份证 + 序号：同一个弹窗里连点两次「应用到项目」
+        // 以前会原样建两遍（弹窗没关掉、按钮还在），现在第二次只是重放第一次的结果。
+        const ref = (summarizeBatchRef || "apply-" + target) + ":" + i;
+        await api(`/api/projects/${target}/tasks?client_ref=${encodeURIComponent(ref)}`,
+          { method: "POST", body: JSON.stringify({
+            title: t.title || "提炼任务", desc: t.desc || "", priority: t.priority || "中",
+            status: t.status || "待办", agent: "" }) });
         ok++;
       } catch (e) { fail++; }
     }
-    const p = await api("/api/projects/" + currentPid);
+    const p = await api("/api/projects/" + target);
     let changed = false;
     if (summarizeData.next_action && summarizeData.next_action !== p.next_action) {
       p.next_action = summarizeData.next_action; changed = true;
@@ -3067,19 +3083,25 @@ async function applySummarize() {
       const note = (p.handoff_note || "") + (p.handoff_note ? "\n\n" : "") + "**会话提炼补充**：" + summarizeData.handoff_note_updates;
       if (note !== p.handoff_note) { p.handoff_note = note; changed = true; }
     }
-    if (changed) await api("/api/projects/" + currentPid, { method: "PUT", body: JSON.stringify(p) });
+    if (changed) await api("/api/projects/" + target, { method: "PUT", body: JSON.stringify(p) });
     // 会话中的决策/坑/约定自动沉淀为结构化记忆
     for (const m of (summarizeData.memories || [])) {
       if (!m.text) continue;
       try {
         await api("/api/memories", { method: "POST", body: JSON.stringify({
-          pid: currentPid, type: m.type || "事实", text: m.text, source: "会话提炼" }) });
-      } catch (e) { /* 记忆写入失败不阻塞主流程 */ }
+          pid: target, type: m.type || "事实", text: m.text, source: "会话提炼" }) });
+      } catch (e) { memFail++; }        // 不阻塞主流程，但不能一句话都不说
     }
-    toast(`应用完成：新增任务 ${ok} 个，失败 ${fail} 个 ✓`);
-    closeModal("summarize-modal");
-    current = await api("/api/projects/" + currentPid);
-    renderDetail();
+    toast(`应用完成：新增任务 ${ok} 个，失败 ${fail} 个 ✓`
+          + (memFail ? `；另有 ${memFail} 条记忆没记上（点「查记忆」可以看现状）` : ""));
+    // 关的是**发起这次应用的那个弹窗**：会话捕获的按钮在 session-modal 里，
+    // 以前写死关 summarize-modal，于是捕获弹窗不关、按钮还在，再点一次就是第二遍。
+    closeOneModal(modalId || "summarize-modal");
+    summarizeBatchRef = "";            // 这批已经落地了，别拿同一把键去建下一批
+    if (target === currentPid) {
+      current = await api("/api/projects/" + currentPid);
+      renderDetail();
+    }
     loadOverview();
   } catch (e) { toast("应用失败：" + e.message); }
   btn.classList.remove("ai-loading-btn");
@@ -3131,6 +3153,8 @@ async function onImportFilePicked(ev) {
     if (r && typeof r.memories === "number") msg += `、${r.memories} 条记忆`;
     // 文件声明的结构版本比本看板新：字段可能被规范化掉了，这句话必须让用户看到
     if (r && r.schema_note) msg += "｜" + r.schema_note;
+    // 有条目被丢掉同样要说：导入别人的板子时"少两个项目"和"一个没少"以前长得一模一样
+    if (r && r.dropped_note) msg += "｜⚠ " + r.dropped_note;
     toast(msg);
     await loadOverview();
   } catch (e) { toast("导入失败：" + e.message); }
@@ -3203,10 +3227,13 @@ async function showRecoverable() {
 
 async function restoreData(source) {
   if (!source) return;
-  if (!confirm(`确定用「${source}」覆盖当前看板数据吗？\n当前数据会先另存为 before-restore.bak。`)) return;
+  if (!confirm(`确定用「${source}」覆盖当前看板数据吗？\n当前数据会先另存为 before-restore.bak，`
+               + `在下面的列表里能选回来。`)) return;
   try {
     const r = await api("/api/restore", { method: "POST", body: JSON.stringify({ source }) });
-    toast(`已恢复 ${r.project_count} 个项目、${r.task_count} 个任务 ✓`);
+    // 少恢复了必须说出来：一句"已恢复 N 个项目"分不清"本来就只有 N 个"和"丢了几条"
+    toast(`已恢复 ${r.project_count} 个项目、${r.task_count} 个任务 ✓`
+          + (r.dropped_note ? `\n⚠ ${r.dropped_note}` : ""));
     await loadOverview();
     showRecoverable();
   } catch (e) { toast("恢复失败：" + e.message); }
@@ -3501,14 +3528,16 @@ async function ingestSession() {
   if (!capturedSession) return;
   const pid = document.getElementById("session-pid").value;
   if (!pid) { toast("请选择入库项目"); return; }
-  currentPid = pid;
+  // 这里以前写 `currentPid = pid`：在 A 的详情页把会话入库到 B，之后屏幕仍是 A，
+  // 但"＋ 新建任务"、拖卡片、刷新全都打在 B 上 —— 一次选择把全局改掉了。
+  summarizeTargetPid = pid;
   const btn = document.getElementById("session-ingest-btn");
   btn.classList.add("ai-loading-btn");
   try {
     const r = await api("/api/sessions/ingest", { method: "POST", body: JSON.stringify({
       pid, path: capturedSession.path }) });
     summarizeData = r.parsed;
-    // 复用提炼结果渲染
+    summarizeBatchRef = r.batch_ref || "";
     const box = document.getElementById("session-result");
     box.style.display = "block";
     const d = r.parsed;
@@ -3527,7 +3556,8 @@ async function ingestSession() {
   btn.classList.remove("ai-loading-btn");
 }
 
-// 会话应用后复用 applySummarize（它基于 summarizeData + currentPid，弹窗关闭不冲突）
+// 会话捕获与粘贴提炼共用 applySummarize：入库目标与幂等键都挂在 summarizeTargetPid
+// / summarizeBatchRef 上（不是 currentPid），两个弹窗各自关各自的那一个。
 // ============ 逾期/临期提醒 ============
 function setBanner(visible) {
   const banner = document.getElementById("remind-banner");

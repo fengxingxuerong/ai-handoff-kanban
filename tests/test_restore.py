@@ -146,3 +146,133 @@ def test_restore_overwrites_instead_of_merging(app_client):
     assert api.post("/api/restore", {"source": folder})[0] == 200
     names = [p["name"] for p in api.get("/api/projects")[1]["projects"]]
     assert names == ["原有项目"], f"应完全覆盖为快照内容，实际：{names}"
+
+
+def _poison_a_backup(api, folder: str, extra: dict) -> None:
+    """把一条"读不回来"的项目塞进快照 —— 手改过的 projects.json、别人导出的包都会这样"""
+    src = api.data_dir / "backups" / folder / "projects.json"
+    raw = json.loads(src.read_text(encoding="utf-8"))
+    raw["projects"].append(extra)
+    src.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+
+def test_restore_drops_entries_that_would_brick_every_read(app_client):
+    """恢复以前只看"projects 是不是列表"，导入却逐条筛 id/名称。
+
+    2026-09-23 实盘复现：从这里放进一条缺 id 的项目，恢复返回 200，
+    之后 `/api/projects` 与 `/api/stats` 全部抛 KeyError（线上就是 500），
+    而主文件是合法 JSON —— 损坏自愈根本不会介入，等于把"救命的退路"变成"一键变砖"。
+    判据因此不是"恢复这个动作成功"，而是**恢复完还读得回来**。
+    """
+    api = app_client
+    seed_projects(api, "干净的项目")
+    assert api.post("/api/backup")[0] == 200
+    folder = api.get("/api/backups")[1]["backups"][0]["name"]
+    _poison_a_backup(api, folder, {"name": "缺 id 的项目", "status": "规划中", "tasks": []})
+
+    st, body = api.post("/api/restore", {"source": folder})
+    assert st == 200, body
+    assert body["dropped_invalid"] and "缺 id" in body["dropped_note"], body
+
+    st2, lst = api.get("/api/projects")
+    assert st2 == 200, f"恢复完读不回来了：{lst}"
+    assert [p["name"] for p in lst["projects"]] == ["干净的项目"]
+    assert api.get("/api/stats")[0] == 200
+
+
+def test_restore_rejects_a_source_with_nothing_usable_in_it(app_client):
+    """整份都是坏条目时报错并原地不动 —— 恢复一次把看板清空，比不恢复更糟。"""
+    api = app_client
+    seed_projects(api, "要保住的项目")
+    assert api.post("/api/backup")[0] == 200
+    folder = api.get("/api/backups")[1]["backups"][0]["name"]
+    src = api.data_dir / "backups" / folder / "projects.json"
+    raw = json.loads(src.read_text(encoding="utf-8"))
+    raw["projects"] = [{"name": "缺 id 的"}]
+    src.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+    st, body = api.post("/api/restore", {"source": folder})
+    assert st == 400, body
+    names = [p["name"] for p in api.get("/api/projects")[1]["projects"]]
+    assert names == ["要保住的项目"], "拒绝恢复就不该动现有数据"
+
+
+def test_recoverable_preview_counts_unusable_entries_beforehand(app_client):
+    """按下去之前就得看见"这份里有几条拿回来会让看板报错"，不是事后才发现少了几项。"""
+    api = app_client
+    seed_projects(api, "甲", "乙")
+    assert api.post("/api/backup")[0] == 200
+    folder = api.get("/api/backups")[1]["backups"][0]["name"]
+    _poison_a_backup(api, folder, {"status": "规划中", "tasks": []})
+
+    _, rec = api.get("/api/recoverable")
+    entry = next(r for r in rec["recoverable"] if r["source"] == folder)
+    assert entry["usable"] is True
+    assert entry["unusable_count"] == 1, entry
+    assert "缺 id" in entry["unusable"][0], entry
+
+
+def test_pre_restore_copy_is_itself_restorable(app_client):
+    """界面向用户承诺"覆盖前会自动把当前数据另存为 before-restore.bak"，
+    但这个路径以前只在写入处硬编码过一次，恢复来源的白名单根本不认识它 ——
+    恢复错了在界面上无路可走，而且第二次恢复会把这份也覆盖掉。
+    """
+    api = app_client
+    seed_projects(api, "快照里的项目")
+    assert api.post("/api/backup")[0] == 200
+    folder = api.get("/api/backups")[1]["backups"][0]["name"]
+    api.create_project("恢复前这一刻的项目")
+    assert api.post("/api/restore", {"source": folder})[0] == 200
+
+    sources = {r["source"] for r in api.get("/api/recoverable")[1]["recoverable"]}
+    assert "before-restore" in sources, f"承诺的退路没出现在列表里：{sources}"
+
+    api.create_project("恢复之后又改的一笔")
+    api.create_project("恢复之后又改的一笔")
+    assert api.post("/api/restore", {"source": "before-restore"})[0] == 200
+    names = [p["name"] for p in api.get("/api/projects")[1]["projects"]]
+    # 退路要回到"按恢复之前那一刻"：那时板子上是两笔，而第 4 步恢复进来的那笔也在里面
+    assert names == ["恢复前这一刻的项目", "快照里的项目"], f"退路内容不对：{names}"
+    assert "恢复之后又改的一笔" not in names
+
+
+def test_restore_does_not_revive_the_idempotency_window(app_client):
+    """数据层约定 13：`_client_refs` 是本进程"刚才那次重试"的窗口，导出/导入都不带它。
+
+    恢复是同一类时间机器，而 `backup_*/projects.json` 里原样躺着当时整张键表 ——
+    `data.clear(); data.update(restored)` 会把它一起复活，之后拿同一个键建**新**东西
+    会被当成重放：返回一个旧 id、一次落盘都不做，用户以为建好了。
+    """
+    api = app_client
+    _, created = api.post("/api/projects?client_ref=win-1", {"name": "带键建的项目"})
+    first_id = created["id"]
+    # 先确认键在这一次里是真生效的（否则后面那条"重放了"也说明不了什么）
+    _, replay = api.post("/api/projects?client_ref=win-1", {"name": "换个正文的重复请求"})
+    assert replay["id"] == first_id and replay.get("client_ref_replayed") is True, replay
+
+    assert api.post("/api/backup")[0] == 200
+    folder = api.get("/api/backups")[1]["backups"][0]["name"]
+    st, r = api.post("/api/restore", {"source": folder})
+    assert st == 200, r
+    assert r.get("idem_table_reset") == 1, f"恢复时应报清楚作废了几把键：{r}"
+
+    _, again = api.post("/api/projects?client_ref=win-1", {"name": "恢复之后新建的同名请求"})
+    assert again["id"] != first_id, "键被复活了：这次创建被判成重放，一个字都没落盘"
+    assert not again.get("client_ref_replayed"), again
+    names = [p["name"] for p in api.get("/api/projects")[1]["projects"]]
+    assert "恢复之后新建的项目" not in names and "恢复之后新建的同名请求" in names, names
+
+
+def test_import_says_what_it_dropped(app_client):
+    """导入可以丢掉读不回来的条目，但不能一声不吭 ——
+    "少两个项目"和"一个没少"在界面上以前长得一模一样。"""
+    api = app_client
+    payload = {"projects": [
+        {"id": "keep00000001", "name": "能读回来的", "status": "规划中", "progress": 0,
+         "priority": "中", "tasks": []},
+        {"name": "读不回来的", "status": "规划中", "tasks": []},
+    ]}
+    st, body = api.post("/api/data/import", {"content": json.dumps(payload)})
+    assert st == 200, body
+    assert body["imported"] == 1
+    assert body["dropped_invalid"] and "缺 id" in body["dropped_note"], body
