@@ -68,7 +68,13 @@ def test_memory_crud_and_filters(app_client):
     assert st == 201 and m["memory"]["type"] == "坑"
 
     app_client.post("/api/memories", {"pid": p["id"], "type": "约定", "text": "提交前跑 npm test"})
-    app_client.post("/api/memories", {"pid": "别的项目", "type": "事实", "text": "不属于这个项目的记忆"})
+    # 以前这里往一个**不存在**的 pid 上挂记忆来验"按项目过滤"—— 那条根本不会被召回，
+    # 断言就退化成"少了一条本来就不存在的东西"（恒绿）。现在挂到真实存在的第二个项目上，
+    # 过滤才真的在过滤。（另一面：`add_memory` 从今天起拒绝未知 pid，见 test_api）
+    _, other = app_client.create_project("另一个真实项目")
+    st_orphan, _ = app_client.post("/api/memories",
+                                   {"pid": other["id"], "type": "事实", "text": "不属于这个项目的记忆"})
+    assert st_orphan == 201, "写到别的项目应当成功，被挡的是按项目过滤的结果"
 
     _, body = app_client.get(f"/api/memories?pid={p['id']}")
     assert len(body["memories"]) == 2, "按项目过滤"
@@ -294,7 +300,9 @@ def test_memory_writes_are_serialized(app_client, monkeypatch):
     monkeypatch.setattr(main, "_load_memories", slow_load)
 
     def add(i: int) -> None:
-        main.add_memory(main.MemoryIn(pid="p1", text=f"并发记忆 {i}"))
+        # pid 留空 = 跨项目的通用记忆（这三条测的是备份/并发/上限，不测归属；
+        # 以前它们用 "p1" 这种不存在的项目 id，而 `add_memory` 从今天起会拦那种写法）
+        main.add_memory(main.MemoryIn(pid="", text=f"并发记忆 {i}"))
 
     threads = [threading.Thread(target=add, args=(i,)) for i in range(3)]
     for t in threads:
@@ -313,7 +321,7 @@ def test_memories_are_capped(app_client, monkeypatch):
     monkeypatch.setattr(main, "MAX_MEMORIES", 5)
     monkeypatch.setattr(main, "KEEP_MEMORIES_ON_TRIM", 3)
     for i in range(8):
-        main.add_memory(main.MemoryIn(pid="p1", text=f"记忆 {i}"))
+        main.add_memory(main.MemoryIn(pid="", text=f"记忆 {i}"))
     items = main._load_memories()
     assert len(items) <= 5, f"超过上限还没裁：{len(items)} 条"
     # 超上限那一次裁到 KEEP，之后又攒回 5 条 —— 留余量是为了不必每次写都裁
@@ -324,7 +332,7 @@ def test_memories_are_capped(app_client, monkeypatch):
 def test_backup_covers_the_memory_layer(app_client):
     from app import main
 
-    main.add_memory(main.MemoryIn(pid="p1", text="备份要带上记忆"))
+    main.add_memory(main.MemoryIn(pid="", text="备份要带上记忆"))
     main.create_backup()
     latest = sorted((main.data_dir() / "backups").iterdir())[-1]
     assert (latest / "memories.json").exists(), "备份里没有记忆层，回滚后决策/坑会全丢"

@@ -922,7 +922,7 @@
         <label>过程日志（自动记录状态流转，也可手动追加）</label>
         <div class="journal-list" id="t-journal-list"></div>
         <div style="display:flex;gap:8px">
-          <input id="t-journal-input" placeholder="追加一条过程记录：做了什么 / 改了什么决策…" style="flex:1">
+          <input id="t-journal-input" maxlength="500" placeholder="追加一条过程记录：做了什么 / 改了什么决策…（单条上限 500 字，长的分几条记）" style="flex:1">
           <button class="btn small" data-act="appendJournal">＋ 记录</button>
         </div>
       </div>
@@ -3305,8 +3305,14 @@ async function runGlobalSearch(q) {
   try {
     const r = await api("/api/search/tasks?q=" + encodeURIComponent(q));
     const list = r.results || [];
+    // "给我 30 条"不等于"只有 30 条"：不说的话，第 31 条在用户眼里就是不存在。
+    // 用 .gs-note 而不是 .gs-item —— 下面给结果行绑点击，提示行不该跟着可点。
+    const note = r.truncated
+      ? `<div class="gs-note" style="opacity:.75;font-size:11.5px;padding:6px 8px">`
+        + `只列出前 ${esc(String(r.limit || list.length))} 条，后面还有 —— 换个更具体的关键词</div>`
+      : "";
     if (!list.length) { box.innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:8px">没有匹配的任务</div>'; return; }
-    box.innerHTML = list.map(t => `
+    box.innerHTML = note + list.map(t => `
       <div class="gs-item" tabindex="0" role="button" data-keyact="1" data-pid="${esc(t.project_id)}" style="cursor:pointer;background:var(--bg-soft);border:1px solid var(--border);border-radius:9px;padding:9px 12px;display:flex;align-items:center;gap:8px">
         <span class="badge st-${taskStCls(t.status)}">${esc(taskStCls(t.status))}</span>
         <span style="flex:1">${esc(t.title)}</span>

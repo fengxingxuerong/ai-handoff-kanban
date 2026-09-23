@@ -455,3 +455,30 @@ def test_search_placeholder_claims_exactly_what_the_filter_reads():
         f"实际读的是 {sorted(read)}")
     assert "background" not in read and "handoff_note" not in read, \
         "列表接口不含这两个字段，要真想搜就得先让接口给（那是另一件事）"
+
+
+def test_journal_input_box_and_backend_share_one_limit():
+    """界面上的 `maxlength` 与后端的 `MAX_JOURNAL_TEXT` 必须是同一个数。
+
+    以前是"输入框收 2000、落盘截到 500"：用户/代理都能提交一条看起来成功、
+    实际少掉 700 字的记录。跨语言的两个数只靠人对齐迟早会漂，所以钉在这里。
+    """
+    import app.main as kanban
+
+    m = re.search(r'id="t-journal-input"[^>]*maxlength="(\d+)"', HTML)
+    assert m, "过程记录输入框没有 maxlength —— 用户会撞到 422 却不知道原因"
+    assert int(m.group(1)) == kanban.MAX_JOURNAL_TEXT, (
+        f"界面允许 {m.group(1)} 字，后端只留 {kanban.MAX_JOURNAL_TEXT} 字")
+
+
+def test_global_search_tells_the_user_the_list_was_cut():
+    """Ctrl+K 命中到上限时必须说"后面还有"，否则第 31 条在界面上就是不存在。
+
+    和 MCP 那条同源（接口现在回 `truncated`/`limit`），这边管的是人看到的版本。
+    """
+    fn = re.search(r"async function runGlobalSearch\(q\).*?\n}", HTML, re.S)
+    assert fn, "找不到 runGlobalSearch"
+    body = fn.group(0)
+    assert "r.truncated" in body, "没读接口的截断标记，等于替用户猜"
+    assert "后面还有" in body, "截断了却没说"
+    assert "gs-note" in body, "提示行不能复用 .gs-item —— 下面给结果行绑了点击"

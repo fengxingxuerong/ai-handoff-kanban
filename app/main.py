@@ -880,10 +880,16 @@ def redact_text(text: str) -> str:
 
 @app.get("/api/search/tasks")
 def search_tasks(q: str = "", limit: int = 30):
-    """全局任务搜索：跨项目按标题/描述/负责人匹配"""
+    """全局任务搜索：跨项目按标题/描述/负责人匹配
+
+    带 `truncated`：命中到上限和"总共就这么些"是两件必须分开说的事。
+    以前响应里只有 `results`，调用方（智能体尤其）会把"给我 30 条"当成"只有 30 条"，
+    于是第 31 条在它的认知里不存在 —— 而 MCP 侧那句"已到上限 50"是按另一个数字写的，
+    两边都在猜。
+    """
     q = (q or "").strip()
     if not q:
-        return {"results": []}
+        return {"results": [], "truncated": False, "limit": 30}
     limit = max(1, min(50, int(limit)))
     data = get_projects_data()
     ql = q.lower()
@@ -908,8 +914,9 @@ def search_tasks(q: str = "", limit: int = 30):
                     "project_name": p.get("name", ""),
                 })
                 if len(out) >= limit:
-                    return {"results": out}
-    return {"results": out}
+                    # 命中到上限就早退：这不代表"只有这么多"，所以把这件事明确说出来
+                    return {"results": out, "truncated": True, "limit": limit}
+    return {"results": out, "truncated": False, "limit": limit}
 
 
 def take_recovered_flag() -> tuple[bool, str]:
@@ -1319,7 +1326,9 @@ def update_task(tid: str, body: TaskIn):
 
 
 MAX_JOURNAL = 50           # 每个任务最多留多少条过程记录
-MAX_JOURNAL_TEXT = 500     # 单条正文上限（输入框限制 2000，这里再收一道）
+MAX_JOURNAL_TEXT = 500     # 单条正文上限：这一个数同时是 HTTP/MCP 的入参上限与落盘长度
+                           # （以前入参收 2000、落盘悄悄截到 500，两侧的"1200 字记录"
+                           # 会少掉 700 字而回执不说 —— 现在超限在边界就被挡）
 
 
 def _append_journal(t: dict, text: str, when: str = "") -> None:
@@ -1352,7 +1361,10 @@ def clean_journal(raw) -> list[dict]:
 
 
 class JournalIn(BaseModel):
-    text: str = Field(..., min_length=1, max_length=2000)
+    # 上限与 `MAX_JOURNAL_TEXT` 同一个数（以前声明收 2000、落盘偷偷截到 500 ——
+    # 智能体写 1200 字的记录会无声掉一半，而回执还写着"已记录"）。
+    # 对账钉子：test_journal_limit_is_one_number_everywhere
+    text: str = Field(..., min_length=1, max_length=MAX_JOURNAL_TEXT)
 
 
 def append_task_journal(tid: str, text: str) -> dict:
@@ -1855,6 +1867,21 @@ def ai_trends():
 
 # ---- AGENTS.md 生成（对接行业标准） ----
 
+AGENTS_MEMORY_LINES = 12     # 进 AGENTS.md 的记忆条数上限（新的优先）：这文件是给代理读的
+
+
+def _project_memories(pid: str) -> list[dict]:
+    """这个项目该被 AGENTS.md 召回的记忆（新的在前，取前 AGENTS_MEMORY_LINES 条）。
+
+    `kanban_memory_add` 对模型承诺过"记忆会在交接包、AGENTS.md 和 AI 监管里自动召回"，
+    而以前只有前两处真读了记忆 —— 声明与实现不一致时，用户按说明记了坑，
+    换工具接手还是踩一遍。这里把最后一处接上，并限死条数（整份文件是给代理看的，
+    无限追加会把真正重要的构建约定挤出去）。
+    """
+    rows = list_memories(pid=pid)["memories"]      # 排序只有一份：与 /api/memories 同一个口径
+    return rows[:AGENTS_MEMORY_LINES]
+
+
 def _build_agents_md_local(p: dict) -> str:
     """本地规则生成 AGENTS.md（LLM 不可用时的兜底）"""
     lines = [f"# AGENTS.md — {p['name']}", ""]
@@ -1892,6 +1919,14 @@ def _build_agents_md_local(p: dict) -> str:
             lines.append(f"- [{t.get('status', '待办')}] {t.get('title')}（优先级 {t.get('priority', '中')}）"
                          + (f" — 涉及：{refs}" if refs else "") + dep_txt)
         lines.append("")
+    mems = _project_memories(p.get("id", ""))
+    if mems:
+        lines.append("## 项目记忆（决策 / 坑 / 约定）")
+        lines.append("")
+        for m in mems:
+            lines.append(f"- 【{m.get('type') or '事实'}】{m.get('text') or ''}"
+                         f"（{m.get('time') or ''}）")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -1928,6 +1963,10 @@ def _generate_agents_md(p: dict) -> tuple[str, str, str]:
         "next_action": p.get("next_action", ""),
         "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", "")}
                   for t in (p.get("tasks") or [])],
+        # 记忆层也送进去：系统提示词第 2 条要的就是"关键决策、已知的坑"，
+        # 而这三样恰恰是用户特意记在记忆层里的东西（不送就等于白记）
+        "memories": [{"type": m.get("type", ""), "text": m.get("text", "")}
+                     for m in _project_memories(p.get("id", ""))],
     }, ensure_ascii=False, indent=1))
     try:
         cfg = llm.load_config()
@@ -2348,6 +2387,12 @@ def list_memories(pid: str = "", q: str = "", mtype: str = ""):
 def add_memory(body: MemoryIn):
     if body.type not in MEMORY_TYPES:
         body.type = "事实"
+    if body.pid and find_project(body.pid) is None:
+        # 以前不校验：挂在不存在项目上的记忆永远进不了交接包/接手包（那两处按 pid 过滤），
+        # 而回执照样说"已记下 [决策] 到 <pid>" —— 用户以为记下了，其实那条谁也读不到。
+        # 留空 pid 是**有意**的另一回事：那是跨项目的通用记忆。
+        raise HTTPException(400, f"项目不存在：{body.pid}（先用 /api/projects 或 "
+                                f"kanban_list_projects 确认 id；跨项目的通用记忆请把 pid 留空）")
     entry = {
         "id": uuid.uuid4().hex[:12],
         "pid": body.pid, "type": body.type,

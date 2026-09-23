@@ -486,6 +486,33 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
     `client_ref = batch_ref:序号`。两个反例都踩过：不清键 → 下一次执行撞同一把键；
     拿全局兜一个固定前缀 → **下一条**正常指令的第一条创建动作被判成重放而静默不建
     （静默不建比重复建更难查）。拿不到 `batch_ref` 就不带键，退回"可能重复"。
+21. **过程记录的上限只有一个数**：`MAX_JOURNAL_TEXT` 同时是 HTTP 入参上限、MCP schema 的
+    `maxLength`（由常量生成）、落盘截断长度、界面 `maxlength`。以前是"入参收 2000、
+    落盘偷偷截到 500"—— 一条 1200 字的记录少掉 700 字（往往正是"为什么这么决定"那段），
+    而回执写着"已记录"。**超限现在在边界被拒，而不是被静默裁**。
+    对账钉子：`test_journal_limit_is_one_number_everywhere`（后端自己三个声明位）
+    与 `test_journal_input_box_and_backend_share_one_limit`（界面向后端常量对齐）。
+22. **schema 里写了的约束就必须真的执行**：`_validate_args` 以前只对 integer 执行
+    `minimum`/`maximum`，string 的 `maxLength` 是写给客户端看的装饰 —— 于是"声明 500、
+    实际收 5000、再被落盘截成 500"两侧都不报错。现在 integer 与 string 同等成立。
+23. **记忆必须落在真存在的项目上**：`add_memory` 拒绝不存在的 `pid`（留空是**有意**的另一档：
+    跨项目通用记忆）。挂在不存在项目上的记忆进不了交接包/接手包（两处都按 pid 过滤），
+    只会被 `delete_project` 当孤儿清掉，而回执照样说"已记下 [决策] 到 <pid>"。
+    同时 `kanban_memory_add` 那句"会在交接包、AGENTS.md 和 AI 监管里自动召回"现在是真的：
+    `_project_memories` 按 pid 取最近 `AGENTS_MEMORY_LINES` 条，本地兜底版与送给模型的
+    素材都带上它（送出前一并 `redact_text`）。
+    **承诺与实现不一致时，优先把实现补齐，补不齐才收窄措辞** —— 反过来做就是让用户
+    按错的说明办事。（这一改动顺带让 3 条老用例失效：它们一直往编造的 `pid="p1"` 上写记忆，
+    现在改成留空 = 通用记忆，那三条测的是备份/并发/上限，本来不关心归属。）
+24. **截断必须留痕，不许让调用方猜**：`/api/search/tasks` 回 `truncated`/`limit`，
+    MCP 的措辞（"已到本次上限 N，后面还有"）与 Ctrl+K 的提示条都按它说；
+    以前 MCP 那句"已到上限 50"是按一个常量猜的（默认 limit 是 30，两边都在猜对方的数）。
+    `resources/list` 超过 `RESOURCE_LIMIT` 时占一条 `kanban://truncated` 说明条目
+    （结构化列表没地方写脚注，而这个 uri 不可读 —— 遍历 name 的客户端一定会看见）。
+25. **`repo_path` 的能力不对称是有意保留的，但必须披露**：AI 指令白名单永远不含它
+    （那等于让被内容带偏的模型自己决定去探测本机哪个目录），代理这条路径保留
+    （用户显式指挥）。保留能力不等于不吭声 —— `t_create_project`/`t_update_project`
+    的回执现在写明"之后看板会在那里跑 git，分支/最近提交/未提交改动会进入接手包与 AI 上下文"。
 
 ## 多智能体入口文件（别退化成 N 份副本）
 
@@ -699,9 +726,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-23 收口）**：`pytest` 549 收集（543 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
-26 个测试文件、518 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
-覆盖率 **93%** 且已经是**分支覆盖**（语句 2442 / 缺 140~144 / 分支 862 / 半覆盖 87~89 ——
+**验证基线（2026-09-23 收口）**：`pytest` 560 收集（554 通过 / 6 跳过，跳过的需 `KANBAN_LIVE=1`）/
+26 个测试文件、529 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+覆盖率 **93%** 且已经是**分支覆盖**（语句 2455 / 缺 139~144 / 分支 868 / 半覆盖 86~89 ——
 未覆盖数在 ±4 之间漂，是 `-n auto` 下时序类用例走了不同分支造成的，**别把它抄成一个精确值**；
 门槛 90，只统计 `app/`，`scripts/` 不进覆盖率 —— 原因见「测试约定 4」）。
 公开接口面：HTTP 51 条自有端点（`method+path` 计 52，多的那条是框架自带的 `/openapi.json`），
@@ -711,7 +738,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 门禁脚本：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
 `release_regression --no-ai` 16 通过 + **2 项明确标"未验"**（`--no-ai` 下 AI 链路本就没跑，
 不许再算进"全部可用"）、`delivery_drill` 21/0、`live_check --mcp` 12/0、
-`frozen_smoke` 10/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 55 秒。
+`frozen_smoke` 10/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 56 秒。
+`ci_local --with-exe` 全十步（含重打包与冻结版自查）实测约 90 秒；改过 `web/index.html` 之后
+必须走这一档，否则「产物内嵌的前端就是仓库这一份」那条会如实拦住你。
 ⚠️ 全量跑常常**打完覆盖率表就没有 summary 行**（见「测试约定 10」），判绿只认退出码。
 
 > 1.1.0 一次加了会话捕获 / 过程轨迹 / 记忆层 / 用量追踪 / 提醒 / 只读模式六个面，

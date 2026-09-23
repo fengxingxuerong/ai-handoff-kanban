@@ -8,6 +8,8 @@ Aider 要 CONVENTIONS.md、Windsurf 要 .windsurfrules）。这里验证一次�
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.main import AGENT_ENTRY_TARGETS, CLAUDE_BRIDGE, build_agent_entries
@@ -184,3 +186,48 @@ def test_agentsmd_endpoint_still_works(ai):
     ai.stub.push_text(CONTENT)
     status, body = ai.post(f"/api/export/agentsmd/{pid}")
     assert status == 200 and body["text"] == CONTENT.strip() and body["source"] == "ai"
+
+
+def test_agentsmd_actually_recalls_the_memory_layer(ai_client):
+    """`kanban_memory_add` 对模型承诺"记忆会在交接包、AGENTS.md 和 AI 监管里自动召回"。
+
+    交接包与监管真读了，AGENTS.md 那两处（本地兜底 + 送给模型的素材）以前都不读 ——
+    用户按说明把坑记进记忆层，换一个编码工具接手还是踩一遍。
+    这条判据钉的是"承诺的那一处真的在那里"，不是文案。
+    """
+    import app.main as kanban
+
+    ai = ai_client
+    _, p = ai.create_project("要召回记忆的项目")
+    pid = p["id"]
+    ai.post("/api/memories", {"pid": pid, "type": "坑", "text": "迁移前必须先跑 tests/migrate_check.py"})
+    ai.post("/api/memories", {"pid": pid, "type": "约定", "text": "接口统一返回 {code,data}"})
+    # 别的项目的记忆不该混进来
+    _, other = ai.create_project("不相干的项目")
+    ai.post("/api/memories", {"pid": other["id"], "type": "事实", "text": "不该出现在这份里的内容"})
+
+    local = kanban._build_agents_md_local(kanban.find_project(pid)[1])
+    assert "## 项目记忆" in local, local[:400]
+    assert "迁移前必须先跑 tests/migrate_check.py" in local
+    assert "【坑】" in local and "【约定】" in local
+    assert "不该出现在这份里的内容" not in local, "按项目过滤没生效，别人的坑会被当成自己的"
+
+    # AI 路径：素材里必须带记忆，而且带之前先过脱敏（送出侧也算输出边界）
+    ai.stub.push_text("# AGENTS.md\n" + "生成内容占位 enough length here" * 3)
+    st, body = ai.post(f"/api/export/agentsmd/{pid}")
+    assert st == 200 and body["source"] == "ai", body
+    sent = json.dumps(ai.stub.calls[-1]["payload"], ensure_ascii=False)
+    assert "迁移前必须先跑" in sent, "模型拿不到记忆，等于这条承诺还是假的"
+    assert "不该出现在这份里的内容" not in sent
+
+
+def test_agentsmd_memory_recall_masks_before_sending_to_the_model(ai_client):
+    """记忆正文里写密钥时，送出去的那一份必须已经盖掉（不是只盖返回体）。"""
+    ai = ai_client
+    _, p = ai.create_project("记忆里带钥匙")
+    secret = "sk-" + "MEMPROBE" + "0123456789ab"
+    ai.post("/api/memories", {"pid": p["id"], "type": "坑", "text": f"轮换 {secret} 这把"})
+    ai.stub.push_text("# AGENTS.md\n" + "占位内容要足够长才能被接受" * 3)
+    assert ai.post(f"/api/export/agentsmd/{p['id']}")[0] == 200
+    sent = json.dumps(ai.stub.calls[-1]["payload"], ensure_ascii=False)
+    assert secret not in sent and "********" in sent, "记忆是新增的送出面，别只给老字段脱敏"

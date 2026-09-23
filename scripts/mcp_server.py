@@ -296,7 +296,22 @@ def t_create_project(args: dict) -> str:
     )
     project = kanban.create_project(body, client_ref=args.get("client_ref") or "")
     replay = "（幂等重放：这个项目之前就存在，没有重复创建）" if project.get("client_ref_replayed") else ""
-    return f"已创建项目 [{project['id']}] {project['name']}（状态 {project['status']}）{replay}"
+    return _agent_text(f"已创建项目 [{project['id']}] {project['name']}（状态 {project['status']}）"
+                       f"{_repo_path_note(project.get('repo_path'))}{replay}", args)
+
+
+def _repo_path_note(repo_path: str) -> str:
+    """设了代码路径就要说清后果 —— 这是 MCP 与 AI 指令之间**唯一**那条能力不对称。
+
+    AI 指令的白名单永远不含 `repo_path`（前端 `AI_PROJECT_FIELDS` / 后端
+    `AI_EDITABLE_PROJECT_FIELDS` 都有钉子），因为那等于让模型自己决定"去探测本机哪个目录"；
+    代理这条路径是用户显式指挥的，保留能力。但保留能力不代表可以不吭声：
+    填上路径之后，看板会去那里跑 git，把分支/最后提交/脏文件数拼进上下文与模型请求。
+    """
+    if not repo_path:
+        return ""
+    return (f"；代码路径已设为 `{repo_path}` —— 之后看板会在那里跑 git，"
+            "分支/最近提交/未提交改动会进入接手包与 AI 上下文（不想被探测就把它清空）")
 
 
 def t_update_project(args: dict) -> str:
@@ -312,7 +327,8 @@ def t_update_project(args: dict) -> str:
         # main 侧的 404 不带 id（HTTP 的 id 在 URL 里），代理这边得补上
         raise ValueError(f"{e.detail}（project_id={pid}；先用 kanban_list_projects 或 "
                          f"kanban_find_project 确认 id）") from None
-    return f"已更新 [{pid}] {updated['name']}：{('、'.join(changes)) or '无字段变化'}"
+    return _agent_text(f"已更新 [{pid}] {updated['name']}：{('、'.join(changes)) or '无字段变化'}"
+                       + _repo_path_note(updated.get("repo_path") if "repo_path" in changes else ""), args)
 
 
 def _clean_notes(args: dict, stored: dict) -> list[str]:
@@ -545,15 +561,21 @@ def t_today(args: dict) -> str:
 
 def t_search_tasks(args: dict) -> str:
     """全局任务搜索（与 Ctrl+K 走同一个接口）"""
-    r = kanban.search_tasks(q=args.get("query") or "", limit=int(args.get("limit") or 30))
-    hits = r["results"]
+    lim = int(args.get("limit") or 30)
+    r = kanban.search_tasks(q=args.get("query") or "", limit=lim)
+    hits, truncated = r["results"], r.get("truncated", False)
     if not hits:
         return f"没有匹配「{args.get('query')}」的任务。"
-    lines = [f"匹配 {len(hits)} 条任务："] if len(hits) < 50 else \
-        [f"匹配 {len(hits)} 条任务（已到上限 50，可能还有更多 —— 换个更具体的关键词）："]
-    for t in hits:
-        # 注意：搜索接口用的是 task_id（today 用的是 id），这里按它自己的字段取
-        lines.append(f"  [{t.get('task_id')}] {t['title']} —— {t['project_name']}（{t['status']}/{t['priority']}）")
+    # 以前这里按"50"这个常量决定要不要留痕，而默认 limit 是 30 ——
+    # 于是命中 30 条时说"就这么些"，命中 100 条时说"上限 50"，两个数都是猜的。
+    # 现在照接口自己说的算。
+    head = f"匹配 {len(hits)} 条任务"
+    if truncated:
+        head += f"（已到本次上限 {r.get('limit', lim)}，后面还有 —— 换个更具体的关键词试试）"
+    # 注意：搜索接口用的是 task_id（today 用的是 id），这里按它自己的字段取
+    lines = [head + "："] + [
+        f"  [{t.get('task_id')}] {t['title']} —— {t['project_name']}（{t['status']}/{t['priority']}）"
+        for t in hits]
     return _agent_text("\n".join(lines), args)
 
 
@@ -879,8 +901,11 @@ TOOLS: list[dict] = [
             "type": "object",
             "properties": {
                 "task_id": {"type": "string"},
-                "text": {"type": "string", "maxLength": 2000,
-                         "description": "一条过程记录，具体一点（决定/原因/影响）"},
+                "text": {"type": "string", "maxLength": kanban.MAX_JOURNAL_TEXT,
+                         "description": f"一条过程记录，具体一点（决定/原因/影响）。"
+                                        f"上限 {kanban.MAX_JOURNAL_TEXT} 字 —— "
+                                        "与落盘长度同一个数，超限会被拒而不是悄悄截断；"
+                                        "长内容请拆成几条记"},
             },
             "required": ["task_id", "text"], "additionalProperties": False,
         },
@@ -1095,7 +1120,8 @@ def _uri_kind(uri: str) -> tuple[str | None, str]:
 def list_resources() -> list[dict]:
     out = [{"uri": u, "name": n, "mimeType": mt, "description": d}
            for u, n, mt, d in RESOURCE_INDEXES]
-    for p in _board_rows()[:RESOURCE_LIMIT]:
+    rows = _board_rows()
+    for p in rows[:RESOURCE_LIMIT]:
         pid = p["id"]
         out.append({"uri": f"kanban://project/{pid}/handoff",
                     "name": f"{p['name']} · 交接包", "mimeType": "text/markdown",
@@ -1103,6 +1129,14 @@ def list_resources() -> list[dict]:
         out.append({"uri": f"kanban://project/{pid}/context",
                     "name": f"{p['name']} · 接手上下文", "mimeType": "application/json",
                     "description": "机器可读接手包（已脱敏）：可执行任务、代码现实、就绪度缺口、记忆"})
+    if len(rows) > RESOURCE_LIMIT:
+        # 静默截断 = 代理以为看板只有前 200 个项目。结构化列表没地方写脚注，
+        # 所以占一条说明性条目：它不可读（`_uri_kind` 不认这个 uri），
+        # 但任何遍历 name 的客户端都会看见这句。
+        out.append({"uri": "kanban://truncated", "name":
+                    f"⚠ 另有 {len(rows) - RESOURCE_LIMIT} 个项目未列出（上限 {RESOURCE_LIMIT}）"
+                    f"：全量请用 kanban_list_projects，知道 id 就直接读 kanban://project/<id>/handoff",
+                    "mimeType": "text/plain", "description": "截断提示条目，不可读"})
     return out
 
 
@@ -1212,6 +1246,15 @@ def _validate_args(schema: dict, args: dict) -> None:
         typ = spec.get("type")
         if typ == "string" and not isinstance(val, str):
             raise ValueError(f"{key} 必须是字符串")
+        if typ == "string" and isinstance(val, str):
+            # 整数有 minimum/maximum，字符串的 maxLength 以前**只写在 schema 里没人执行** ——
+            # 于是"声明收 500、实际收 5000 再被落盘截掉"这种事两侧都不报错。
+            # 声明了什么就执行什么，这条对 integer 和 string 应当同等成立。
+            if "maxLength" in spec and len(val) > spec["maxLength"]:
+                raise ValueError(f"{key} 最长 {spec['maxLength']} 字，收到 {len(val)} 字"
+                                 f"（长内容请拆成多次调用，不要指望被截断后还完整）")
+            if "minLength" in spec and len(val.strip()) < spec["minLength"]:
+                raise ValueError(f"{key} 至少 {spec['minLength']} 字")
         if typ == "integer":
             if isinstance(val, bool) or not isinstance(val, int):
                 raise ValueError(f"{key} 必须是整数")

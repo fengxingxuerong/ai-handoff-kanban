@@ -845,3 +845,66 @@ def test_empty_patch_is_rejected(app_client):
     assert st == 400, (st, body)
     _, t = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "一条"})
     assert app_client.patch(f"/api/tasks/{t['id']}", {})[0] == 400
+
+
+# ---------------- 批次 F：三条"声明与执行不一致"的收口 ----------------
+
+def test_search_reports_truncation_instead_of_making_the_caller_guess(app_client):
+    """命中到上限与"总共就这么些"必须分开说。
+
+    以前响应里只有 `results`：代理拿 30 条就以为全板只有 30 条匹配，
+    第 31 条在它的认知里不存在 —— 而 MCP 那句"已到上限 50"又是按另一个数字猜的。
+    """
+    _, p = app_client.create_project("搜索截断")
+    for i in range(6):
+        app_client.post(f"/api/projects/{p['id']}/tasks", {"title": f"联调任务{i}", "desc": "都含同一个词"})
+    st, body = app_client.get("/api/search/tasks?q=联调&limit=3")
+    assert st == 200 and len(body["results"]) == 3
+    assert body["truncated"] is True and body["limit"] == 3, body
+    st2, all_of_them = app_client.get("/api/search/tasks?q=联调&limit=50")
+    assert all_of_them["truncated"] is False and len(all_of_them["results"]) == 6, all_of_them
+    # 空查询也要带同一组键：调用方不该为"有没有搜到"写两套分支
+    _, empty = app_client.get("/api/search/tasks?q=")
+    assert empty["results"] == [] and empty["truncated"] is False
+
+
+def test_memory_on_a_project_that_does_not_exist_is_refused(app_client):
+    """回执说"已记下 [决策] 到 <pid>"，而那条记忆永远进不了交接包 —— 就是撒谎。
+
+    交接包/接手包都按 pid 过滤，挂在不存在项目上的记忆谁也读不到，
+    只有 `delete_project` 会把它当孤儿清掉。留空 pid 是另一回事（通用记忆）。
+    """
+    st, body = app_client.post("/api/memories", {"pid": "根本没有这个项目", "text": "一条决策"})
+    assert st == 400, (st, body)
+    assert "项目不存在" in str(body), body
+    _, listed = app_client.get("/api/memories")
+    assert not any(m.get("text") == "一条决策" for m in listed["memories"])
+
+    st2, gen = app_client.post("/api/memories", {"pid": "", "text": "跨项目的通用记忆"})
+    assert st2 == 201, (st2, gen)      # 留空 = 通用记忆，是有意支持的另一档
+
+
+def test_journal_limit_is_one_number_everywhere(app_client):
+    """过程记录的上限以前有三个数：入参收 2000、落盘截到 500、MCP schema 写 2000。
+
+    于是智能体写一条 1200 字的记录，落盘只剩 500，回执还说"已记录"——
+    少掉的那 700 字（往往正是"为什么这么决定"）没人知道。
+    现在只有一个数：`MAX_JOURNAL_TEXT`，超限在边界就被挡。
+    """
+    import app.main as kanban
+
+    declared = [m.max_length for m in kanban.JournalIn.model_fields["text"].metadata
+                if hasattr(m, "max_length")]
+    assert declared == [kanban.MAX_JOURNAL_TEXT], (
+        f"声明的上限 {declared} 与真正落盘的 {kanban.MAX_JOURNAL_TEXT} 不是同一个数")
+
+    _, p = app_client.create_project("过程记录上限")
+    _, t = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "一条任务"})
+    ok_text = "决" * kanban.MAX_JOURNAL_TEXT
+    st, _ = app_client.post(f"/api/tasks/{t['id']}/journal", {"text": ok_text})
+    assert st == 201, st
+    st2, body2 = app_client.post(f"/api/tasks/{t['id']}/journal", {"text": ok_text + "多一个字"})
+    assert st2 == 422, (st2, body2)       # 超一个也不行：静默截断就是这一条要消灭的东西
+    _, detail = app_client.get("/api/tasks/" + t["id"])
+    assert len(detail["task"]["journal"]) == 1, "被拒的那次不该留下半条记录"
+    assert len(detail["task"]["journal"][0]["text"]) == kanban.MAX_JOURNAL_TEXT

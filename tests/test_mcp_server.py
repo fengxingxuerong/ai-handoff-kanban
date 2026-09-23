@@ -1365,3 +1365,74 @@ def test_every_agent_read_path_masks_by_default(mcp):
     # 显式要原文时才给原文（逃生口要在）
     raw, e = mcp.tool("kanban_get_project", {"project_id": pid, "redact": False})
     assert not e and "sk-bgabcdef12345678" in raw, "显式 redact:false 应当拿原文"
+
+
+def test_search_says_what_the_interface_actually_capped_at(mcp):
+    """以前这句"已到上限 50"是按一个常量猜的：默认 limit 是 30，接口又按 limit 早退。
+
+    于是命中 30 条时说"就这么些"（其实被截了），命中 100 条时说"上限 50"（其实是 100）。
+    现在措辞跟着接口回的 `truncated`/`limit` 走。
+    """
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "搜索上限"})[0])
+    for i in range(5):
+        mcp.tool("kanban_add_task", {"project_id": pid, "title": f"压测任务{i}"})
+    hit = mcp.tool("kanban_search_tasks", {"query": "压测任务", "limit": 2})[0]
+    assert "已到本次上限 2" in hit and "后面还有" in hit, hit
+    whole = mcp.tool("kanban_search_tasks", {"query": "压测任务", "limit": 30})[0]
+    assert "已到本次上限" not in whole, whole
+    assert "匹配 5 条任务：" in whole, whole
+
+
+def test_string_max_length_in_a_schema_is_actually_enforced(mcp):
+    """`_validate_args` 执行 integer 的 min/max，却从来不执行 string 的 maxLength。
+
+    声明收 500、实际收 5000 再被落盘截成 500 —— 代理看到"调用成功"，
+    盘上少 4500 字。既然 schema 写了一个数，它就得是真的。
+    """
+    import app.main as kanban
+
+    over = "记" * (kanban.MAX_JOURNAL_TEXT + 1)
+    text, is_err = mcp.tool("kanban_log_progress", {"task_id": "whatever", "text": over})
+    assert is_err and "最长 500 字" in text and "收到 501 字" in text, text
+    # 上限之内就该放行：同样的 id 只报"任务不存在"，不许再报长度问题
+    ok_text, ok_err = mcp.tool("kanban_log_progress", {
+        "task_id": "no-such-task", "text": "记" * kanban.MAX_JOURNAL_TEXT})
+    assert "最长" not in ok_text and "任务不存在" in ok_text, ok_text
+
+
+def test_resources_list_admits_when_it_cut_the_list(app_client):
+    """项目多于 `RESOURCE_LIMIT` 时以前静默只列前 N 个 —— 代理会以为板子就这些。
+
+    走**进程内**调用：`mcp` 那套夹具是子进程，在本进程里 monkeypatch 它的常量
+    影响不到它（第一版就栽在这里）。上限压到 2 来验这条留痕 ——
+    为了测一行文案去真造 201 个项目，会把整份 JSON 撑大，不值得。
+    """
+    import scripts.mcp_server as x
+
+    for i in range(3):
+        app_client.create_project(f"资源截断{i}")
+    listed = x.list_resources()
+    assert not any(r["uri"] == "kanban://truncated" for r in listed), "没截断就不该出提示条"
+    real, x.RESOURCE_LIMIT = x.RESOURCE_LIMIT, 2
+    try:
+        listed2 = x.list_resources()
+        note = [r for r in listed2 if r["uri"] == "kanban://truncated"]
+        assert len(note) == 1 and "另有 1 个项目未列出（上限 2）" in note[0]["name"], note
+        # 提示条不该被当成能读的资源
+        assert x._uri_kind("kanban://truncated")[0] is None
+    finally:
+        x.RESOURCE_LIMIT = real
+
+
+def test_setting_a_repo_path_says_what_the_board_will_do_with_it(mcp):
+    """`repo_path` 只有代理这条路径能写（AI 指令白名单永远不含它）—— 保留能力，但要说清后果。
+
+    填上之后看板会去那个目录跑 git，分支/最近提交/未提交改动会被拼进接手包与模型请求。
+    不对称本身是有意的（用户显式指挥的代理 vs 被内容带偏的模型），
+    不对称**不吭声**才是问题。
+    """
+    text = mcp.tool("kanban_create_project", {
+        "name": "设了路径的项目", "repo_path": "D:/somewhere/real"})[0]
+    assert "之后看板会在那里跑 git" in text, text
+    plain = mcp.tool("kanban_create_project", {"name": "没设路径的项目"})[0]
+    assert "跑 git" not in plain, plain
