@@ -28,7 +28,7 @@
 | `scripts/release_regression.py` | 发版回归：自起独立实例（不碰真实数据），v1.1 新功能全链路（`--no-ai` 下 16 项真断言 + 2 项标「未验」；不带 `--no-ai` 才会跑 AI 链路）；真实 Key 从 `KANBAN_REAL_DATA_DIR` 指向的配置读取 |
 | `scripts/test_all_llm.py` | LLM 端点全量实测：端点×Key×模型 健康矩阵 |
 | `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
-| `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉两件事：exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；**首页返回的字节与 `web/index.html` 逐字节一致** —— 后者专治「改了前端忘了重打包」，没有它，测试全绿而用户看到的还是旧界面 |
+| `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复" |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
@@ -751,8 +751,8 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-23 收口）**：`pytest` 559 收集（554 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
-26 个测试文件、528 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+**验证基线（2026-09-24 收口）**：`pytest` 560 收集（555 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
+26 个测试文件、529 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
 覆盖率 **93%** 且已经是**分支覆盖**（语句 2455 / 缺 139~144 / 分支 868 / 半覆盖 86~89 ——
 未覆盖数在 ±4 之间漂，是 `-n auto` 下时序类用例走了不同分支造成的，**别把它抄成一个精确值**；
 门槛 90，只统计 `app/`，`scripts/` 不进覆盖率 —— 原因见「测试约定 4」）。
@@ -763,7 +763,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 门禁脚本：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
 `release_regression --no-ai` 16 通过 + **2 项明确标"未验"**（`--no-ai` 下 AI 链路本就没跑，
 不许再算进"全部可用"）、`delivery_drill` 21/0、`live_check --mcp` 12/0、
-`frozen_smoke` 10/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 56 秒。
+`frozen_smoke` 11/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 56 秒。
 > `release_regression` **去掉 `--no-ai` 实跑过一次：23 通过 / 0 失败**（2026-09-23，多花约 1 次真调用）
 > —— 那句"新功能链路全部可用"第一次是跑出来的，不是印出来的。
 `ci_local --with-exe` 全十步（含重打包与冻结版自查）实测约 90 秒；改过 `web/index.html` 之后
