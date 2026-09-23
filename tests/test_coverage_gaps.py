@@ -33,6 +33,27 @@ def _write_report(data_dir, rid: str, health_by_id: dict) -> None:
     }, ensure_ascii=False), encoding="utf-8")
 
 
+def test_trends_drops_points_the_model_wrote_as_non_numeric(ai_client):
+    """报告正文是模型写的：`health` 可以是 null、"82 分"，甚至一段带尖括号的字符串。
+
+    以前 `/api/ai/trends` 原样透传，而前端 SVG 的 `<title>` 插值恰好是同一个函数里
+    唯一没过 esc 的一处（`_attach_trends` 那边是 int 过的）—— 两头各漏一点，
+    凑起来就是"模型输出能往页面里塞标记"。现在后端归一成 0-100 整数、坏点丢掉，
+    前端那处插值也补了 esc：两道都得在，因为其中任何一道都可能是唯一的一道。
+    """
+    import app.main as kanban
+
+    _write_report(ai_client.data_dir, "20260101_090000", {"p1": 50})
+    _write_report(ai_client.data_dir, "20260101_100000",
+                  {"p2": "82 分", "p3": None, "p4": "<img src=q onerror=alert(1)>", "p5": 91})
+    series = {s["id"]: s["points"] for s in kanban.ai_trends()["series"]}
+    assert "p1" in series and series["p1"][-1]["health"] == 50
+    for pid, pts in series.items():
+        for pt in pts:
+            assert isinstance(pt["health"], int), f"{pid} 还在往外传 {pt['health']!r}"
+    assert "p3" not in series and "p4" not in series and "p2" not in series,         f"坏点没丢掉：{sorted(series)}"
+
+
 def test_trend_compares_with_previous_report(ai_client):
     """上一份报告存在时，要算出 down / up / flat 三档"""
     _write_report(ai_client.data_dir, "20260101_090000",

@@ -424,3 +424,31 @@ def test_session_ingest_does_not_reassign_current_pid():
     assert fn, "找不到 ingestSession"
     assert "currentPid = pid" not in fn.group(0), "入库时不要动全局 currentPid"
     assert "summarizeTargetPid" in fn.group(0), "入库目标应记在 summarizeTargetPid 上"
+
+
+# 输入框上那句提示里的中文标签 → 过滤器实际读的字段
+SEARCH_LABELS = {"项目名称": "name", "标签": "tags", "下一步": "next_action", "代码路径": "repo_path"}
+
+
+def test_search_placeholder_claims_exactly_what_the_filter_reads():
+    """搜索框写着「搜索项目名称 / 标签 / **背景 / 交接说明**」，而过滤器只拼了
+    name / tags / next_action / repo_path —— 总览列表接口本来就不含背景与交接说明。
+
+    后果不是文案难看：有人在背景里写了"金蝶对接"，搜"金蝶"搜出来是空的，
+    只能理解成"我写的内容丢了"。所以提示里承诺的字段集合必须与代码里读的**完全相等**，
+    两侧任何一边单独改动都会红。
+    """
+    ph = re.search(r'id="search"[^>]*placeholder="([^"]+)"', HTML)
+    assert ph, "找不到搜索框的 placeholder"
+    claimed = [x.strip() for x in ph.group(1).replace("搜索", "", 1).rstrip("…").split("/")]
+    unknown = [c for c in claimed if c not in SEARCH_LABELS]
+    assert not unknown, f"placeholder 里有没登记映射的标签（加进 SEARCH_LABELS 或改掉文案）：{unknown}"
+
+    hay = re.search(r"const hay = \((.*?)\)\.toLowerCase", HTML, re.S)
+    assert hay, "找不到 renderOverview 里的 hay 拼接"
+    read = set(re.findall(r"p\.([a-z_]+)", hay.group(1)))
+    assert read == {SEARCH_LABELS[c] for c in claimed}, (
+        f"提示说搜 {sorted(claimed)}（={sorted(map(SEARCH_LABELS.get, claimed))}），"
+        f"实际读的是 {sorted(read)}")
+    assert "background" not in read and "handoff_note" not in read, \
+        "列表接口不含这两个字段，要真想搜就得先让接口给（那是另一件事）"

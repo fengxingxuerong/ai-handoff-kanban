@@ -673,7 +673,7 @@
   <div class="search-wrap">
     <div class="search-box">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <input id="search" type="text" placeholder="搜索项目名称 / 标签 / 背景 / 交接说明…">
+      <input id="search" type="text" placeholder="搜索项目名称 / 标签 / 下一步 / 代码路径…">
     </div>
   </div>
   <div class="header-actions">
@@ -706,7 +706,7 @@
   <div class="grid" id="grid"></div>
   <div class="empty" id="empty" style="display:none">
     <div class="big">🗂️</div>
-    <div>还没有项目，点右上角「新建项目」开始搭建你的交接看板吧</div>
+    <div id="empty-msg">还没有项目，点右上角「新建项目」开始搭建你的交接看板吧</div>
   </div>
 </div>
 
@@ -1371,13 +1371,32 @@ function renderOverview() {
   let list = projects.filter(p => {
     if (filter !== "全部" && p.status !== filter) return false;
     if (!q) return true;
-    const hay = (p.name + " " + (p.tags || []).join(" ") + " " + p.next_action + " " + (p.repo_path || "")).toLowerCase();
+    // 这个 haystack 必须和输入框 placeholder 说的那几项一致（有一条测试逐字对账）。
+    // 总览列表接口本来就不含 background / handoff_note，所以这里搜不到它们 ——
+    // 想按正文搜是 Ctrl+K 那个任务搜索，不是这个框。
+    // `|| ""` 是有用的：`next_action` 缺键时字符串拼出 "undefined"，
+    // 于是搜 "undef" 会命中所有没填下一步的项目。
+    const hay = (p.name + " " + (p.tags || []).join(" ") + " " + (p.next_action || "")
+                 + " " + (p.repo_path || "")).toLowerCase();
     return hay.includes(q);
   });
   document.getElementById("proj-count").textContent = "共 " + list.length + " 个项目";
   const grid = document.getElementById("grid");
   const empty = document.getElementById("empty");
+  // 三种"屏幕上没有卡片"的原因必须分开说。以前共用一句「还没有项目，点右上角新建」，
+  // 于是手里有 5 个项目的人搜索打了个不匹配的词，界面就大字宣布"还没有项目"——
+  // 看着就像数据被人清空了。
   empty.style.display = list.length ? "none" : "block";
+  const msg = document.getElementById("empty-msg");
+  if (list.length) {
+    msg.textContent = "";
+  } else if (!projects.length) {
+    msg.textContent = "还没有项目，点右上角「新建项目」开始搭建你的交接看板吧";
+  } else if (q) {
+    msg.textContent = `没有匹配「${q}」的项目（共 ${projects.length} 个）—— 换个词，或清空搜索框`;
+  } else {
+    msg.textContent = `「${filter}」状态下没有项目（共 ${projects.length} 个）—— 点「全部」看所有项目`;
+  }
   grid.innerHTML = list.map(p => cardHTML(p)).join("");
   bindCardEvents();
 }
@@ -2124,7 +2143,13 @@ async function openReport(rid) {
     }
     renderReport(currentReport);
   } catch (e) {
-    document.getElementById("report-body").innerHTML = '<div class="r-loading" style="color:var(--red)">分析失败：' + esc(e.message) + '<br><br><button class="btn" data-act="openReport">重试</button></div>';
+    // 「重试」必须重试**刚才那一次**：以前这里的按钮不带 rid，于是"回看某份历史报告失败"
+    // 点一下重试变成"重新跑一次 AI 分析"（花配额、多存一份报告），而标题还写着"历史报告"。
+    const retryArg = rid ? ` data-arg="${esc(rid)}"` : "";
+    document.getElementById("report-body").innerHTML =
+      '<div class="r-loading" style="color:var(--red)">' + (rid ? "读取历史报告失败：" : "分析失败：")
+      + esc(e.message) + '<br><br><button class="btn" data-act="openReport"' + retryArg
+      + '>重试</button></div>';
   }
 }
 
@@ -2628,7 +2653,7 @@ function renderTrends(series) {
     const pts = (s.points || []).map((p, i) => `${x(i)},${y(p.health)}`).join(" ");
     if ((s.points || []).length > 1) svg += `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/>`;
     (s.points || []).forEach((p, i) => {
-      svg += `<circle cx="${x(i)}" cy="${y(p.health)}" r="3.5" fill="${col}" stroke-width="1.5" style="stroke:var(--bg)"><title>${esc(s.name)} ${esc(p.time)}: ${p.health}分</title></circle>`;
+      svg += `<circle cx="${x(i)}" cy="${y(p.health)}" r="3.5" fill="${col}" stroke-width="1.5" style="stroke:var(--bg)"><title>${esc(s.name)} ${esc(p.time)}: ${esc(p.health)}分</title></circle>`;
     });
   });
   svg += "</svg>";
@@ -2870,13 +2895,26 @@ function realityVerdicts(p, g) {
   const tasks = p.tasks || [];
   const done = tasks.filter(t => t.status === "已完成").length;
   const idle = daysSince(boardLastTouch(p));
+  // 这两条只看看板自己前后对不对，一个 git 字段都不碰 —— 以前却被下面的
+  // `if (!p.repo_path) return` 一起挡在门外，于是"没填代码路径"的项目
+  // （占大多数）永远听不到"进度写 90% 却一条任务没完成"这句最该听到的话。
+  if (tasks.length && p.progress >= 60 && done === 0) {
+    out.push(["warn", `进度条写 ${p.progress}%，但 ${tasks.length} 条任务里没有一条已完成 —— `
+                   + "两边对不上，接手方不知道该信哪个。"]);
+  }
+  if (tasks.length && done / tasks.length >= 0.6 && p.progress <= 25) {
+    out.push(["warn", `${done}/${tasks.length} 条任务已完成，进度条却只有 ${p.progress}% —— 对不上`
+                   + "（也可能是还有活没登记，那就把任务补进来）。"]);
+  }
   if (!p.repo_path) {
-    return [["", "没填代码路径，无法核对代码现实。填上才能把「看板写的进度」和「git 里真发生的提交」"
-                  + "放在一起看 —— 这件事正是这个看板存在的理由。"]];
+    out.push(["", "还没填代码路径：上面那句是**只对着看板自己**核出来的，"
+                  + "填上才能把「写的进度」与「git 里真发生的提交」放在一起看 —— 这件事正是这个看板存在的理由。"]);
+    return out;
   }
   if (!g) {
-    return [["", gitCache.failed ? ("代码现状读不到：" + esc(gitCache.failed)
-             + "（确认路径存在且是个 git 仓库）") : "代码现状读取中…"]];
+    out.push(["", gitCache.failed ? ("代码现状读不到：" + esc(gitCache.failed)
+             + "（确认路径存在且是个 git 仓库）") : "代码现状读取中…"]);
+    return out;
   }
   const codeIdle = g.days_since_commit, dirty = g.dirty_count || 0;
   if (codeIdle !== null && codeIdle !== undefined && codeIdle >= 7 && dirty === 0
@@ -2887,14 +2925,6 @@ function realityVerdicts(p, g) {
   if (codeIdle !== null && codeIdle !== undefined && codeIdle <= 2 && idle !== null && idle >= 7) {
     out.push(["warn", `代码 ${codeIdle} 天前刚提交过，看板却停在 ${idle} 天前 —— 接手的人会低估进度。`
                    + `顺手更新一下 progress / next_action。`]);
-  }
-  if (tasks.length && p.progress >= 60 && done === 0) {
-    out.push(["warn", `进度条写 ${p.progress}%，但 ${tasks.length} 条任务里没有一条已完成 —— `
-                   + "两边对不上，接手方不知道该信哪个。"]);
-  }
-  if (tasks.length && done / tasks.length >= 0.6 && p.progress <= 25) {
-    out.push(["warn", `${done}/${tasks.length} 条任务已完成，进度条却只有 ${p.progress}% —— 对不上`
-                   + "（也可能是还有活没登记，那就把任务补进来）。"]);
   }
   if (!out.length) out.push(["ok", "两边节奏对得上：看板记录的动静与提交记录没有互相打脸。"]);
   return out;

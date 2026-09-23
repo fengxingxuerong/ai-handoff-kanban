@@ -1805,8 +1805,15 @@ def ai_trends():
             pid = it.get("id")
             if not pid:
                 continue
+            # 报告正文是模型写的：`health` 可以是 null、"82 分"，也可以是一段带尖括号的字符串。
+            # 这里就归一成 0-100 的整数、坏点丢掉 —— 它一路走到前端 SVG 的 <title> 插值里，
+            # 而那里曾是同一个函数中唯一没过 esc 的一处（`_attach_trends` 是 int 过的）。
+            try:
+                score = max(0, min(100, int(it.get("health"))))
+            except (TypeError, ValueError):
+                continue
             series_map.setdefault(pid, {"id": pid, "name": it.get("name", ""), "points": []})
-            series_map[pid]["points"].append({"time": t, "health": it.get("health")})
+            series_map[pid]["points"].append({"time": t, "health": score})
     return {"series": list(series_map.values())}
 
 

@@ -459,6 +459,48 @@ def test_pages_handle_empty_board(ui):
     assert "还没有项目" in page.locator("body").inner_text() or page.locator(".pcard").count() == 0
 
 
+def test_search_with_no_match_does_not_claim_the_board_is_empty(ui):
+    """手里有项目、搜索打了个不匹配的词，界面以前大字宣布「还没有项目，点右上角新建」
+    —— 看着就像数据被谁清空了。三种"屏幕上没卡片"（真没项目 / 筛选空 / 搜索不匹配）
+    必须分开说。
+    """
+    page, api, _ = ui
+    make_project(api, "对账用甲项目")
+    make_project(api, "对账用乙项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.fill("#search", "zzz这个词不可能匹配zzz")
+    page.wait_for_timeout(900)                      # 搜索是防抖的
+    body = page.locator("body").inner_text()
+    assert page.locator(".pcard").count() == 0
+    assert "还没有项目" not in body, "搜不到却宣布用户没有项目：" + body[:200]
+    assert "没有匹配" in body, "没说出「是没有匹配」这件事：" + body[:200]
+
+
+def test_progress_vs_tasks_verdict_shows_without_a_repo_path(ui):
+    """「进度写 90% 却一条任务没完成」这条判据一个 git 字段都不碰。
+
+    以前 `realityVerdicts` 开头就是 `if (!p.repo_path) return [...]`，把这条与 git
+    无关的判据一起挡掉了 —— 而"没填代码路径"恰恰是多数项目的常态，
+    最需要有人指出进度对不上的那些项目反而永远听不到。
+    """
+    page, api, _ = ui
+    p = make_project(api, "没填仓库路径却写了90", progress=90)
+    for title in ("还没动的任务一", "还没动的任务二", "还没动的任务三"):
+        api.post(f"/api/projects/{p['id']}/tasks",
+                 {"title": title, "status": "待办", "priority": "中"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.locator(".pcard").first.click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.wait_for_function(
+        "() => { const v = document.querySelectorAll('#reality-verdicts .verdict');"
+        "  return v.length >= 1 && !/正在核对|读取中/.test(v[0].innerText); }", timeout=15000)
+    txt = page.locator("#reality-verdicts").inner_text()
+    assert "进度条写 90%" in txt, f"与 git 无关的那句判据没出现：{txt[:200]}"
+    assert "没填代码路径" in txt, f"没交代清楚这一条只对着看板自己核：{txt[:200]}"
+
+
 def test_task_sort_reorders_cards(ui):
     """切换排序后卡片顺序要真的变（默认顺序是新建在前）"""
     page, api, _ = ui
