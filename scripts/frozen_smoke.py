@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import hashlib
-import hashlib
 import json
 import os
 import re
@@ -24,6 +23,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -102,7 +102,26 @@ def main() -> int:
               f"exe={health.get('version')}/{health.get('build_time')} "
               f"仓库={ver and ver.group(1)}/{stamp and stamp.group(1)}")
 
-        # 2. 首页与前端资源
+        # 构建戳之后如果 `app/` 或 `web/` 里任何一个源文件又被改过，这个 exe 就是旧的。
+        # 只比前端字节（上面那条）拦不住后端改动 —— PyInstaller 打的是 .pyc，
+        # 没法从产物里把源码比回来，所以这里用时间戳兜一层：宁可拦住要求重打包，
+        # 也不要"测试全绿、发出去的 exe 少几个修复"。
+        built_at = stamp.group(1) if stamp else ""
+        try:
+            built_ts = datetime.strptime(built_at, "%Y-%m-%d %H:%M").timestamp() if built_at else 0.0
+        except ValueError:
+            built_ts = 0.0
+        newer = []
+        if built_ts:
+            for f in list((ROOT / "app").glob("*.py")) + [ROOT / "web" / "index.html"]:
+                try:
+                    if f.stat().st_mtime > built_ts + 60:      # 一分钟容差：打包本身要时间
+                        newer.append(f.name)
+                except OSError:
+                    continue
+        check("产物不比源码旧（改了后端也得重打包）", not newer,
+              f"构建戳 {built_at} 之后又改过：{'、'.join(newer[:6])}")
+
         with opener.open(BASE + "/", timeout=8) as r:
             html = r.read().decode("utf-8", "replace")
         check("首页可访问且含看板标记", "AI 交接看板" in html)
