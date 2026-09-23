@@ -18,6 +18,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import socket
@@ -25,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -62,12 +64,57 @@ def run(argv: list[str], env: dict, timeout: int = 900) -> tuple:
     except subprocess.TimeoutExpired:
         out, code = f"超时（>{timeout}s）", -1
     dt = time.time() - t0
-    tail = [ln.strip() for ln in out.splitlines() if ln.strip()][-1:]
-    return code == 0, dt, (tail[0][:78] if tail else f"exit={code}")
+    # 取最后两行而不是最后一行：门禁的「N 通过 / M 失败 / K 未验」和「结论：…」
+    # 常常是两行，只截一行会把后半句丢掉 —— 那正是"18 通过"被当成"全部可用"的路径。
+    tail = [ln.strip() for ln in out.splitlines() if ln.strip()][-2:]
+    return code == 0, dt, (" ⏎ ".join(tail)[:170] if tail else f"exit={code}")
+
+
+SEED = {
+    "projects": [{
+        "id": "ciseed000001", "name": "CI 演练种子板", "status": "进行中", "progress": 40,
+        "priority": "高", "tags": ["门禁自用"], "next_action": "看第二条任务的依赖",
+        "background": "这块板子只给 live_check / live_ui_check 有内容可点，不承载任何真实数据。",
+        "handoff_note": "这块板子不放任何凭据形态的字符串 —— 种子文件是被跟踪的，"
+                        "写一个像 Key 的字面量等于把它复制到更多地方。",
+        "repo_path": "D:/not/a/real/repo", "created_at": "2026-09-23 09:00",
+        "updated_at": "2026-09-23 09:00",
+        "tasks": [
+            {"id": "ciseedt00002", "title": "被前置挡住的那条", "desc": "", "status": "待办",
+             "priority": "中", "agent": "", "due_date": "2026-01-05",
+             "refs": [], "journal": [], "depends_on": ["ciseedt00001"]},
+            {"id": "ciseedt00001", "title": "先做这条", "desc": "", "status": "进行中",
+             "priority": "高", "agent": "", "due_date": "", "refs": [], "journal": [],
+             "depends_on": []},
+        ]}],
+}
+
+
+def seed_live_dir(path: str) -> None:
+    """给常驻实例播一块小板子。
+
+    live_check 以前的两条断言写成 `not projects or all(...)`，而这里的实例是**空**的，
+    于是"项目字段齐全"与"Key 已掩码"永远绿。空实例上"没内容可验"不能算通过，
+    所以要么播种子、要么让门禁自己说 SKIP —— 这里两样都做：种子保证真跑到，
+    SKIP 分支保证不再假绿。
+
+    config.json 里那把"Key"是**运行时拼出来的合成串**，源码里不留完整的 `sk-…` 形态：
+    这个文件是被跟踪的，写一个字面量假 Key 等于往仓库里多放一处像凭据的东西。
+    """
+    with open(os.path.join(path, "projects.json"), "w", encoding="utf-8") as fp:
+        json.dump(SEED, fp, ensure_ascii=False, indent=2)
+    fake_key = "sk-" + "CIseed" + "0" * 14 + "f"
+    with open(os.path.join(path, "config.json"), "w", encoding="utf-8") as fp:
+        json.dump({"ai": {"endpoints": [{
+            "name": "门禁自用合成端点", "base_url": "http://127.0.0.1:9/v1",
+            "model": "not-a-real-model", "enabled": False, "api_keys": [fake_key],
+        }]}}, fp, ensure_ascii=False, indent=2)
 
 
 def main() -> int:
     tmp = tempfile.mkdtemp(prefix="kanban-ci-")
+    live_dir = tempfile.mkdtemp(prefix="kanban-ci-live-")
+    seed_live_dir(live_dir)
     port = free_port()
     base = f"http://127.0.0.1:{port}"
     # 两套 env，**不能合成一套**。这里踩过两次同一类坑（都是门禁自己造的噪声）：
@@ -82,29 +129,38 @@ def main() -> int:
     # 端口不能省：桌面版默认占 18320，而 Windows 上 SO_REUSEADDR 允许两个进程
     # 同时"绑定成功"—— 抢不到端口的那个会静默存在，门禁就可能打到用户的真实实例上。
     srv_env = dict(env, KANBAN_PORT=str(port))
-    print(f"隔离数据目录：{tmp}\n实例端口：{port}（不会碰 ~/.ai-kanban）\n")
+    live_env = dict(srv_env, KANBAN_DATA_DIR=live_dir)   # 常驻实例用已播种的那块目录
+    print(f"隔离数据目录：{tmp}\n常驻实例数据目录（已播种）：{live_dir}\n"
+          f"实例端口：{port}（不会碰 ~/.ai-kanban）\n")
 
     server = None
     results: list[tuple[str, bool, float, str]] = []
 
-    def step(label, argv, timeout=900, for_server=False):
-        ok, dt, note = run(argv, srv_env if for_server else env, timeout)
+    def step(label, argv, timeout=900, for_server=False, live=False):
+        e = live_env if live else (srv_env if for_server else env)
+        ok, dt, note = run(argv, e, timeout)
         results.append((label, ok, dt, note))
         print(f"  [{'OK' if ok else 'FAIL'}] {label:34s} {dt:6.1f}s  {note}", flush=True)
 
     try:
-        step("pytest 全量（含覆盖率门槛）", [PY, "-m", "pytest", "-q"], 1800)
+        # --basetemp 不是多余的：pytest 收尾会去删系统 temp 里历次会话的目录，
+        # 本机（杀软/受管终端）那一步会抛 PermissionError 把整条 CI 掐在收尾阶段。
+        # 指到自己的临时目录里，跑完整包连带一起删，不留跨会话残留。
+        step("pytest 全量（含覆盖率门槛）",
+             [PY, "-m", "pytest", "-q", "--basetemp", os.path.join(tmp, "basetemp")], 1800)
         if MODE != "quick":
             step("场景测试 scenario_test", [PY, "scripts/scenario_test.py"], 900, True)
             step("发版回归 release_regression",
                  [PY, "scripts/release_regression.py", "--no-ai"], 900, True)
             step("交付演练 delivery_drill", [PY, "scripts/delivery_drill.py"], 900, True)
 
-        # 起一个实例给 live_* 两条门禁打（它们的设计就是"对着在跑的实例只读体检"）
+        # 起一个实例给 live_* 两条门禁打（它们的设计就是"对着在跑的实例只读体检"）。
+        # 用的是**单独一块已播种的数据目录**：空实例会让 live_check 的字段断言变成
+        # "没内容可验"，而"没内容可验"从来不算通过。
         srv_log = open(os.path.join(tmp, "server.log"), "wb")
         server = subprocess.Popen([PY, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
                                    "--port", str(port), "--log-level", "warning"],
-                                  cwd=str(ROOT), env=srv_env, stdout=srv_log, stderr=srv_log)
+                                  cwd=str(ROOT), env=live_env, stdout=srv_log, stderr=srv_log)
         for _ in range(60):
             try:
                 with socket.create_connection(("127.0.0.1", port), timeout=1):
@@ -116,9 +172,23 @@ def main() -> int:
             print("  [FAIL] 起隔离实例：端口没起来，live_* 两条只能跳过", flush=True)
 
         if server.poll() is None:
+            # 端口通了不等于起对了：Windows 上 SO_REUSEADDR 能让两个进程都"绑定成功"。
+            # 唯一可信的自证是问它自己读的是哪份数据 —— 必须是本脚本刚播的那块临时目录。
+            who = _health_data_file(base)
+            if who and os.path.normcase(who).startswith(os.path.normcase(live_dir)):
+                print(f"  [OK] 实例自证数据目录：{who}", flush=True)
+            else:
+                results.append(("实例自证数据目录", False, 0.0,
+                                f"它读的是 {who}，不是 {live_dir} → 立即停，绝不往下跑"))
+                print(f"  [FAIL] 实例读的是 {who}，不是本次的临时目录 → 停", flush=True)
+                _kill_tree(server.pid)
+                server = None
+
+        if server is not None and server.poll() is None:
             step("只读体检 live_check --mcp", [PY, "scripts/live_check.py", base, "--mcp"],
-                 600, True)
-            step("真实浏览器 live_ui_check", [PY, "scripts/live_ui_check.py", base], 600, True)
+                 600, True, live=True)
+            step("真实浏览器 live_ui_check", [PY, "scripts/live_ui_check.py", base], 600, True,
+                 live=True)
 
         if MODE == "exe":
             step("生成构建戳", [PY, "scripts/make_stamp.py"], 120)
@@ -138,6 +208,7 @@ def main() -> int:
             _kill_tree(server.pid)
         time.sleep(0.5)
         shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(live_dir, ignore_errors=True)
 
     bad = [r for r in results if not r[1]]
     print("\n" + "=" * 78)
@@ -146,6 +217,15 @@ def main() -> int:
         print(f"  ✗ {label} —— {note}")
     print("结论：" + ("全部通过，可以发版 ✓" if not bad else "有步骤失败，别发版"))
     return 1 if bad else 0
+
+
+def _health_data_file(base: str) -> str:
+    """问实例自己：你读的是哪份数据文件？拿不到就回空串（调用方按"没自证成"处理）。"""
+    try:
+        with urllib.request.urlopen(base + "/api/health", timeout=10) as r:
+            return str(json.loads(r.read().decode("utf-8", "replace")).get("data_file", ""))
+    except Exception:                                          # noqa: BLE001
+        return ""
 
 
 def _kill_tree(pid: int) -> None:

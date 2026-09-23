@@ -55,7 +55,9 @@ def test_dependency_roundtrip(app_client):
 
     st, detail = app_client.get(f"/api/projects/{pid}")
     ids = [t["id"] for t in detail["tasks"]]
-    assert ids.index(a["id"]) < ids.index(b["id"]) or True       # 顺序由前端渲染决定
+    # 原来这条是 `... or True`，恒真、拦不住任何东西。顺序本来就不是契约
+    # （前端自己按拓扑/状态重排），所以改成断"两条都在这份详情里"这种真会坏的事。
+    assert set(ids) >= {a["id"], b["id"]}
     assert any(t["depends_on"] == [a["id"]] for t in detail["tasks"])
 
 

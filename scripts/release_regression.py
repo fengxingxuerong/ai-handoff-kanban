@@ -40,7 +40,7 @@ except Exception:                                     # noqa: BLE001  重定向�
 # 本机常年挂着代理：127.0.0.1 必须直连，否则演练请求被代理拦下，全线超时
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-passed, failed = [], []
+passed, failed, skipped = [], [], []
 
 
 def req(method, path, body=None, timeout=180):
@@ -56,8 +56,14 @@ def req(method, path, body=None, timeout=180):
         return e.code, e.read().decode("utf-8", "replace")
 
 
-def check(name, cond, extra=""):
-    if cond:
+def check(name, cond, extra="", skip=False):
+    """skip=True 表示这一项**本轮没验**，不是"验过了"。
+    以前 `--no-ai` 模式用 `check(..., True)` 占位，于是"18 通过"里混着两条无断言项，
+    结尾还能印出"新功能链路全部可用"。跳过要跳得看得见。"""
+    if skip:
+        skipped.append(name)
+        print(f"  [SKIP] {name}  {extra}")
+    elif cond:
         passed.append(name)
         print(f"  [PASS] {name}")
     else:
@@ -164,7 +170,7 @@ def t1_session_capture(pid_hint: str | None):
     pid = next(p["id"] for p in projects["projects"] if p["name"] == "回归演练-临时")
 
     if NO_AI:
-        check("（--no-ai 跳过真实提炼）", True)
+        check("会话捕获 → AI 提炼 → 入库", False, "本轮 --no-ai 未跑", skip=True)
         return pid
 
     status, r = req("POST", "/api/sessions/ingest", {"pid": pid, "path": str(jsonl)}, timeout=180)
@@ -228,7 +234,7 @@ def t3_memories(pid):
 def t4_usage():
     print("\n[4] LLM 用量追踪")
     if NO_AI:
-        check("（--no-ai 跳过用量断言）", True)
+        check("LLM 用量记账", False, "本轮 --no-ai 未跑", skip=True)
         return
     _, u = req("GET", "/api/usage")
     check("提炼调用被记账", u["totals"]["calls"] >= 1)
@@ -325,11 +331,16 @@ def main():
         shutil.rmtree(DATA_DIR, ignore_errors=True)
 
     print("\n" + "=" * 66)
-    print(f"发版回归结果：{len(passed)} 通过 / {len(failed)} 失败")
+    print(f"发版回归结果：{len(passed)} 通过 / {len(failed)} 失败"
+          + (f" / {len(skipped)} 未验（{'、'.join(skipped)}）" if skipped else ""))
     if failed:
         print("失败项：", "；".join(failed))
         sys.exit(1)
-    print("结论：v1.1 新功能链路全部可用，可发版 ✓")
+    if skipped:
+        print(f"结论：已验的 {len(passed)} 项可用；{len(skipped)} 项本轮跳过，**不能说全部可用**")
+        print("      要拿「新功能链路全部可用」这句话，得跑一次不带 --no-ai 的（会消耗少量配额）")
+    else:
+        print("结论：v1.1 新功能链路全部可用，可发版 ✓")
 
 
 if __name__ == "__main__":

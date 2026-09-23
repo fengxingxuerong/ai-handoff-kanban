@@ -170,7 +170,16 @@ t_next = req("POST", f"/api/projects/{pid}/tasks", {"title": "迁移脚本联调
                                                     "depends_on": [t_block["id"]]})[1]
 t_future = req("POST", f"/api/projects/{pid}/tasks", {"title": "报表模块", "status": "待办", "priority": "低",
                                                       "depends_on": [t_next["id"]]})[1]
-check("录入 4 个带依赖链的任务", s == 201)
+# 以前这条写的是 `s == 201`，而 `s` 是上面**建项目**那一次的返回码 ——
+# 任务一条没建出来它照样绿。断言要看它名义上看着的东西。
+_, board = req("GET", f"/api/projects/{pid}")
+by_id = {t["id"]: t for t in board["tasks"]}
+check("录入 4 个任务且依赖链按 建→阻→未 接上",
+      len(by_id) == 4
+      and all(x["id"] in by_id for x in (t_done, t_block, t_next, t_future))
+      and by_id[t_next["id"]]["depends_on"] == [t_block["id"]]
+      and by_id[t_future["id"]]["depends_on"] == [t_next["id"]],
+      f"盘上 {len(by_id)} 条：{[(t['title'], t.get('depends_on')) for t in board['tasks']]}")
 
 # ---------- 2. 接手视角：新智能体拉取机器可读上下文 ----------
 print("\n[阶段2] 新智能体接手：拉取机器可读上下文（零粘贴）")
@@ -201,7 +210,13 @@ s, stats = req("GET", "/api/stats")
 rd = next((x for x in stats["readiness"] if x["id"] == pid), None)
 check("交接就绪度评分就位", rd is not None and rd["score"] >= 50)
 s, md = req("GET", f"/api/export/{pid}")
-check("完整交接包含任务/背景/交接说明", "订单状态机改造" in md and "handoff" in md.lower() or "交接说明" in md)
+# 原来写成 `A and B or C`：`or` 绑得比 `and` 松，而那份 markdown 只要有交接说明就一定含
+# 「交接说明」四个字（章节标题本身），于是**任务清单整块丢了它照样绿**。
+# 三块内容分开断，坏在哪块说得出哪块。
+check("交接包里有任务清单（按标题找得到）", "订单状态机改造" in md, md[:160])
+check("交接包里有项目背景一节", "项目背景" in md, md[:160])
+check("交接包里有交接说明一节且有正文", "交接说明" in md
+      and "数据库迁移必须先跑" in md, md[:160])
 s, md_safe = req("GET", f"/api/export/{pid}?redact=1")
 proj_now = req("GET", f"/api/projects/{pid}")[1]
 req("PUT", f"/api/projects/{pid}", {**proj_now, "handoff_note": (proj_now.get("handoff_note") or "") + "\n密钥：sk-drill123456789012"})

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -115,7 +116,32 @@ def test_stateless_style_works_without_initialize(mcp):
 
 def test_server_discover(mcp):
     res = mcp.call("server/discover")["result"]
-    assert res["serverInfo"]["name"] == "ai-kanban" and len(res["tools"]) >= 10
+    # 23 = 2026-09-23 实测的工具数；门槛按实测钉，别按"大概十几个"钉
+    assert res["serverInfo"]["name"] == "ai-kanban" and len(res["tools"]) >= 23
+
+
+def test_every_registered_tool_is_advertised_and_actually_called(mcp):
+    """工具面要三个方向都对得上，以前只数一个**个数**。
+
+    - 注册了却没广播 = 智能体永远看不见，写了等于没写；
+    - 广播了却没有任何一条用例真调用过 = 上线时没人知道它返什么形状；
+    - 这个文件是**子进程**跑的，`pytest.ini` 那个百分比量不到它（实测加
+      `--cov=scripts/mcp_server.py` 连 TOTAL 都不动），所以这条判据必须自己能跑。
+
+    只查 registered ⊆ called，不查反向：`kanban_not_exist` 这类名字是故意写的
+    负向探针（测"叫不存在的工具怎么报错"），拿反向断言会把它们判成缺陷。
+    """
+    src = SERVER.read_text(encoding="utf-8")
+    block = src.split("HANDLERS = {", 1)[1].split("\n}", 1)[0]
+    registered = set(re.findall(r'^\s*"(kanban_[a-z_]+)":', block, re.M))
+    advertised = {t["name"] for t in mcp.call("tools/list")["result"]["tools"]}
+    assert registered == advertised, f"注册与广播不一致：{sorted(registered ^ advertised)}"
+
+    called: set[str] = set()
+    for f in (ROOT / "tests").glob("test_mcp*.py"):
+        called |= set(re.findall(r'"(kanban_[a-z_]+)"', f.read_text(encoding="utf-8")))
+    never = sorted(registered - called)
+    assert not never, f"这些工具注册并广播了，但没有任何用例真调用过：{never}"
 
 
 def test_server_version_matches_app_version(mcp):

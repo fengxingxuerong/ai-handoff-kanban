@@ -36,12 +36,17 @@ for arg in sys.argv[1:]:
         BASE = arg.rstrip("/")
 
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-rows: list[tuple[str, bool, str]] = []
+rows: list[tuple[str, str, str]] = []      # (名字, P/F/S, 现场)
 
 
-def check(name: str, cond: bool, extra: str = "") -> None:
-    rows.append((name, cond, extra))
-    print(("  [OK] " if cond else "  [FAIL] ") + name + ("" if cond else "  " + extra))
+def check(name: str, cond, extra: str = "") -> None:
+    """cond 传 bool 是断言；传字符串是**这一项没跑**（没数据可点），记为 SKIP 而不是通过。"""
+    state = "S" if isinstance(cond, str) else ("P" if cond else "F")
+    detail = cond if isinstance(cond, str) else extra
+    rows.append((name, state, detail))
+    print({"P": f"  [OK] {name}",
+           "F": f"  [FAIL] {name}  {detail}",
+           "S": f"  [SKIP] {name}  {detail}"}[state])
 
 
 def api(path: str):
@@ -104,7 +109,12 @@ def main() -> int:
         t0 = time.time()
         page.goto(BASE + "/", wait_until="domcontentloaded")
         page.wait_for_selector("[data-act='openProjectModal']", timeout=20000)
-        check("页面加载完成（不是白页）", True, f"{int((time.time() - t0) * 1000)}ms")
+        # 「不是白页」要量的是屏幕上真有东西，以前是 `check(..., True)` —— 恒绿
+        shown = page.locator("body").inner_text().strip()
+        dash = page.locator("#dash").inner_text().strip()
+        check("页面加载完成（仪表盘真渲染出内容，不是白页）",
+              len(dash) > 10 and len(shown) > 200,
+              f"{int((time.time() - t0) * 1000)}ms / 仪表盘 {len(dash)} 字 / 整页 {len(shown)} 字")
 
         page.wait_for_selector(".pcard", timeout=20000) if names else None
         cards = page.locator(".pcard")
@@ -131,7 +141,10 @@ def main() -> int:
         if names:
             cards.first.click()
             page.wait_for_selector("#view-detail.active", timeout=10000)
-            check("点卡片能进详情页", True)
+            # 以前这句是 check(..., True)：进去的若是另一个项目，它照样绿
+            check("点卡片进的是刚点的那个项目的详情页",
+                  names[0] in page.locator("#view-detail").inner_text(),
+                  f"期望 {names[0]}")
             cols = [".kcol.k-todo", ".kcol.k-doing", ".kcol.k-done", ".kcol.k-blocked"]
             check("看板四列都在", all(page.locator(c).count() == 1 for c in cols))
             check("详情页有内容（不是空壳）",
@@ -181,18 +194,34 @@ def main() -> int:
 
         page.click("[data-act='openGlobalSearch']")
         page.wait_for_selector("#gs-input", timeout=10000)
-        page.fill("#gs-input", names[0][:4] if names else "任务")
+        # 这个框搜的是**任务**（标题/描述/负责人/引用），不搜项目名 —— 拿项目名去断言
+        # 会恒红（2026-09-23 就是这么红的），拿一个不存在的词去搜又恒绿，
+        # 所以关键词必须从接口里取一条真实任务标题的前几个字。
+        probe = ""
+        for pr in projects:
+            det = api("/api/projects/" + pr["id"])
+            if det.get("tasks"):
+                probe = (det["tasks"][0].get("title") or "")[:4]
+                if probe:
+                    break
+        page.fill("#gs-input", probe or "任务")
         page.wait_for_timeout(700)
-        check("全局搜索能打开并返回结果", True,
-              f"结果 {page.locator('.gs-item, .gs-empty').count()} 条")
+        items = page.locator(".gs-item").count()
+        # 有真实任务标题可搜却不返回任何一条，就是搜索链路坏了；没数据时不能拿"空"当通过
+        check("全局搜索用真实任务标题能搜到东西",
+              (items >= 1 if probe else "这块板上没有任务可搜"),
+              f"命中 {items} 条 / 关键词「{probe}」")
 
         check("全程无 JS 报错 / 请求失败", not errors, " | ".join(errors[:3]))
 
         ctx.close()
         browser.close()
 
-    failed = [r for r in rows if not r[1]]
-    print(f"\n结果：{len(rows) - len(failed)} 通过 / {len(failed)} 失败")
+    failed = [r for r in rows if r[1] == "F"]
+    passed = [r for r in rows if r[1] == "P"]
+    skipped = [r for r in rows if r[1] == "S"]
+    print(f"\n结果：{len(passed)} 通过 / {len(failed)} 失败"
+          + (f" / {len(skipped)} 未验（{'、'.join(r[0] for r in skipped)}）" if skipped else ""))
     return 1 if failed else 0
 
 

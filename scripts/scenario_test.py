@@ -544,7 +544,9 @@ def run_all(api: Http, mcp: Mcp, data_dir: Path, repo_dir: Path, stub: StubLLM, 
         fields = acts[0].get("fields", {}) if acts else {}
         return expect(f"返回 {st}，解析出 {len(acts)} 个动作："
                       f"{json.dumps(acts, ensure_ascii=False)[:110]}",
-                      st == 200 and len(acts) == 1 and fields.get("progress") == 20)
+                      st == 200 and len(acts) == 1 and fields.get("progress") == 20
+                      and fields.get("priority") == "高"
+                      and acts[0].get("next_action") == "补第 3 章接口设计文档")
 
     check("A6", "用一句自然语言改项目字段（不点界面）",
           "「把毕业设计进度改成 20%，下一步…，优先级提到高」",
@@ -698,9 +700,8 @@ def run_all(api: Http, mcp: Mcp, data_dir: Path, repo_dir: Path, stub: StubLLM, 
           "分别对未填路径与路径不存在的项目拉 git 与交接包",
           "git 接口 400 且提示可行动；交接包正常生成但不含空节", b20)
 
-    check("A10", "边界：仓库里已经有一份用户手写的 AGENTS.md 时再写一次",
-          "同一目录重复调用 /api/export/agent-files",
-          "应跳过已有文件或至少给出提示/备份，不能静默覆盖", a10)
+    # （这里原来还有一条同名的 A10，把同一个 a10 又跑了一遍 —— 33 个"用例"里有一条是重复计数。
+    #  657 行那条是完整版（同时管 AGENTS.md 与 CLAUDE.md），删的是这条旧的。）
 
     # ---------- B. 边界与异常 ----------
     def b1():

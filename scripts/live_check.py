@@ -38,7 +38,7 @@ for arg in sys.argv[1:]:
 
 # 本机可能有代理，显式绕过，否则 127.0.0.1 也可能被拦成"超时"
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-rows: list[tuple[str, bool, str]] = []
+rows: list[tuple[str, str, str]] = []      # (名字, P/F/S, 现场)
 
 
 def get(path: str, headers: dict | None = None):
@@ -54,9 +54,17 @@ def get(path: str, headers: dict | None = None):
         return 0, f"{type(e).__name__}: {e}"
 
 
-def check(name: str, cond: bool, actual: str) -> None:
-    rows.append((name, cond, actual))
-    print(("  [OK] " if cond else "  [FAIL] ") + name + ("  " + actual if not cond else ""))
+def check(name: str, cond, actual: str) -> None:
+    """cond 传 False/True 就是断言；传字符串就是**这一项没跑**，明确记为 SKIP。
+
+    空实例上「项目字段齐全」以前写成 `not projects or all(...)` —— 恒绿。
+    没数据可验不是"验过了"，得单独一列，让"12 通过"这句话重新有信息量。
+    """
+    state = "S" if isinstance(cond, str) else ("P" if cond else "F")
+    rows.append((name, state, cond if isinstance(cond, str) else actual))
+    label = {"P": "  [OK] ", "F": "  [FAIL] ", "S": "  [SKIP] "}[state]
+    print(label + name + ("  " + (cond if isinstance(cond, str) else actual)
+                          if state != "P" else ""))
 
 
 def main() -> int:
@@ -77,9 +85,11 @@ def main() -> int:
     st, data = get("/api/projects")
     projects = data.get("projects", []) if isinstance(data, dict) else []
     fields = {"id", "name", "status", "progress", "priority", "total_tasks"}
-    ok = st == 200 and (not projects or all(fields <= set(p) for p in projects))
-    check(f"项目列表可读（{len(projects)} 个项目）", ok, f"{st}")
-    check("项目字段齐全", ok, "有项目缺少必需字段")
+    check(f"项目列表可读（{len(projects)} 个项目）", st == 200, f"{st}")
+    # 以前是 `not projects or all(...)`：空实例上恒绿，而 CI 起的恰恰是空实例
+    check("项目字段齐全", all(fields <= set(p) for p in projects) if projects
+          else "实例里没有项目，没有字段可验（ci_local 会先播一条种子）",
+          "有项目缺少必需字段")
 
     st, stats = get("/api/stats")
     need = {"project_total", "total_tasks", "blocked_tasks", "status_dist", "readiness"}
@@ -88,8 +98,12 @@ def main() -> int:
 
     st, cfg = get("/api/ai/config")
     eps = cfg["ai"]["endpoints"] if isinstance(cfg, dict) else []
-    masked = all("****" in k for ep in eps for k in ep.get("api_keys", []))
-    check(f"AI 配置可读（{len(eps)} 个端点）且 Key 已掩码", st == 200 and masked, f"{st}")
+    keys = [k for ep in eps for k in ep.get("api_keys", [])]
+    # 同上：`all(...)` 对空列表恒真，"Key 已掩码"在没有 Key 的实例上什么都不说
+    check(f"AI 配置可读（{len(eps)} 个端点）且 Key 已掩码",
+          (st == 200 and all("****" in k for k in keys)) if keys
+          else "该实例没有配置任何 Key，掩码无内容可验",
+          f"{st} / 未掩码的 Key 若干")
 
     st, backups = get("/api/backups")
     check("备份列表可读", st == 200 and "backups" in backups, f"{st}")
@@ -112,11 +126,15 @@ def main() -> int:
         tools = json.loads(line[0])["result"]["tools"] if line else []
         # `or ""` 不是摆设：读线程一旦解码失败，CompletedProcess.stdout/stderr 就是 None，
         # 于是"失败原因"本身先把体检脚本崩掉，反而看不到真问题（2026-09-19 撞到过）
-        check(f"MCP 工具目录可读（{len(tools)} 个工具）", len(tools) >= 10,
-              f"stderr={(proc.stderr or '')[:120]} / rc={proc.returncode}")
+        check(f"MCP 工具目录可读（{len(tools)} 个工具）", len(tools) >= 23,
+              f"实际 {len(tools)}（2026-09-23 实测 23；门槛钉在实测值上，砍一半必须显式改这里）"
+              f" / stderr={(proc.stderr or '')[:120]} / rc={proc.returncode}")
 
-    failed = [r for r in rows if not r[1]]
-    print(f"\n结果：{len(rows) - len(failed)} 通过 / {len(failed)} 失败")
+    failed = [r for r in rows if r[1] == "F"]
+    passed = [r for r in rows if r[1] == "P"]
+    skipped = [r for r in rows if r[1] == "S"]
+    print(f"\n结果：{len(passed)} 通过 / {len(failed)} 失败"
+          + (f" / {len(skipped)} 未验（{'、'.join(r[0] for r in skipped)}）" if skipped else ""))
     if failed:
         print("失败项：" + " | ".join(r[0] for r in failed))
     return 1 if failed else 0

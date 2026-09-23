@@ -36,7 +36,9 @@ def test_search_input_is_debounced():
 
 def test_actions_table_exists():
     assert ACTIONS_BLOCK, "未找到 ACTIONS 表"
-    assert len(ACTIONS_KEYS) >= 30, f"ACTIONS 条目偏少：{len(ACTIONS_KEYS)}"
+    # 门槛钉在实测值上（2026-09-23 实测 60 个动作）。原来写 >=30，
+    # 砍掉一半处理器它照样绿，等于没门。要减少动作面就得连带改这里，这正是想要的摩擦。
+    assert len(ACTIONS_KEYS) >= 60, f"ACTIONS 条目偏少：{len(ACTIONS_KEYS)}"
 
 
 def test_actions_table_has_no_duplicate_keys():
