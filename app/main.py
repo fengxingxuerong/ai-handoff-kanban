@@ -6,8 +6,6 @@ AI 交接看板 - FastAPI 后端
 """
 from __future__ import annotations
 
-import heapq
-import hashlib
 import json
 import os
 import re
@@ -24,6 +22,7 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -33,6 +32,68 @@ from .handoff_page import build_handoff_page, dep_graph_svg
 from .handoff_page import MAX_NODES as GRAPH_MAX_NODES
 from .handoff_page import MAX_COLS as GRAPH_MAX_COLS
 from .handoff_page import _layers as _graph_layers
+# 任务依赖图与重复 id 处理：2026-09-26 从本文件整体搬出（实现逐字未改）
+from .taskgraph import (  # noqa: F401  —— 这些名字仍可从 app.main 取，既有 import 与 monkeypatch 路径不变
+    MAX_DEPS,
+    clean_deps,
+    task_graph,
+    has_cycle,
+    topo_order,
+    _break_dep_cycles,
+    executable_tasks,
+    _dedupe_ids,
+)
+# 截止日期归一与临期/逾期判定：2026-09-26 从本文件整体搬出（实现逐字未改）
+from .due import (  # noqa: F401  —— 这些名字仍可从 app.main 取，既有 import 与 monkeypatch 路径不变
+    _DUE_CANONICAL_RE,
+    _clean_due_date,
+    _due_state,
+)
+# 交接内容脱敏：2026-09-26 从本文件整体搬出（实现逐字未改）
+from .redact import (  # noqa: F401  —— 这些名字仍可从 app.main 取，既有 import 与 monkeypatch 路径不变
+    MASK_MARK,
+    _REDACT_PATTERNS,
+    redact_text,
+)
+# 创建幂等键：2026-09-26 从本文件整体搬出（实现逐字未改）
+from .idem import (  # noqa: F401  —— 这些名字仍可从 app.main 取，既有 import 与 monkeypatch 路径不变
+    MAX_IDEM,
+    IDEM_KEY,
+    _idem_seen,
+    _idem_remember,
+    _clean_ref,
+)
+# 交接包小节与尺寸预算：2026-09-26 从本文件整体搬出（实现逐字未改）
+from .handoff_meta import (  # noqa: F401  —— 这些名字仍可从 app.main 取，既有 import 与 monkeypatch 路径不变
+    HANDOFF_SECTIONS,
+    _SECTION_CN,
+    parse_handoff_sections,
+    context_budget,
+    _budget_note,
+)
+# 任务关联的代码位置：2026-09-26 从本文件整体搬出（实现逐字未改）
+from .taskgraph import (  # noqa: F401
+    MAX_REFS,
+    MAX_REF_LEN,
+    clean_refs,
+)
+# 会话扫描与文本提取：2026-09-26 从本文件整体搬出（实现逐字未改）
+from .sessions import (  # noqa: F401
+    session_sources,
+    _walk_bounded,
+    _newest_files,
+    _read_tail_text,
+    _extract_session_text,
+    _session_roots,
+    is_allowed_session_file,
+)
+# 多智能体入口文件生成：2026-09-26 从本文件整体搬出（实现逐字未改）
+from .agentfiles import (  # noqa: F401
+    AGENT_ENTRY_TARGETS,
+    CLAUDE_BRIDGE,
+    _cursor_rule,
+    build_agent_entries,
+)
 from .readiness import readiness_items, readiness_score
 from .version import APP_VERSION, BUILD_TIME
 
@@ -162,226 +223,42 @@ _SAMPLE_DATA = {
 
 # ---- 任务关联的代码位置（交接时说清"改哪里"） ----
 
-MAX_REFS = 20
-MAX_REF_LEN = 200
+# [taskgraph.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.taskgraph 导入。
 
 
-def clean_refs(raw) -> list[str]:
-    """规范化代码位置引用：去空白、去重、限长限量。
-
-    只当字符串存，**不做任何路径解析或存在性校验** —— 它可能指向别的机器，
-    也可能是个还没创建的文件；意义在于"给接头的人一个准确落点"。
-    """
-    if isinstance(raw, str):
-        raw = [p for p in raw.replace("\n", ",").split(",")]
-    if not isinstance(raw, (list, tuple)):
-        return []
-    seen, out = set(), []
-    for item in raw:
-        if not isinstance(item, str):
-            continue
-        ref = item.strip().strip("`").strip()
-        if not ref or len(ref) > MAX_REF_LEN or ref in seen:
-            continue
-        seen.add(ref)
-        out.append(ref)
-        if len(out) >= MAX_REFS:
-            break
-    return out
+# [taskgraph.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.taskgraph 导入。
 
 
 # ---- 任务依赖（交接时说清"先做哪个"） ----
 
-MAX_DEPS = 10
+# [taskgraph.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.taskgraph 导入，见文件顶部 import。
 
 
-def clean_deps(raw, valid_ids) -> list[str]:
-    """依赖只能是同一项目里存在的任务 id；去重、限量、去自引用"""
-    if isinstance(raw, str):
-        raw = [p for p in raw.replace("\n", ",").split(",")]
-    if not isinstance(raw, (list, tuple)):
-        return []
-    out, seen = [], set()
-    for item in raw:
-        dep = str(item).strip()
-        if not dep or dep in seen or dep not in valid_ids or len(out) >= MAX_DEPS:
-            continue
-        seen.add(dep)
-        out.append(dep)
-    return out
+# [taskgraph.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.taskgraph 导入，见文件顶部 import。
 
 
-def task_graph(tasks: list[dict]) -> dict[str, list[str]]:
-    ids = {t.get("id") for t in tasks if isinstance(t, dict)}
-    return {t.get("id"): [d for d in (t.get("depends_on") or []) if d in ids]
-            for t in tasks if isinstance(t, dict)}
+# [taskgraph.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.taskgraph 导入，见文件顶部 import。
 
 
-def has_cycle(graph: dict[str, list[str]]) -> bool:
-    """依赖图不能有环 —— 否则谁都等谁，永远做不了"""
-    WHITE, GREY, BLACK = 0, 1, 2
-    color = {k: WHITE for k in graph}
-
-    def visit(node: str) -> bool:
-        color[node] = GREY
-        for dep in graph.get(node, []):
-            if dep not in color:
-                continue
-            if color[dep] == GREY or (color[dep] == WHITE and visit(dep)):
-                return True
-        color[node] = BLACK
-        return False
-
-    return any(color[n] == WHITE and visit(n) for n in list(graph))
+# [taskgraph.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.taskgraph 导入，见文件顶部 import。
 
 
-def topo_order(tasks: list[dict]) -> list[dict]:
-    """按依赖给出可执行顺序；有环时剩下的退回原始顺序（不该发生，写入时已拦）。
-
-    分层与层内顺序与旧实现逐字一致（层内按原列表顺序），改的只是算法：
-    原来每排完一层就重扫整个列表，链长 N 就是 N² 次比较（实测 400 长的链 29ms）；
-    这里按 Kahn 记"还差几个前置"，前置满足时给后继 -1，归零进下一层。
-    键用 `id(task)` 而不是任务 id：调用方可能传进没经过 `_sanitize` 的列表。
-    """
-    by_id = {t.get("id"): t for t in tasks}
-    rank = {id(t): i for i, t in enumerate(tasks)}      # 层内保持原顺序
-    waiting: dict[int, int] = {}
-    dependents: dict[object, list] = {}
-    for t in tasks:
-        deps = [d for d in (t.get("depends_on") or []) if d in by_id]
-        # 依赖里指向"不存在的前置"按已满足处理（与旧实现同口径：数据清洗后不该有这种）；
-        # 指向自己的那条留在 waiting 里，永远满足不了 → 走有环兜底，同样与旧实现一致。
-        waiting[id(t)] = len(deps)
-        for d in deps:
-            dependents.setdefault(d, []).append(t)
-    current = [t for t in tasks if waiting[id(t)] == 0]
-    out: list[dict] = []
-    while current:
-        out.extend(current)
-        nxt: list[dict] = []
-        for t in current:
-            for d in dependents.get(t.get("id"), ()):
-                waiting[id(d)] -= 1
-                if waiting[id(d)] == 0:
-                    nxt.append(d)
-        nxt.sort(key=lambda x: rank[id(x)])
-        current = nxt
-    if len(out) < len(tasks):                     # 有环：剩下的按原序补上
-        placed = {id(t) for t in out}
-        out.extend(t for t in tasks if id(t) not in placed)
-    return out
+# [taskgraph.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.taskgraph 导入，见文件顶部 import。
 
 
-def _break_dep_cycles(tasks: list[dict]) -> None:
-    """就地剪掉依赖里的环：按顺序逐条接受依赖，会把图连成环的那一条直接丢掉。
-
-    写入路径（create_task / update_task）已经在锁内拦环，这里兜的是另外两条入口 ——
-    导入外部 JSON、从历史备份恢复，它们绕过端点校验。环一旦进了存储，
-    `topo_order` 会退回原序、`executable_tasks` 也可能永远等不齐前置，
-    而用户只看到"顺序怎么不对"，查不到原因。
-
-    挂在 `_sanitize()`（每次读都跑）而不是只挂在导入端点上，是为了连手改过的
-    projects.json 与旧备份一起自愈。代价实测过：1000 项目 / 一万任务（4.1MB）下
-    `scripts/bench.py` 的列表接口从 56ms 涨到 63ms（约 +6ms），离 300ms 的存储层
-    改造触发线还很远；常态只有一次 DFS 就返回，不会逐条试。要挪走前先重跑 bench。
-    """
-    ids = {t.get("id") for t in tasks if isinstance(t, dict)}
-    graph: dict[str, list[str]] = {}
-    for t in tasks:
-        if isinstance(t, dict):
-            graph[t.get("id")] = [d for d in (t.get("depends_on") or []) if d in ids]
-    if not has_cycle(graph):
-        return                      # 常态：一次 DFS 就过，不必逐条试
-    # 真有成环（多半来自外部导入/旧备份）：从空图出发按入列顺序逐条接受，
-    # 装得进去就留、会把图连成环就丢。必须从空图开始 —— 拿检测用的那张图当底子，
-    # 后面任务尚未处理的依赖会假装成"已经在图里"，把本该保留的前一条依赖误剪掉。
-    acyclic: dict[str, list[str]] = {tid: [] for tid in graph}
-    for t in tasks:
-        if not isinstance(t, dict):
-            continue
-        tid = t.get("id")
-        accepted: list[str] = []
-        for dep in (t.get("depends_on") or []):
-            if dep not in ids or dep == tid:
-                continue
-            acyclic[tid].append(dep)
-            if has_cycle(acyclic):
-                acyclic[tid].pop()
-            else:
-                accepted.append(dep)
-        t["depends_on"] = accepted
+# [taskgraph.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.taskgraph 导入，见文件顶部 import。
 
 
-def executable_tasks(tasks: list[dict]) -> list[dict]:
-    """当前可以动手的任务：自己的状态未完成，且所有前置都已完成"""
-    done_ids = {t.get("id") for t in tasks if t.get("status") == "已完成"}
-    known_ids = {t.get("id") for t in tasks}      # 只算一次：原来这个集合是在下面按任务逐个重建的
-    return [t for t in tasks
-            if t.get("status") != "已完成"
-            and all(d in done_ids or d not in known_ids
-                    for d in (t.get("depends_on") or []))]
+# [taskgraph.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.taskgraph 导入，见文件顶部 import。
 
 
-def _dedupe_ids(items: list) -> None:
-    """就地消除重复 id：保留第一条，后来的换成**确定性**的新 id（`t1~2`、`t1~3`…）。
-
-    全部"按 id 找"的逻辑都是 first-match，所以重复 id 不是显示问题而是静默的数据问题：
-    PUT 只改第一条（余份永远读不到新值）、DELETE 会把同 id 的几条**一起删掉**、
-    `topo_order` 输入 4 条只输出 3 条（交接包丢任务）；而 `by_id = {t["id"]: t}` 是
-    last-wins，于是依赖图和任务列表指向两条不同任务，真环能以 has_cycle=False 入库
-    —— 直接违反「不许有环」这条不变式。
-
-    新 id 必须由原 id 推出来、**不能是随机 uuid**：这一步挂在每次读上，
-    随机化会让同一条数据在两次读之间换身份 —— 界面拿旧 id 点进去就 404，
-    测试里"读一次拿 id、再删它"也会随机失败。内容一条都不能丢，
-    id 本来就是 uuid，用户界面靠标题定位，数据里也没有跨项目引用它。
-
-    **没有 id 的条目不补**：导入端点有一条明写并测过的规则 —— 缺 id 或缺名的项目直接丢，
-    在这里替它编一个 id 等于把那份残缺数据放回世界。
-    """
-    seen: set = set()
-    for it in items:
-        if not isinstance(it, dict):
-            continue
-        tid = it.get("id")
-        if not tid:
-            continue
-        if tid not in seen:
-            seen.add(tid)
-            continue
-        n = 2
-        while f"{tid}~{n}" in seen:
-            n += 1
-        it["id"] = f"{tid}~{n}"
-        seen.add(it["id"])
+# [taskgraph.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.taskgraph 导入，见文件顶部 import。
 
 
-_DUE_CANONICAL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# [due.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.due 导入，见文件顶部 import。
 
 
-def _clean_due_date(v) -> str:
-    """归一截止日期：认 `2026-09-05` / `2026/9/5` / `2026.09.05`，认不出来就清空。
-
-    写入端点自己会校验，这里兜的是导入与手改的 projects.json。
-    不归一的话它是**按字符串**比较的：`2026-9-5` 排在 `2026-08-01` 之后（'9' > '0'），
-    于是 /api/today 的顺序、临期与逾期判断一起看错，而且错得看不出来。
-    清空与 `TaskIn._clean_due` 同口径 —— 留着解析不出的原值只会让下游各自猜。
-
-    长得就已经是规范形式的先看形状放过：这一步挂在每次读上，
-    一万条任务逐条 `strptime` 实测给列表接口加了约 20ms（1000 项目数据集）。
-    形状对但日期不存在（`2026-13-45`）的会留到 `_due_state` 里解析失败、按"未设截止"处理。
-    """
-    s = str(v or "").strip()
-    if not s:
-        return ""
-    if _DUE_CANONICAL_RE.match(s):
-        return s
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d"):
-        try:
-            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
-        except ValueError:
-            continue
-    return ""
+# [due.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.due 导入，见文件顶部 import。
 
 
 def _sanitize(data: dict) -> dict:
@@ -732,6 +609,14 @@ def index():
     return PlainTextResponse("前端资源缺失，请检查安装包完整性", status_code=500)
 
 
+# 前端静态资源：2026-09-28 之前的 index.html 是"CSS+JS 全内联"的单文件，
+# 拆成 `style.css` + `js-*.js` 之后，浏览器会单独请求这些文件 ——
+# 不挂这一条，界面就是一片白（而 `/` 那条接口照样 200，看不出问题）。
+# 挂 `/web` 而不是根：根下已经有 `/api/*`，放开了容易和以后的路由撞。
+if Path(WEB_DIR).is_dir():
+    app.mount("/web", StaticFiles(directory=str(WEB_DIR), check_dir=False), name="web")
+
+
 @app.get("/api/health")
 def health():
     return {
@@ -841,41 +726,12 @@ def project_context(pid: str, redact: int = 0):
 
 # ---- 交接内容脱敏（对标 handoff skill 的 redact） ----
 
-MASK_MARK = "********"      # 脱敏掩码；「建议回传里带掩码就别落盘」那条判断认它
+# [redact.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.redact 导入，见文件顶部 import。
 
-_REDACT_PATTERNS = [
-    # 前缀型 Key：OpenAI / Anthropic / NVIDIA / GitHub 全系 / GitLab / AWS（含临时凭据 ASIA）/
-    # Slack / npm / PyPI / Docker Hub / HuggingFace / Sonar
-    (r"(?i)\b(sk|rc|nvapi|ghp|gho|ghu|ghs|ghr|github_pat|glpat|xoxb|xoxp|xapp"
-     r"|npm_|pypi|dckr_pat|hf|sgpat)[-_][A-Za-z0-9_-]{6,}", r"\1-" + MASK_MARK),
-    # AWS 访问密钥是前缀直接跟 16 位大写字母数字，**没有分隔符**，套不进上面那条
-    (r"\b(AKIA|ASIA)[0-9A-Z]{16}\b", r"\1-" + MASK_MARK),
-    # JWT：三段 base64url，段段有点分着，正常中文/代码里不会出现
-    (r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}", "JWT." + MASK_MARK),
-    (r"(?i)\bBearer\s+[A-Za-z0-9._-]{8,}", "Bearer " + MASK_MARK),
-    # 私钥整块（PEM）：正文本来就是 base64，逐条规则都命中不了，只能按块盖掉
-    (r"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----(.*?)(-----END [A-Z ]*PRIVATE KEY-----|$)",
-     "-----" + MASK_MARK + "-----"),
-    # key: value 形态。**JSON 里键名是带引号的**（`"api_key": "xxx"`），
-    # 原来那条 `key\s*[:=]` 卡在引号上匹配不到，于是最常见的 JSON 配置反而没脱敏。
-    # 另外替换必须原样保留分隔符 —— 老写法把 `:` 统一换成 `=`，脱敏顺手改了别人的格式。
-    (r"(?i)\b(api[_-]?key|apikey|access[_-]?token|auth[_-]?token|refresh[_-]?token|token"
-     r"|secret|password|passwd|pwd|key|授权码|密钥)([\"']?)(\s*[:=]\s*)([\"']?)[^\s\"']{4,}",
-     r"\1\2\3\4" + MASK_MARK),
-    # 连接串 postgres://user:pass@host —— 盖掉口令，主机名留着（排查问题要用）
-    # 必须排在邮箱规则前面：否则邮箱规则先把 `pass@host.com` 吃掉，口令就漏在协议头里
-    (r"(?i)\b([a-z][a-z0-9+.-]*://[^/\s:@]+:)[^@\s]+(@)", r"\1" + MASK_MARK + r"\2"),
-    (r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "****@****"),
-]
+# [redact.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.redact 导入，见文件顶部 import。
 
 
-def redact_text(text: str) -> str:
-    """把交接内容里的敏感信息替换为掩码（API Key / 令牌 / 密码 / 邮箱）"""
-    if not text:
-        return text
-    for pat, rep in _REDACT_PATTERNS:
-        text = re.sub(pat, rep, text)
-    return text
+# [redact.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.redact 导入，见文件顶部 import。
 
 
 @app.get("/api/search/tasks")
@@ -955,40 +811,16 @@ def list_projects():
     return {"projects": out, "data_recovered": recovered, "recovered_from": recovered_from}
 
 
-MAX_IDEM = 500           # 幂等键表上限：追加型存储，按硬性约定 11 必须有上限
-IDEM_KEY = "_client_refs"
+# [idem.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.idem 导入，见文件顶部 import。
 
 
-def _idem_seen(data: dict, ref: str) -> str | None:
-    """这个 `client_ref` 之前用过吗？用过就返回当初建出来的 id。"""
-    hit = (data.get(IDEM_KEY) or {}).get(ref)
-    return hit if isinstance(hit, str) else None
+# [idem.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.idem 导入，见文件顶部 import。
 
 
-def _idem_remember(data: dict, ref: str, ident: str) -> None:
-    """记住"这个键造出了这条记录"。
-
-    智能体调用超时后重试是常态：没有幂等键，同一条指令就会造出成对的重复任务，
-    重复项还会跟着进交接包与拓扑序，事后要靠"标题一样"手工分辨。
-    写入与记账必须在**同一个临界区**里（所以它吃 `mutate` 的那份 `data`）——
-    分两次做就会出现"建成了但没记下来"，重试照样翻倍。
-    同一个键配不同正文时按"重试"处理：返回第一次的结果，不覆盖。
-    """
-    table = data.setdefault(IDEM_KEY, {})
-    table[ref] = ident
-    while len(table) > MAX_IDEM:      # 先进先出；幂等窗口只需覆盖"刚才那次重试"
-        table.pop(next(iter(table)))
+# [idem.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.idem 导入，见文件顶部 import。
 
 
-def _clean_ref(raw) -> str:
-    """规范化幂等键。**超长不能简单截断**：两条前 80 字符相同、后面才不同的不同请求
-    会被截成同一个键，第二次直接拿回第一次那条记录的 id —— 静默返回错的东西，
-    比报个错严重得多（实测过：`A`*80+"-first" 与 `A`*80+"-SECOND" 撞成同一条）。
-    超长改成"前缀 + 全串哈希"：表内长度仍有界，不同输入必然不同键。"""
-    ref = str(raw or "").strip()
-    if len(ref) <= 80:
-        return ref
-    return ref[:48] + "~" + hashlib.sha1(ref.encode("utf-8")).hexdigest()[:16]
+# [idem.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.idem 导入，见文件顶部 import。
 
 
 @app.post("/api/projects", status_code=201)
@@ -1421,50 +1253,16 @@ def _local_url(path: str) -> str:
     return f"http://127.0.0.1:{SERVICE_PORT}{path}"
 
 
-def context_budget(text: str, warn_lines: int = 150, over_lines: int = 300) -> dict:
-    """交接物有多长（行 / KB / 档位）。
-
-    为什么值得报这个数字：接手方是模型，上下文窗口是它的稀缺资源 ——
-    上游（Claude Code 对 CLAUDE.md 的官方口径）也是按"超过约 200 行遵循度开始掉"
-    来建议的。交接包不是越长越负责：过长会被截断、被略读，反而丢关键信息。
-    报出来让人和智能体自己决定要不要精简。
-    """
-    lines = len(text.splitlines())
-    kb = round(len(text.encode("utf-8")) / 1024, 1)
-    level = "ok" if lines <= warn_lines else ("warn" if lines <= over_lines else "over")
-    return {"lines": lines, "kb": kb, "level": level}
+# [handoff_meta.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.handoff_meta 导入，见文件顶部 import。
 
 
-def _budget_note(text: str) -> str:
-    """给交接物末尾追加一行尺寸提示（只在偏长/过载时说话，正常长度不打扰）"""
-    b = context_budget(text)
-    if b["level"] == "ok":
-        return ""
-    hint = {"warn": "偏长，建议精简背景与已完成任务",
-            "over": "过长：接手方很可能读不完或被截断，务必裁剪"}[b["level"]]
-    return f"\n\n—— 本包约 {b['lines']} 行 / {b['kb']} KB，{hint}。"
+# [handoff_meta.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.handoff_meta 导入，见文件顶部 import。
 
 
-HANDOFF_SECTIONS = ("git", "journal", "memories", "refs", "done")
-_SECTION_CN = {"git": "代码现状", "journal": "任务过程记录", "memories": "已沉淀记忆",
-               "refs": "涉及代码位置", "done": "已完成任务"}
+# [handoff_meta.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.handoff_meta 导入，见文件顶部 import。
 
 
-def parse_handoff_sections(raw, *, param: str) -> set[str]:
-    """解析"要省略哪些小节"。不认识的名字**必须报错**，不能静默忽略 ——
-    静默忽略等于调用方以为自己裁掉了、实际整包原样发出去。"""
-    if raw is None or raw == "":
-        return set()
-    items = raw if isinstance(raw, (list, tuple)) else [x for x in str(raw).replace(" ", ",").split(",")]
-    out = set()
-    for x in items:
-        name = str(x).strip().lower()
-        if not name:
-            continue
-        if name not in HANDOFF_SECTIONS:
-            raise HTTPException(400, f"{param} 不认识「{name}」，可选：{'、'.join(HANDOFF_SECTIONS)}")
-        out.add(name)
-    return out
+# [handoff_meta.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.handoff_meta 导入，见文件顶部 import。
 
 
 def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None,
@@ -1596,21 +1394,7 @@ def export_handoff(pid: str, redact: int = 0, omit_sections: str = ""):
 #  统计 / 就绪度 / 完整交接包 / 趋势
 # =====================================================================
 
-def _due_state(t: dict) -> str:
-    """任务截止状态：overdue=已逾期 / soon=2 天内临期 / ok=正常 / 空=未设截止或已完成"""
-    due = (t.get("due_date") or "").strip()
-    if not due or t.get("status") == "已完成":
-        return ""
-    try:
-        d = datetime.strptime(due, "%Y-%m-%d").date()
-    except ValueError:
-        return ""
-    today = datetime.now().date()
-    if d < today:
-        return "overdue"
-    if (d - today).days <= 2:
-        return "soon"
-    return "ok"
+# [due.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.due 导入，见文件顶部 import。
 
 
 @app.get("/api/stats")
@@ -1981,52 +1765,15 @@ def _generate_agents_md(p: dict) -> tuple[str, str, str]:
 
 # ---- 多智能体入口文件（对比同类：Claude/Cursor/Copilot/Gemini/Cline/Aider/Windsurf 各要各的入口） ----
 
-# 各工具的入口文件路径：AGENTS.md 是唯一事实来源，其余都是它的投影
-AGENT_ENTRY_TARGETS: dict[str, str] = {
-    "agents": "AGENTS.md",
-    "claude": "CLAUDE.md",
-    "cursor": ".cursor/rules/project.mdc",
-    "copilot": ".github/copilot-instructions.md",
-    "gemini": "GEMINI.md",
-    "cline": ".clinerules/project.md",
-    "aider": "CONVENTIONS.md",
-    "windsurf": ".windsurfrules",
-}
+# [agentfiles.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.agentfiles 导入。
 
-# Claude Code 不直接读 AGENTS.md，官方给的方式是让 CLAUDE.md 导入它
-CLAUDE_BRIDGE = (
-    "# CLAUDE.md\n"
-    "\n"
-    "<!-- 项目约定统一维护在 AGENTS.md，本文件只做桥接，避免两份内容各写各的、慢慢漂移 -->\n"
-    "\n"
-    "@AGENTS.md\n"
-)
+# [agentfiles.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.agentfiles 导入。
 
 
-def _cursor_rule(content: str, p: dict) -> str:
-    """Cursor Project Rules 需要 YAML frontmatter（描述 / 作用范围 / 是否常驻）"""
-    desc = f"{p.get('name', '项目')} 的工程约定（由 AI 交接看板生成）"
-    return f"---\ndescription: {desc}\nglobs:\nalwaysApply: true\n---\n\n{content}\n"
+# [agentfiles.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.agentfiles 导入。
 
 
-def build_agent_entries(p: dict, content: str, targets: list[str] | None = None) -> dict[str, str]:
-    """把同一份内容投影成各工具要求的入口文件，返回 {相对路径: 内容}
-
-    相对路径来自白名单，不接受调用方传入，因此不存在路径穿越。
-    """
-    picked = targets if targets else list(AGENT_ENTRY_TARGETS)
-    out: dict[str, str] = {}
-    for t in picked:
-        rel = AGENT_ENTRY_TARGETS.get(t)
-        if not rel or rel in out:
-            continue
-        if t == "claude":
-            out[rel] = CLAUDE_BRIDGE
-        elif t == "cursor":
-            out[rel] = _cursor_rule(content, p)
-        else:
-            out[rel] = content if content.endswith("\n") else content + "\n"
-    return out
+# [agentfiles.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.agentfiles 导入。
 
 
 class AgentFilesBody(BaseModel):
@@ -2429,52 +2176,13 @@ def delete_memory(mid: str):
 
 # ---- 会话捕获：自动发现 AI 工具的本地会话文件 ----
 
-def session_sources() -> list[dict]:
-    """默认探测常见 AI 工具会话目录；自定义源存 config.ai.session_sources"""
-    home = Path(os.environ.get("USERPROFILE") or str(Path.home()))
-    defaults = [
-        {"name": "Claude Code", "path": str(home / ".claude" / "projects"), "type": "claude_jsonl"},
-        {"name": "Cline (VS Code)", "path": str(home / "AppData" / "Roaming" / "Code" / "User"
-                                                / "globalStorage" / "saoudrizwan.claude-dev" / "tasks"), "type": "cline"},
-        {"name": "Cline (独立版)", "path": str(home / ".cline" / "data" / "tasks"), "type": "cline"},
-    ]
-    cfg = llm.load_config()
-    custom = cfg.get("ai", {}).get("session_sources") or []
-    return defaults + [c for c in custom if isinstance(c, dict) and c.get("path")]
+# [sessions.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.sessions 导入。
 
 
-def _walk_bounded(root: Path, budget: int = 2000, max_depth: int = 3):
-    """懒走目录，最多吐 budget 个文件、深 max_depth 层。
-
-    自定义会话源常被随手指到很宽的目录（甚至整块盘）。原来写的是
-    `[f for f in root.rglob("*") if f.is_file()][:200]` —— 切片在推导式**之后**，
-    等于先把整棵树物化进内存才想起来只要 200 个，一个宽路径就能挂住整个请求。
-    """
-    base_depth = len(root.parts)
-    seen = 0
-    for dirpath, dirnames, filenames in os.walk(root):
-        if len(Path(dirpath).parts) - base_depth >= max_depth:
-            dirnames[:] = []            # 不再往下走
-        for name in filenames:
-            seen += 1
-            if seen > budget:
-                return
-            yield Path(dirpath) / name
+# [sessions.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.sessions 导入。
 
 
-def _newest_files(paths, n: int = 8) -> list[Path]:
-    """按修改时间取最近 n 个。
-
-    单个文件 stat 失败（扫描过程中被删/被占用）跳过就行，不能像原来那样
-    把它留给 `sorted(key=f.stat)` —— 那会让整次 /api/sessions/scan 直接 500。
-    """
-    scored = []
-    for f in paths:
-        try:
-            scored.append((f.stat().st_mtime, f))
-        except OSError:
-            continue
-    return [f for _, f in heapq.nlargest(n, scored, key=lambda x: x[0])]
+# [sessions.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.sessions 导入。
 
 
 @app.get("/api/sessions/scan")
@@ -2512,105 +2220,16 @@ def scan_sessions():
     return {"sessions": out[:20]}
 
 
-def _read_tail_text(f: Path, limit_bytes: int = 1 << 20) -> str:
-    """只读文件末尾 limit_bytes 字节。
-
-    会话文件动辄几百 MB，而提取逻辑本来就是"尾部优先"：整份 `read_text()`
-    等于把内存和一次几秒的 IO 搭进去，只为拿最后 12000 字。
-    """
-    try:
-        size = f.stat().st_size
-        with open(f, "rb") as fh:
-            if size > limit_bytes:
-                fh.seek(-limit_bytes, os.SEEK_END)
-            data = fh.read()
-    except OSError:
-        return ""
-    return data.decode("utf-8", "replace")
+# [sessions.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.sessions 导入。
 
 
-def _extract_session_text(path: str, max_chars: int = 12000) -> str:
-    """从会话文件提取对话文本（尾部优先）。支持 Claude Code JSONL / cline JSON / 纯文本"""
-    f = Path(path)
-    if not f.exists():
-        raise HTTPException(404, "会话文件不存在")
-    texts: list[str] = []
-    if f.suffix.lower() == ".jsonl":
-        try:
-            lines = _read_tail_text(f).splitlines()
-        except Exception:
-            lines = []
-        for line in lines[-200:]:
-            try:
-                obj = json.loads(line)
-            except Exception:
-                continue
-            if not isinstance(obj, dict):
-                continue
-            msg = obj.get("message") or {}
-            role = str(obj.get("type") or msg.get("role") or "")
-            content = msg.get("content")
-            if isinstance(content, list):
-                content = " ".join(c.get("text", "") for c in content
-                                   if isinstance(c, dict) and c.get("type") == "text")
-            if isinstance(content, str) and content.strip():
-                tag = "用户" if "user" in role.lower() else "助手"
-                texts.append(f"{tag}：{content.strip()[:600]}")
-    elif f.suffix.lower() == ".json":
-        try:
-            data = json.loads(_read_tail_text(f))
-        except Exception:
-            data = None
-        if isinstance(data, list):
-            for m in data[-120:]:
-                if not isinstance(m, dict):
-                    continue
-                txt = m.get("text") or ""
-                say = str(m.get("say") or m.get("type") or "")
-                if txt and "api_req" not in say and "tool" not in say:
-                    role = "用户" if "user" in say else "助手"
-                    texts.append(f"{role}：{str(txt)[:600]}")
-    if not texts:
-        texts = [_read_tail_text(f)[-6000:]]
-    return "\n\n".join(texts)[-max_chars:]
+# [sessions.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.sessions 导入。
 
 
-def _session_roots() -> list[Path]:
-    """已配置的会话源根目录（默认源 + config 里用户自定义的）"""
-    roots = []
-    for src in session_sources():
-        p = (src or {}).get("path") if isinstance(src, dict) else None
-        if not p:
-            continue
-        try:
-            roots.append(Path(p).resolve())
-        except Exception:
-            continue
-    return roots
+# [sessions.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.sessions 导入。
 
 
-def is_allowed_session_file(raw_path: str) -> bool:
-    """只允许读取「已配置的会话源」里的文件。
-
-    为什么必须收口：preview/ingest 读到的内容会**送进 LLM** ——
-    等于把文件内容搬到外部模型。不限源的话，任意本机路径（config.json 里的 API Key、
-    .env、别的项目源码）都能被读走 12000 字符，直接掀翻「数据不出本机」这条边界。
-    """
-    if not raw_path:
-        return False
-    try:
-        target = Path(raw_path).resolve()
-    except Exception:
-        return False
-    if not target.is_file():
-        return False
-    for root in _session_roots():
-        try:
-            if target == root or root in target.parents:
-                return True
-        except Exception:
-            continue
-    return False
+# [sessions.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.sessions 导入。
 
 
 @app.get("/api/sessions/preview")

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 交接看板 · 全面测试与优化报告（2026-09-29）</title>
+<style>
+  :root {
+    --bg: #f6f4ef;          /* 暖米纸底，非纯白 */
+    --ink: #26282b;         /* 近黑，非纯黑 */
+    --ink-2: #5c6166;
+    --hairline: #d8d4cb;
+    --accent: #4a6b5d;      /* 哑绿，唯一 accent */
+    --accent-soft: #e7ece9;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Source Han Serif SC", "Noto Serif SC", Georgia, "Songti SC", serif;
+    line-height: 1.6;
+    font-size: 16px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 32px 96px; }
+  header.doc { padding: 72px 0 40px; border-bottom: 1px solid var(--hairline); }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-2); margin-bottom: 20px;
+  }
+  h1 { font-size: 40px; line-height: 1.15; font-weight: 600; letter-spacing: -0.02em; max-width: 640px; }
+  .lede { margin-top: 22px; font-size: 17px; color: var(--ink-2); max-width: 620px; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 28px; margin-top: 34px;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-2);
+  }
+  .meta-row b { color: var(--ink); font-weight: 500; }
+  nav.toc { padding: 26px 0; border-bottom: 1px solid var(--hairline); }
+  nav.toc ol { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 40px; }
+  nav.toc a { color: var(--ink); text-decoration: none; font-size: 14px; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .n { font-family: var(--mono); font-size: 11px; color: var(--ink-2); margin-right: 10px; }
+  section { padding: 52px 0 8px; }
+  .folio {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+    color: var(--accent); margin-bottom: 14px;
+  }
+  h2 { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 18px; }
+  h3 { font-size: 16px; font-weight: 600; margin: 28px 0 10px; }
+  p { margin-bottom: 14px; max-width: 66ch; }
+  p.small-note { font-size: 13px; color: var(--ink-2); }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 26px; font-size: 14px; }
+  th {
+    text-align: left; font-weight: 600; font-size: 12.5px;
+    border-bottom: 1px solid var(--ink); padding: 8px 14px 8px 0;
+  }
+  td { border-bottom: 1px solid var(--hairline); padding: 9px 14px 9px 0; vertical-align: top; }
+  td.mono, .mono { font-family: var(--mono); font-size: 12.5px; }
+  .num { font-family: var(--mono); }
+  /* 结论看板：圆角柔影但克制（Takram 方向允许的小元件柔化） */
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 26px 0 10px; }
+  .stat {
+    background: #fbfaf7; border: 1px solid var(--hairline); border-radius: 14px;
+    padding: 20px 22px; box-shadow: 0 1px 2px rgba(38,40,43,0.04);
+  }
+  .stat .v { font-family: var(--mono); font-size: 30px; color: var(--accent); line-height: 1.1; }
+  .stat .k { font-size: 13px; color: var(--ink-2); margin-top: 8px; }
+  .stat .s { font-size: 12px; color: var(--ink-2); margin-top: 4px; font-family: var(--mono); }
+  /* 阶段时间线 */
+  .steps { margin: 22px 0 8px; }
+  .step { display: grid; grid-template-columns: 92px 1fr; gap: 18px; padding: 14px 0; border-bottom: 1px solid var(--hairline); }
+  .step:last-child { border-bottom: none; }
+  .step .d { font-family: var(--mono); font-size: 12px; color: var(--ink-2); padding-top: 2px; }
+  .step .t { font-size: 14.5px; }
+  .step .t b { font-weight: 600; }
+  .step .t span { display: block; color: var(--ink-2); font-size: 13.5px; margin-top: 3px; }
+  .verdict {
+    margin: 30px 0 0; padding: 22px 26px; border-radius: 14px;
+    background: var(--accent-soft); border: 1px solid #cfd9d3;
+  }
+  .verdict b { font-weight: 600; }
+  .verdict p { margin: 0; max-width: none; }
+  code {
+    font-family: var(--mono); font-size: 0.86em;
+    background: #eeece6; border-radius: 4px; padding: 1px 6px;
+  }
+  footer { margin-top: 70px; padding-top: 22px; border-top: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); }
+  @media (max-width: 720px) {
+    .wrap { padding: 0 20px 64px; }
+    h1 { font-size: 30px; }
+    .board { grid-template-columns: 1fr; }
+    nav.toc ol { grid-template-columns: 1fr; }
+    .step { grid-template-columns: 1fr; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="kicker">Delivery Report · 2026-09-29 · 变异探针清零轮</div>
+  <h1>AI 交接看板：全面测试与优化收口</h1>
+  <p class="lede">在 9-22 评测、9-25 测试可信度审计、9-28 大文件拆分之后，本轮把七步门禁推到全绿，
+  并将变异探针的 12 条存活盲区清零——「改了还全绿」的窗口从此不存在。</p>
+  <div class="meta-row">
+    <span>对象 <b>D:\lo\项目任务看板</b></span>
+    <span>门禁 <b>ci_local 七步全绿</b></span>
+    <span>用例 <b>595 / 0 失败</b></span>
+    <span>覆盖 <b>93%（分支）</b></span>
+  </div>
+</header>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#s1"><span class="n">01</span>结论看板</a></li>
+    <li><a href="#s2"><span class="n">02</span>本轮做了什么</a></li>
+    <li><a href="#s3"><span class="n">03</span>七步门禁终验</a></li>
+    <li><a href="#s4"><span class="n">04</span>12 条盲区：为什么以前没人红</a></li>
+    <li><a href="#s5"><span class="n">05</span>接口面测试清单</a></li>
+    <li><a href="#s6"><span class="n">06</span>风险与遗留</a></li>
+  </ol>
+</nav>
+
+<section id="s1">
+  <div class="folio">01 · 结论看板</div>
+  <h2>三个数字说明这轮的价值</h2>
+  <div class="board">
+    <div class="stat">
+      <div class="v">12 → 0</div>
+      <div class="k">变异探针存活清零</div>
+      <div class="s">32/32 mutations killed</div>
+    </div>
+    <div class="stat">
+      <div class="v">7 / 7</div>
+      <div class="k">ci_local 门禁全绿</div>
+      <div class="s">CI_EXIT=0 · 可发版</div>
+    </div>
+    <div class="stat">
+      <div class="v">595</div>
+      <div class="k">全量用例，0 失败</div>
+      <div class="s">branch coverage 93%</div>
+    </div>
+  </div>
+  <p class="small-note">9-28 拆分当晚探针还报 32/32 全杀，本轮全量复跑才暴露真实状态：日志尾部截影让三轮门禁各看到互不重叠的存活子集，全量跑第一次拿到完整 12 条清单。</p>
+</section>
+
+<section id="s2">
+  <div class="folio">02 · 本轮做了什么</div>
+  <h2>从基线到清零的执行路径</h2>
+  <div class="steps">
+    <div class="step"><div class="d">17:48–17:57</div><div class="t"><b>盘点与基线</b><span>确认 9-28 拆分现场未提交；全量 pytest 595 绿、覆盖 93%；前端 5 个 JS 文件语法/编码/契约审查通过；清理 3 个历史垃圾文件。</span></div></div>
+    <div class="step"><div class="d">18:04–18:12</div><div class="t"><b>第一轮门禁 5/7</b><span>live_check 前端契约还停在"单文件 index.html 时代"（ACTIONS 表已搬去 js-core.js）——按 frozen_smoke 同口径修复，复跑 12 项全过。</span></div></div>
+    <div class="step"><div class="d">18:15–18:31</div><div class="t"><b>探针第一、二轮收口</b><span>先收 8 条：6 条是 9-26 拆纯模块后 killer 清单没跟上搬家（A/B 实证纯模块单测能杀），1 条变异打在重构后不可达路径（guard_host_ipv6），1 条真盲区（搜索上限夹取）。</span></div></div>
+    <div class="step"><div class="d">18:47–19:40</div><div class="t"><b>全量复跑与终局收口</b><span>全量探针首次暴露完整 12 条存活；逐条注入实证根因，补 8 个语义级用例 + killer 清单对齐 + 一处自引用断言消除；8/8 单独复验转"被杀"。</span></div></div>
+    <div class="step"><div class="d">19:45</div><div class="t"><b>终验</b><span>全量探针 32/32 被杀（PROBE_EXIT=0）→ ci_local 七步全绿（CI_EXIT=0），脚本结论"全部通过，可以发版"。</span></div></div>
+  </div>
+</section>
+
+<section id="s3">
+  <div class="folio">03 · 七步门禁终验</div>
+  <h2>每一步的真实退出码与数字</h2>
+  <table>
+    <tr><th>步骤</th><th>结果</th><th>关键数字</th></tr>
+    <tr><td>pytest 全量（覆盖率门槛 90）</td><td class="num">OK</td><td>595 用例 / 0 失败 / 5 跳过（需真实 Key 的 live 用例），分支覆盖 93%</td></tr>
+    <tr><td>变异探针 mutation_probe</td><td class="num">OK</td><td><b>32 条全部被杀</b>（本轮从 12 条存活清零）</td></tr>
+    <tr><td>场景测试 scenario_test</td><td class="num">OK</td><td>32/32</td></tr>
+    <tr><td>发版回归 release_regression --no-ai</td><td class="num">OK</td><td>16 通过 + 2 项明确标"未验"（AI 链路不冒充已验）</td></tr>
+    <tr><td>交付演练 delivery_drill</td><td class="num">OK</td><td>21/0（接手→执行→交接→监管→迁移端到端）</td></tr>
+    <tr><td>只读体检 live_check --mcp</td><td class="num">OK</td><td>12/0（含 MCP 23 工具目录）</td></tr>
+    <tr><td>真浏览器 live_ui_check</td><td class="num">OK</td><td>16/0，全程无 JS 报错（Playwright + 系统 Edge/Chrome）</td></tr>
+  </table>
+  <p class="small-note">终验日志：ci_final3.log 七步全部 [OK]，总结论"全部通过，可以发版"。覆盖率 93% 为分支覆盖口径（门槛 90），-n auto 下未覆盖数在 ±4 漂动属正常。</p>
+</section>
+
+<section id="s4">
+  <div class="folio">04 · 12 条盲区</div>
+  <h2>为什么以前没人红</h2>
+  <p>探针存活的本质只有两类：<b>测试看不见</b>（killer 清单没跟上代码搬家）与<b>断言没落到语义</b>（用例存在但改了语义照样绿）。本轮 12 条按此分类：</p>
+  <table>
+    <tr><th>类型</th><th>条目</th><th>根因与修法</th></tr>
+    <tr><td>killer 清单没跟上搬家（6 条）</td><td class="mono">due_soon_window · due_overdue_boundary · due_ignore_done · due_normalize_formats · executable_unknown_dep_blocks · max_deps_shrunk</td><td>9-26 拆出的纯模块直接单测 test_pure_modules.py 不在 killer 清单；max_deps 另有自引用断言（== MAX_DEPS 永远成立），改硬编码 10</td></tr>
+    <tr><td>变异打在不可达路径（1 条）</td><td class="mono">guard_host_ipv6</td><td>_host_of 主路径已走 urlparse，原变异文本不可达；改为"兜底分支不得把异常 Host 解析成空串放行"，补 [abc] 类输入用例</td></tr>
+    <tr><td>带内区间无断言（1 条）</td><td class="mono">idem_ref_truncate</td><td>幂等键 49~80 字符区间无人测；补"80 原样 / 81 走哈希"带内断言</td></tr>
+    <tr><td>真语义盲区（8 条）</td><td class="mono">search_limit_ceiling_raised · today_hard_cap_shrunk · today_loses_priority_sort · readiness_active_narrowed · clean_journal_no_cap · forbidden_roots_drops_appdata · live_url_wrong_port · save_export×3</td><td>上限夹取、优先级排序、全完成项目满分、AppData 黑名单、直链端口、保存三面闸——每条补一个语义级用例</td></tr>
+  </table>
+  <p class="small-note">给后续维护者的纪律：新拆的模块要同步进相关变异的 killer 清单；新增业务规则时顺手往 MUTATIONS 加一条——这两件事漏掉任何一件，本轮清零都会回退。</p>
+</section>
+
+<section id="s5">
+  <div class="folio">05 · 接口面测试清单</div>
+  <h2>"全面测试所有接口"的口径</h2>
+  <table>
+    <tr><th>接口面</th><th>数量</th><th>验证方式</th></tr>
+    <tr><td>HTTP 自有端点</td><td class="num">51 条</td><td>pytest 进程内 TestClient 全覆盖 + 场景测试 32 例真服务真数据</td></tr>
+    <tr><td>MCP 工具</td><td class="num">23 个</td><td>test_mcp_server 走真 stdio tools/call 逐工具验（覆盖率口径之外的声明盲区已明示）</td></tr>
+    <tr><td>MCP 资源 / 提示词</td><td class="num">4 类 uri / 3 个</td><td>resources 与 prompts 契约测试</td></tr>
+    <tr><td>前端交互</td><td class="num">60+ 动作</td><td>静态契约（data-act 全注册、ACTIONS 函数全定义、无内联事件）+ 真浏览器点击 16 项</td></tr>
+    <tr><td>语义防回归</td><td class="num">32 处</td><td>变异探针逐条注入假缺陷，全部被既有用例抓红</td></tr>
+  </table>
+  <p class="small-note">本轮未改任何产品语义；"优化"全部落在验证面——把只在该报的时候绿的灯接成真的会红的。</p>
+</section>
+
+<section id="s6">
+  <div class="folio">06 · 风险与遗留</div>
+  <h2>已知债与接手顺序</h2>
+  <table>
+    <tr><th>优先级</th><th>事项</th><th>说明</th></tr>
+    <tr><td>高</td><td>提交拆分与收口两批改动</td><td>工作区同时含 9-28 拆分与本轮收口，建议拆两个 commit；回滚方式见交接说明第五节</td></tr>
+    <tr><td>高</td><td>重新打包 exe</td><td>改过 web/ 与 app/，旧 exe 会触发"产物不比源码旧"红灯；build.bat + frozen_smoke 必跑</td></tr>
+    <tr><td>中</td><td>CI 首跑</td><td>仓库仍无远端，workflow 从未真执行过；接远端后观察第一轮</td></tr>
+    <tr><td>低（需用户点头）</td><td>三项登记债</td><td>备份带明文 Key、journal 维度收口、_projects_brief 双实现合并——AGENTS.md 已登记代价</td></tr>
+  </table>
+  <div class="verdict">
+    <p><b>终验结论：</b>ci_local 七步全绿，变异探针 32/32 被杀，"全部通过，可以发版"由脚本真实退出码背书，不是口头绿灯。</p>
+  </div>
+</section>
+
+<footer>
+  AI 交接看板 · 全面测试与优化收口 · 2026-09-29 · 伴随文件：操作台账 / 复核报告与交接说明（同目录 DELIVERY/）
+</footer>
+
+</div>
+</body>
+</html>

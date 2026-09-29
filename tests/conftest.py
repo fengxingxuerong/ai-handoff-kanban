@@ -2,6 +2,7 @@
 """pytest 公共夹具：为每个测试会话起一个真实 uvicorn 服务（隔离数据目录）。"""
 from __future__ import annotations
 
+import collections
 import json
 import os
 import socket
@@ -100,13 +101,33 @@ class Api:
         return [p["id"] for p in data["projects"]]
 
 
-def _wait_health(api: Api, timeout: float = 25.0) -> bool:
+def _wait_health(api: Api, timeout: float = 25.0, expect_dir: Path | None = None) -> bool:
+    """等实例就绪。**端口通了不等于连对了** —— 必须让它自证读的是本次的数据目录。
+
+    为什么加 `expect_dir`：`free_port()` 是 bind 一下再关掉，子进程随后才 bind 同一个端口，
+    中间这段窗口里端口可能被别的进程（同事跑的桌面版、xdist 的另一个 worker、上一次
+    没退干净的实例）抢走。这时 `/api/health` 照样 200，而用例读到的是**别人的看板** ——
+    表现为凭空多出几个项目（2026-09-25 实测：`test_export_button_really_downloads`
+    在别人实例上读到"对账用甲/乙项目"而假红），更坏的情况是写入别人的数据目录。
+    判据跟 `scripts/ci_local.py` 那条"实例自证"一致：**问它自己读的是哪份数据**。
+    """
+    want = os.path.normcase(os.path.abspath(str(expect_dir))) if expect_dir else None
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            status, _ = api.get("/api/health")
+            status, body = api.get("/api/health")
             if status == 200:
-                return True
+                if want is None:
+                    return True
+                got = os.path.normcase(os.path.abspath(str((body or {}).get("data_file", ""))))
+                if got.startswith(want):
+                    return True
+                # 连上了但不是我们起的：继续等没用，直接判失败（调用方会终止进程）
+                raise RuntimeError(
+                    f"端口 {api.base} 上是别的实例（它读 {got}，本次应为 {want}）—— "
+                    f"拒绝在别人的数据上跑用例")
+        except RuntimeError:
+            raise
         except Exception:
             pass
         time.sleep(0.3)
@@ -143,9 +164,15 @@ class _server_ctx:
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         api = Api(f"http://127.0.0.1:{port}", token=self.token)
-        if not _wait_health(api):
+        try:
+            ok = _wait_health(api, expect_dir=self.data_dir)
+        except RuntimeError:
+            self.proc.terminate()          # 连错实例时别留下自己这个抢不到端口的进程
+            raise
+        if not ok:
             self.proc.terminate()
-            raise RuntimeError("服务在 25 秒内未就绪")
+            raise RuntimeError(
+                f"服务在 25 秒内未就绪（端口 {port}，数据目录 {self.data_dir}）")
         return api, self.proc
 
     def __exit__(self, *exc):
@@ -247,6 +274,28 @@ def seeded_client(tmp_path, monkeypatch):
     monkeypatch.delenv("KANBAN_TOKEN", raising=False)
     with TestClient(app, base_url="http://127.0.0.1") as c:
         yield Api(client=c, data_dir=data_dir)
+
+
+def pytest_terminal_summary(terminalreporter):
+    """把被跳过的用例**念出名字**写进报告尾巴。
+
+    为什么需要它：跳过在报告里只是一个 `s`，和通过的 `.` 颜色相近、位置分散，
+    而"某个文件整份被 skipif 掉了"（本机没有 node / 没有真实 LLM Key / 没有浏览器）
+    看起来跟"全绿"毫无区别。2026-09 实测：本机跑一次就有 5 条 live 用例永久跳过，
+    而报告的 `529 passed` 里根本看不出这件事 —— 覆盖率照样 92%，因为那些行本来
+    就没进分母。跳过的用例是**没验**，不是**验过了**，必须让它出现在结尾。
+    """
+    skipped = terminalreporter.stats.get("skipped", [])
+    if not skipped:
+        return
+    by_file = collections.Counter()
+    for rep in skipped:
+        by_file[str(rep.fspath).replace("\\", "/").split("/")[-1]] += 1
+    terminalreporter.write_sep("=", f"跳过 {len(skipped)} 条（没验，不是通过）", bold=True)
+    for name, n in sorted(by_file.items(), key=lambda x: -x[1]):
+        terminalreporter.write_line(f"  {name}: {n} 条")
+    terminalreporter.write_line(
+        "  整份跳过的文件意味着这条能力在本机从未被验证过；跑 CI 或补齐环境后再看这个数。")
 
 
 @pytest.fixture

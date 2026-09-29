@@ -17,6 +17,24 @@ from app.main import _extract_session_text
 
 # ---------------- 用量追踪 ----------------
 
+
+def test_today_orders_by_priority_before_due_date(app_client):
+    """今日待办先按优先级、同级再按截止日（2026-09-29 补）。
+
+    变异 today_loses_priority_sort（丢掉 pri_rank 那一级排序）曾存活：
+    既有用例只断言"谁在谁不在"，从没断言**顺序**。丢了优先级排序后，
+    高优先任务会被埋在无截止的杂事后面 —— 今日待办的第一屏就是错的。
+    """
+    _, p = app_client.create_project("今日排序")
+    # 同一天、不同优先级：顺序必须 高→中→低
+    for pri in ("低", "高", "中"):
+        app_client.post(f"/api/projects/{p['id']}/tasks",
+                        {"title": f"任务-{pri}", "priority": pri})
+    _, body = app_client.get("/api/today")
+    titles = [x["title"] for x in body["tasks"]]
+    assert titles == ["任务-高", "任务-中", "任务-低"], titles
+
+
 def test_usage_stats_with_no_records(app_client):
     status, body = app_client.get("/api/usage")
     assert status == 200

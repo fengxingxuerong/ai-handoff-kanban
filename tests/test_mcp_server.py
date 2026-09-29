@@ -272,7 +272,10 @@ def test_malformed_json_does_not_kill_server(mcp):
     mcp.send_raw("{ 这不是 JSON")
     bad = mcp.read()
     assert bad["error"]["code"] == -32700
-    assert mcp.call("ping")["result"] is not None, "解析错误后服务必须还活着"
+    # 不能只写 `is not None`：那样"回了个半死的结构"也算过。
+    # 钉住形状 —— ping 的 result 只有规范要求的 resultType，不该带任何业务字段。
+    assert mcp.call("ping")["result"] == {"resultType": "complete"}, \
+        "解析错误后服务必须还活着，且 ping 只回规范那一层"
 
 
 def test_unknown_method_returns_jsonrpc_error(mcp):
@@ -459,7 +462,8 @@ def test_unknown_tool_is_a_jsonrpc_protocol_error(mcp):
     # 入参校验不过仍然是工具错误 —— 那条要让模型自己纠
     text, is_err = mcp.tool("kanban_add_task", {"project_id": "x"})
     assert is_err and "缺少必填参数" in text, text
-    assert mcp.call("ping")["result"] is not None, "协议错误之后服务必须还能用"
+    assert mcp.call("ping")["result"] == {"resultType": "complete"}, \
+        "协议错误之后服务必须还能用，且 ping 只回规范那一层"
 
 
 def test_server_discover_matches_the_stateless_spec(mcp):

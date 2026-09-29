@@ -152,6 +152,11 @@ def main() -> int:
         step("pytest 全量（含覆盖率门槛）",
              [PY, "-m", "pytest", "-q", "--basetemp", os.path.join(tmp, "basetemp")], 1800)
         if MODE != "quick":
+            # 覆盖率只证明"这行被执行过"，不证明"这行错了会被发现"。
+            # 变异探针是唯一能量化后者的门禁：**改了语义还全绿 = 盲区**，直接判失败。
+            # 放在场景测试之前：它会临时改 app/ 源码（跑完自己还原），
+            # 不能和任何"起真实实例"的步骤并行。
+            step("变异探针 mutation_probe", [PY, "scripts/mutation_probe.py"], 1800)
             step("场景测试 scenario_test", [PY, "scripts/scenario_test.py"], 900, True)
             step("发版回归 release_regression",
                  [PY, "scripts/release_regression.py", "--no-ai"], 900, True)

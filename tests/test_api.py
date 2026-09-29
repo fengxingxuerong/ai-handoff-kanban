@@ -868,6 +868,40 @@ def test_search_reports_truncation_instead_of_making_the_caller_guess(app_client
     assert empty["results"] == [] and empty["truncated"] is False
 
 
+def test_local_url_follows_the_serving_port(monkeypatch):
+    """交接包直链端口必须来自 SERVICE_PORT，不许写死（2026-09-29 补）。
+
+    变异 live_url_wrong_port（端口写死 18321）曾存活：test_handoff_page.py
+    钉的是默认端口 18320 下的字面量，写死成另一个常量后默认部署恰好等值。
+    这里在**非默认端口**下断言 _local_url 的输出 —— 读环境与写死常量的分水岭。
+    """
+    import app.main as kanban
+
+    monkeypatch.setenv("KANBAN_PORT", "18999")
+    kanban.SERVICE_PORT = "18999"
+    url = kanban._local_url("/api/context/p1")
+    assert url == "http://127.0.0.1:18999/api/context/p1", url
+    assert not url.startswith("http://127.0.0.1:18321"), "写死的历史缺陷端口"
+
+
+def test_search_limit_is_clamped_to_the_ceiling(app_client):
+    """limit 超上限必须被夹回 50（2026-09-29 补）。
+
+    变异 search_limit_ceiling_raised（50→5000）曾存活：既有用例只试了
+    limit=3（截断）与 limit=50（恰好全量），没人验"更大的数也会被夹回封顶"。
+    上限是前端 Ctrl+K 与 MCP schema 共同声明的封顶口径 —— 接口自己先松掉，
+    一次请求就能把整份看板拖出去。回执里的 limit 必须报**实际生效**的那个数。
+    """
+    _, p = app_client.create_project("搜索封顶")
+    for i in range(3):
+        app_client.post(f"/api/projects/{p['id']}/tasks", {"title": f"压测词{i}", "desc": "封顶取样"})
+    st, body = app_client.get("/api/search/tasks?q=封顶&limit=5000")
+    assert st == 200 and body["limit"] == 50, body
+    assert body["truncated"] is False and len(body["results"]) == 3, body
+    st2, zero = app_client.get("/api/search/tasks?q=封顶&limit=0")
+    assert st2 == 200 and zero["limit"] == 1, zero
+
+
 def test_memory_on_a_project_that_does_not_exist_is_refused(app_client):
     """回执说"已记下 [决策] 到 <pid>"，而那条记忆永远进不了交接包 —— 就是撒谎。
 

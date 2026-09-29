@@ -113,7 +113,10 @@ def main() -> int:
             built_ts = 0.0
         newer = []
         if built_ts:
-            for f in list((ROOT / "app").glob("*.py")) + [ROOT / "web" / "index.html"]:
+            # web/ 下现在是多个文件（index.html + style.css + js-*.js）：
+            # 只看 index.html 会漏掉"改了某个 js 却没重打包"（2026-09-28 拆分后的新盲区）。
+            for f in list((ROOT / "app").glob("*.py")) + \
+                    [p for p in (ROOT / "web").rglob("*") if p.is_file()]:
                 try:
                     if f.stat().st_mtime > built_ts + 60:      # 一分钟容差：打包本身要时间
                         newer.append(f.name)
@@ -133,7 +136,9 @@ def main() -> int:
         check("exe 内嵌的前端就是仓库里这一份（不一致说明该重打包）",
               bool(want) and got == want,
               f"sha256 产物={got[:12]} 仓库={want[:12]}")
-        check("内嵌前端为事件委托版本", "const ACTIONS = {" in html and 'data-act="' in html)
+        # ACTIONS 表现在在 web/js-core.js 里（2026-09-28 拆出），首页只留有引用标签
+        check("内嵌前端为事件委托版本",
+              'data-act="' in html and 'src="web/js-core.js"' in html)
         check("内嵌前端无内联事件", "onclick=" not in html and "onkeydown=" not in html)
 
         # 3. 写读删闭环

@@ -264,7 +264,13 @@ def test_scheduler_start_is_idempotent():
 
 # ---------------- 交接物尺寸预算（接手方是模型，上下文窗口才是稀缺资源） ----------------
 
-def test_context_budget_levels():
+def test_context_budget_levels_and_lines_key():
+    """边界档位与返回形状（2026-09-29 改名：与 test_pure_modules 同名会静默覆盖一条）。
+
+    档位边界断言与 test_pure_modules.test_context_budget_levels 有意重叠 ——
+    两份从不同入口（re-export 的 main 与纯模块本体）钉同一条边界，改名后两边都在跑。
+    这里独有的是返回 dict 的完整形状（lines/kb/level 三键同值）。
+    """
     from app.main import context_budget
 
     b = context_budget("一行\n" * 10)

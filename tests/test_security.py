@@ -92,10 +92,40 @@ def test_bracketed_foreign_host_rejected(server, raw):
     assert server.get("/api/health", host=raw)[0] == 403
 
 
+@pytest.mark.parametrize("raw", ["[abc]", "[abc]:80", "[ lookout]"])
+def test_host_fallback_branch_still_rejects_foreign_names(server, raw):
+    """_host_of 的 ValueError 兜底分支（2026-09-29 补）。
+
+    2026-09-26 重构后主机解析主路径走 urlparse：`[::1]:18320`、`[fe80::1]`、
+    `[evil.example.com]` 全由主路径判定，兜底分支成了既有用例的盲区 ——
+    变异 guard_host_ipv6（把兜底改回历史缺陷写法）因此存活没人红。
+    只有"方括号里不是合法 IP"的输入（urlparse 抛 ValueError）才会落到兜底：
+    这里用 `[abc]` 这类输入钉住它 —— 兜底解析出的主机名同样必须过白名单。
+    """
+    assert server.get("/api/health", host=raw)[0] == 403
+
+
 def test_export_save_rejects_system_dir(fresh_server):
     status, _ = fresh_server.post("/api/export/save", {
         "filename": "x.md", "content": "# hi", "path": r"C:\Windows\evil.md"})
     assert status == 400
+
+
+def test_export_save_rejects_appdata_outside_temp(app_client, monkeypatch, tmp_path):
+    """AppData 黑名单分支单独钉住（2026-09-29 补）。
+
+    变异 forbidden_roots_drops_appdata（黑名单摘掉 AppData）曾存活：
+    既有"拒绝系统目录"用例打的是 Windows 主目录（走 SystemRoot 分支），
+    而 AppData 被摘后没有任何用例红 —— 保存/写盘通路对 AppData 大开（C:\\Windows 字样写在注释里需转义）。
+    临时目录在 AppData 下是唯一放行位置，所以这里把 TEMP 指到 tmp_path，
+    用一个真实存在的 AppData 子目录验证它必须被拒。
+    """
+    monkeypatch.setenv("TEMP", str(tmp_path))
+    monkeypatch.setenv("TMP", str(tmp_path))
+    target = Path(os.environ["USERPROFILE"]) / "AppData" / "Roaming" / "kanban_escape_probe.md"
+    status, body = app_client.post("/api/export/save", {
+        "filename": "x.md", "content": "# hi", "path": str(target)})
+    assert status == 400, body
 
 
 def test_export_save_rejects_non_markdown_suffix(fresh_server):
@@ -173,9 +203,30 @@ def test_save_export_auto_name_still_replaces_its_own_export(app_client):
     assert app_client.post("/api/export/save", {**body, "content": "第二版"})[0] == 200
 
 
+def test_token_guard_holds_in_a_real_subprocess(token_server):
+    """Token 鉴权必须在**真起进程**的那条路上也成立。
+
+    `test_token_required_for_write` 走的是进程内客户端 + monkeypatch，
+    只能证明"运行时读环境变量"这个写法还对；而打包后的 exe 恰恰是另一条路 ——
+    环境变量在进程启动时就带进来，中间件读的是 `os.environ`。
+    这两条路分叉过一次（历史：`test_security.py` 的 server 夹具从子进程改成进程内，
+    `token_server` 从此零引用、子进程那条路没人再验），所以补这一条钉住它。
+    """
+    body = {"name": "子进程鉴权", "status": "进行中", "progress": 0, "priority": "中"}
+
+    assert token_server.get("/api/health")[0] == 200, "读接口不该被 Token 挡住"
+    assert token_server.request("POST", "/api/projects", body, token=None)[0] == 401
+    assert token_server.request("POST", "/api/projects", body, token="wrong")[0] == 401
+
+    status, project = token_server.request("POST", "/api/projects", body)
+    assert status == 201, f"带对 Token 的写请求应当放行：{status} {project}"
+
+
 def test_agentsmd_save_sends_the_overwrite_flag():
     """界面必须把覆盖开关接到 /api/export/save，否则用户没有任何办法覆盖旧文件"""
-    html = (Path(__file__).resolve().parent.parent / "web" / "index.html").read_text(encoding="utf-8")
+    from frontend_src import frontend_source
+
+    html = frontend_source()          # JS 已拆出 index.html，契约要对着"整个前端"判
     i = html.index("async function saveAgentsMD")
     assert "overwrite:" in html[i:i + 1200], "保存按钮没带 overwrite"
     assert 'id="agentsmd-overwrite"' in html

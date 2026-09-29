@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -393,17 +393,29 @@ def test_export_save_allows_normal_user_directory(app_client):
     pytest 的 tmp_path 在 %TEMP% 下（临时目录提前 return），
     而 AppData 又是被明确禁止的（系统目录那一支）。
     所以用项目目录里的探针目录，用完删掉。
+
+    **文件名带随机后缀**：清理用 `ignore_errors=True`，在删除会被拦的环境里
+    （杀软 / 受管终端 / 批量删除保护）它安静地失败，残留文件会让**下一次**跑
+    撞上"文件已存在 409"而假红 —— 一次环境抖动变成永久红，真正的信号反而看不见
+    （2026-09-25 实测）。探针要的是"这个路径能写"，不是"这个路径上次被清干净了"。
     """
     probe = Path(__file__).resolve().parent.parent / ".pytest_probe"
     probe.mkdir(exist_ok=True)
-    target = probe / "我的交接包.md"
+    target = probe / f"我的交接包-{uuid.uuid4().hex[:8]}.md"
     try:
         status, body = app_client.post(
             "/api/export/save", {"filename": "交接包.md", "content": "# 内容", "path": str(target)})
         assert status == 200, body
         assert target.read_text(encoding="utf-8") == "# 内容"
     finally:
-        shutil.rmtree(probe, ignore_errors=True)
+        # 只删自己那个文件，且**连 SystemExit 一起吞**：在开了批量删除保护的环境里
+        # `shutil.rmtree` 会被守卫直接 `SystemExit(1)`（`ignore_errors=True` 不管这个），
+        # 用例就变成"清理动作"失败而不是"被测行为"失败 —— 我们在验 200 和文件内容，
+        # 不该被清理这一步拖红。文件名带 uuid，删不掉也不会污染下一次。
+        try:
+            target.unlink(missing_ok=True)
+        except BaseException:                                   # noqa: BLE001
+            pass
 
 
 # ---------------- 6. 前端资源缺失时不该白屏（安装完整性） ----------------

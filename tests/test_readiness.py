@@ -31,6 +31,17 @@ def test_full_project_scores_100():
     assert readiness_line(FULL).endswith("（齐备）")
 
 
+def test_completed_tasks_still_count_as_active():
+    """active 项认『进行中/已完成』两种状态（2026-09-29 补）。
+
+    变异 readiness_active_narrowed（把已完成从推进判定里摘掉）曾存活：
+    FULL 样板只用『进行中』。一个全部做完的项目理应拿满 100 分 ——
+    做完比没做更"推进过"， narrowed 之后反而掉 10 分。
+    """
+    done_only = {**FULL, "tasks": [{"id": "t1", "title": "A", "status": "已完成"}]}
+    assert readiness_score(done_only) == 100
+
+
 def test_empty_project_scores_zero_and_lists_all_missing():
     assert readiness_score({}) == 0
     line = readiness_line({})

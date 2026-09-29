@@ -13,7 +13,11 @@ from pathlib import Path
 
 import pytest
 
-HTML = (Path(__file__).resolve().parent.parent / "web" / "index.html").read_text(encoding="utf-8")
+# 2026-09-28 前端拆成 index.html + style.css + 5 个 js-*.js。
+# 契约测的是"整个前端"而不是某一个文件，所以读拼接后的源码（顺序与浏览器加载一致）。
+from frontend_src import frontend_source  # noqa: E402
+
+HTML = frontend_source()
 
 ACTIONS_BLOCK = re.search(r"const ACTIONS = \{(.*?)\n\};", HTML, re.S)
 ACTIONS_KEYS = set(re.findall(r"^\s{2}([A-Za-z_$][\w$]*):", ACTIONS_BLOCK.group(1), re.M)) if ACTIONS_BLOCK else set()
@@ -342,17 +346,19 @@ def test_inline_script_is_syntactically_valid_js(tmp_path):
     import shutil
     import subprocess
 
-    blocks = re.findall(r"<script>(.*?)</script>", HTML, re.S)
-    assert blocks, "找不到内联脚本"
+    from frontend_src import web_dir
+
+    # 2026-09-28 起 JS 不再是内联块，而是 web/js-*.js 若干文件 ——
+    # 逐文件 `node --check`（比原来的"整段内联脚本"更细：能指出是哪个文件）。
+    files = sorted(web_dir().glob("js-*.js"))
+    assert files, "web/ 下没有 JS 文件了（拆分回归？）"
     node = shutil.which("node")
     if not node:
         pytest.skip("本机没有 node")
-    for i, src in enumerate(blocks):
-        f = tmp_path / ("inline_%d.js" % i)
-        f.write_text(src, encoding="utf-8")
+    for f in files:
         r = subprocess.run([node, "--check", str(f)], capture_output=True,
                            text=True, encoding="utf-8", errors="replace")
-        assert r.returncode == 0, f"第 {i + 1} 段 <script> 语法错误：\n{(r.stderr or r.stdout)[:600]}"
+        assert r.returncode == 0, f"{f.name} 语法错误：\n{(r.stderr or r.stdout)[:600]}"
 
 
 def test_project_edit_form_is_filled_from_the_single_project_endpoint():

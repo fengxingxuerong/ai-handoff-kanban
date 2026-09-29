@@ -13,7 +13,14 @@
 
 | 路径 | 职责 |
 | --- | --- |
-| `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程 |
+| `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程。**2026-09-26 已拆出 7 个纯模块（3596 → 3206 行），本文件只留路由编排与有全局状态的部分** |
+| `app/taskgraph.py` | 任务依赖图：`clean_deps` / `task_graph` / `has_cycle` / `topo_order` / `_break_dep_cycles` / `executable_tasks` / `_dedupe_ids` / `clean_refs`（纯函数，从 main 逐字搬来） |
+| `app/due.py` | 截止日期归一 `_clean_due_date` 与状态判定 `_due_state`（纯函数） |
+| `app/redact.py` | 交接内容脱敏规则与 `redact_text`（纯函数） |
+| `app/idem.py` | 创建幂等键 `client_ref` 的清洗与记账（纯函数） |
+| `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note` |
+| `app/sessions.py` | 会话扫描与文本提取（目录遍历有界、只读文件尾部、源内外校验） |
+| `app/agentfiles.py` | 多智能体入口文件投影（`AGENT_ENTRY_TARGETS` 白名单 → 各工具要求的相对路径） |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `app/filelock.py` | 跨进程文件锁（msvcrt/fcntl 一份实现，`main` 与 `llm` 共用）。两边不能互相 import，所以锁不放在任何一边里 |
 | `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
@@ -31,6 +38,7 @@
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复" |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
+| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 32 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 封顶、幂等键截断…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），跑法照旧。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
 
@@ -751,16 +759,16 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-24 收口）**：`pytest` 560 收集（555 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
-26 个测试文件、529 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
-覆盖率 **93%** 且已经是**分支覆盖**（语句 2455 / 缺 139~144 / 分支 868 / 半覆盖 86~89 ——
+**验证基线（2026-09-29 收口）**：`pytest` 595 收集（590 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
+27 个测试文件、557 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖；
+2026-09-29 对账抓出并改名一处重名：`test_context_budget_levels` ×2，test_misc 侧改名 `_and_lines_key`）。
 未覆盖数在 ±4 之间漂，是 `-n auto` 下时序类用例走了不同分支造成的，**别把它抄成一个精确值**；
 门槛 90，只统计 `app/`，`scripts/` 不进覆盖率 —— 原因见「测试约定 4」）。
 公开接口面：HTTP 51 条自有端点（`method+path` 计 52，多的那条是框架自带的 `/openapi.json`），
 其中 2026-09-23 新增 `PATCH /api/projects/{pid}`、`PATCH /api/tasks/{tid}` 两条（见数据层约定 18）
 + MCP 23 个工具，另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
   4 类 uri）与提示词（`prompts/list` / `prompts/get`，3 个）。
-门禁脚本：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
+门禁脚本（2026-09-29 全部复跑过一遍，`ci_local` 七步全绿、变异探针 32/32 被杀）：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
 `release_regression --no-ai` 16 通过 + **2 项明确标"未验"**（`--no-ai` 下 AI 链路本就没跑，
 不许再算进"全部可用"）、`delivery_drill` 21/0、`live_check --mcp` 12/0、
 `frozen_smoke` 11/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 56 秒。

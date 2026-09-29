@@ -104,8 +104,9 @@ def test_journal_text_is_truncated(app_client, monkeypatch):
     assert len(body["text"]) <= 20
 
 
-def test_clean_journal_normalizes_dirty_data():
+def test_clean_journal_normalizes_dirty_data(monkeypatch):
     """导入的脏数据也要收口：非字典条目丢掉、超长截断、超量只留最近"""
+    import app.main as kanban
     from app.main import MAX_JOURNAL_TEXT, clean_journal
 
     dirty = ["不是字典", {"time": "2026-01-01 00:00", "text": "正常"},
@@ -113,6 +114,14 @@ def test_clean_journal_normalizes_dirty_data():
     out = clean_journal(dirty)
     assert len(out) == 2 and all(isinstance(x, dict) for x in out)
     assert len(out[-1]["text"]) == MAX_JOURNAL_TEXT
+
+    # 导入路径的条数上限（2026-09-29 补）：上面的脏数据只有 3 条，够不到 MAX_JOURNAL，
+    # 变异 clean_journal_no_cap（摘掉 raw[-MAX_JOURNAL:]）曾因此存活 —— 一次脏导入
+    # 能把 projects.json 撑大几 MB 却没有用例红。收窄上限后必须留最近 N 条。
+    monkeypatch.setattr(kanban, "MAX_JOURNAL", 2)
+    out2 = clean_journal([{"text": f"第{i}条"} for i in range(6)])
+    assert len(out2) == 2, f"导入超量应只留最近 2 条，实际 {len(out2)}"
+    assert [x["text"] for x in out2] == ["第4条", "第5条"], "留下的必须是最新的两条"
 
 
 # ---------------- 会话捕获：只能读已配置的源 ----------------
