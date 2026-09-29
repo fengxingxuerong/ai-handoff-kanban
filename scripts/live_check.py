@@ -79,8 +79,11 @@ def main() -> int:
 
     st, html = get("/")
     check("首页可访问", st == 200 and "AI 交接看板" in str(html), f"{st}")
+    # ACTIONS 表在 web/js-core.js 里（2026-09-28 前端拆成多文件），首页只有引用标签；
+    # 判据与 frozen_smoke 那份保持同口径：首页无内联事件 + 真引到了 js-core.js
     check("前端为事件委托版本（无内联事件）",
-          "const ACTIONS = {" in str(html) and "onclick=" not in str(html), "内联事件或 ACTIONS 缺失")
+          'data-act="' in str(html) and 'src="web/js-core.js"' in str(html)
+          and "onclick=" not in str(html), "内联事件或 js-core 引用缺失")
 
     st, data = get("/api/projects")
     projects = data.get("projects", []) if isinstance(data, dict) else []
