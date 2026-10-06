@@ -2,7 +2,7 @@
 
 - Date: 2026-10-06
 - Goal: 在 2026-10-01 两轮对标（通用开源 PM + makeplane/plane）基础上，做增量全方面竞品扫描，产出可落地的优化吸取方案
-- Status: research complete, awaiting output-format decision
+- Status: closed —— 十大候选判定为 5 落地 / 2 暂缓 / 3 不吸收，落地明细见仓库根《竞品优点吸取-2026-10-06.html》与 AGENTS.md 硬性约定 24-28
 
 ## Research Questions
 

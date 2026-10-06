@@ -28,6 +28,10 @@
 | `app/handoff_md.py` | 交接包 Markdown **纯渲染器**（2026-10-06 拆出，依赖注入式）：`build_handoff_markdown` 只收现成数据（活跃记忆/过期计数/git 回调/端口），不 import main、不读盘、不跑子进程；原签名 `_build_handoff_markdown` 是 main 侧的注入包装 |
 | `app/agentsmd.py` | AGENTS.md 文档生成（2026-10-06 拆出，同法注入）：本地兜底版收 `memory_rows`+`now`，AI 版的记忆与兜底经回调注入；`_build_agents_md_local` / `_generate_agents_md` 是 main 的原签名包装 |
 | `app/paths.py` | 数据目录定位（2026-10-06 拆出）：`data_dir` / `data_file`，所有存储模块的共同根 —— 后续拆出的模块从这里取，不必反向 import main。环境变量每次调用时读 |
+| `app/readiness.py` | 交接就绪度评分（纯函数，从 main 拆出）：`readiness_items` / `readiness_score`，「待审查」算推进的口径在这里 |
+| `app/assign.py` | 任务自动分配（纯函数，2026-10-01）：`allocatable` / `plan_assign`，就绪判定复用 `executable_tasks`；路由只负责锁内写入 |
+| `app/project_stats.py` | 项目统计聚合（纯函数，2026-10-01）：截止热力/任务计数，`/api/projects/{pid}/stats` 的口径 |
+| `app/usage_stats.py` | LLM 用量聚合（纯函数，2026-10-01）：usage.jsonl 的按日/端点/模型聚合与预算水位，`/api/usage` 的口径 |
 | `app/aireports.py` | 监管报告的落盘/裁剪/历史/趋势（2026-10-06 拆出）：`reports_dir` / `_save_report` / `_trim_reports` / `_latest_report_before` / `_attach_trends` / 提示词构造。**`MAX_REPORTS` 的 monkeypatch 点在这里**（main 是转发别名）；`_run_analyze` 编排留在 main |
 | `app/aiprompt.py` | AI 编排的只读计算层（2026-10-06 拆出，依赖注入式）：看板简报 `projects_brief`（记忆分桶/git 探测经回调注入，main 的 monkeypatch 照常有效）与会话提炼 `summarize_inner`（find_project 注入）。**不落库** —— 写动作仍走 main 的 mutate() 临界区 |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
@@ -808,13 +812,14 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 + MCP 23 个工具（工具数没变，但 `kanban_add_task`/`kanban_update_task` 的 schema 带了 `acceptance`、
 `kanban_memory_add` 带了 `expires`），另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
   4 类 uri）与提示词（`prompts/list` / `prompts/get`，3 个）。
-门禁脚本（2026-10-01 全部复跑过一遍，`ci_local` 七步全绿、变异探针 **44** 条 —— 2026-10-06 新增 4 条且 4/4 被杀，
-`ci_local --quick` 三步全绿）：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
+门禁脚本（2026-10-06 全部复跑过：`ci_local --with-exe` 11 步全绿 × 3 次、变异探针 **44** 条全被杀
+（2026-10-06 新增 4 条且 4/4 被杀）、`release_regression` 带 AI 链路 23 通过）：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
 `release_regression --no-ai` 16 通过 + **2 项明确标"未验"**（`--no-ai` 下 AI 链路本就没跑，
 不许再算进"全部可用"）、`delivery_drill` 21/0、`live_check --mcp` 12/0、
 `frozen_smoke` 11/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 56 秒。
-> `release_regression` **去掉 `--no-ai` 实跑过一次：23 通过 / 0 失败**（2026-09-23，多花约 1 次真调用）
-> —— 那句"新功能链路全部可用"第一次是跑出来的，不是印出来的。
+> `release_regression` **去掉 `--no-ai` 实跑过两次：23 通过 / 0 失败**（2026-09-23 首跑、
+> 2026-10-06 随 v1.2.0 发版复跑，各多花约 1 次真调用）—— "新功能链路全部可用"这句话
+> 两次都是跑出来的，不是印出来的。
 `ci_local --with-exe` 全十步（含重打包与冻结版自查）实测约 90 秒；改过 `web/index.html` 之后
 必须走这一档，否则「产物内嵌的前端就是仓库这一份」那条会如实拦住你。
 ⚠️ 全量跑常常**打完覆盖率表就没有 summary 行**（见「测试约定 10」），判绿只认退出码。
