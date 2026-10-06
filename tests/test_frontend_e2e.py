@@ -1233,6 +1233,9 @@ def test_journal_overflow_folds_in_task_modal(ui):
     folded = page.locator("#t-journal-list .j-folded")
     assert folded.count() == 1, "折叠摘要没有渲染"
     assert "已折叠" in folded.inner_text() and "状态：" in folded.inner_text()
+    # 折叠摘要的 time 是日期区间（2026-XX-XX~2026-XX-XX），不能按普通条目 slice(5,16)
+    # 截成 [09-01~2026-] 这样的乱码（2026-10-06 审查发现）
+    assert "[2026-" in folded.inner_text() and "~2026-" in folded.inner_text(), folded.inner_text()
     rows = page.locator("#t-journal-list .j-row")
     assert rows.count() <= 50, "折叠后总条数必须压回上限内"
 
@@ -1419,3 +1422,43 @@ def test_session_capture_full_flow_to_project(ai_ui, tmp_path):
     assert proj["next_action"] == "先改签发端", "下一步行动没更新"
     _, mems = api.get(f"/api/memories?pid={pid}")
     assert any(m["text"] == "登录用 JWT" for m in mems["memories"]), "决策记忆没沉淀"
+
+
+def test_stats_panel_counts_review_only_project(ui):
+    """P1 回归：项目只有「待审查」任务时，统计面板必须报 1 个任务而不是"还没有任务"
+    （面板求和曾漏第五列，2026-10-06 审查发现）"""
+    page, api, _ = ui
+    p = make_project(api, "纯待审查项目")
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "待验收的任务", "status": "待审查"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('纯待审查项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.wait_for_function(
+        "() => document.getElementById('stats-panel').style.display === 'block' "
+        "&& !document.getElementById('stats-body').textContent.includes('统计读取中')",
+        timeout=15000)
+    # 「共 N 个任务」在 note 里，分布与图例在 body 里 —— 两处都要对
+    assert page.locator("#stats-note").inner_text() == "共 1 个任务",         page.locator("#stats-note").inner_text()
+    body = page.locator("#stats-body").inner_text()
+    assert "待审查1" in body, body
+
+
+def test_milestone_row_delete_works_after_earlier_deletion(ui):
+    """P2 回归：删过一行后剩余行的 data-arg 与 DOM 下标错位，第二个 ✕ 必须仍删它自己
+    （按下标删会删错行，2026-10-06 审查发现）"""
+    page, api, _ = ui
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("[data-act='openProjectModal']", timeout=20000)
+    page.click("[data-act='openProjectModal']")
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    page.click("[data-act='addMilestoneRow']")
+    page.click("[data-act='addMilestoneRow']")
+    rows = page.locator("#f-milestones .ms-row")
+    rows.nth(0).locator(".ms-name").fill("里程碑甲")
+    rows.nth(1).locator(".ms-name").fill("里程碑乙")
+    rows.nth(0).locator("[data-act='removeMilestoneRow']").click()      # 删掉甲
+    assert rows.count() == 1 and rows.nth(0).locator(".ms-name").input_value() == "里程碑乙"
+    rows.nth(0).locator("[data-act='removeMilestoneRow']").click()      # 乙的 data-arg 仍是 1
+    assert page.locator("#f-milestones .ms-row").count() == 0, \
+        "第二个 ✕ 没删掉自己的行（按下标删的错位又回来了）"

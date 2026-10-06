@@ -1498,3 +1498,20 @@ def test_memory_add_with_expires_reports_the_window_and_garbage(mcp):
 
     listed = mcp.tool("kanban_list_memories", {"project_id": pid})[0]
     assert f"有效期至 {tomorrow}" in listed, listed
+
+
+def test_update_task_acceptance_add_over_cap_is_reported(mcp):
+    """增量动词的「没落上」与整批覆盖同权：acceptance_add 撞 10 条上限必须说破，
+    不能回执照样"已更新"（2026-10-06 审查发现的静默丢弃）。"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "验收增量上限项目"})[0])
+    tid = last_id(mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "满编任务",
+        "acceptance": [f"标准{i}" for i in range(10)]})[0])
+    text, _ = mcp.tool("kanban_update_task", {"task_id": tid, "acceptance_add": ["第十一条"]})
+    assert "没落上" in text and "第十一条" in text, text
+
+    # 未超限的增量正常落上、已有项的重复不算丢失 —— 不许误报
+    tid2 = last_id(mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "留位任务", "acceptance": ["甲"]})[0])
+    text2, _ = mcp.tool("kanban_update_task", {"task_id": tid2, "acceptance_add": ["甲", "乙"]})
+    assert "没落上" not in text2, text2

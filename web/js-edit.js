@@ -122,9 +122,10 @@ function addMilestoneRow() {
   box.insertAdjacentHTML("beforeend", milestoneRowHTML({ name: "", done: false }, box.children.length));
 }
 
-function removeMilestoneRow(idx) {
-  const box = document.getElementById("f-milestones");
-  const row = box.children[idx];
+function removeMilestoneRow(btn) {
+  // 按元素删，不按下标删：data-arg 是渲染时写死的序号，删过一行之后剩余行的
+  // data-arg 与 DOM 下标错位，按下标会删错行（甚至点第三行的 ✕ 删不到任何行）。
+  const row = btn.closest(".ms-row");
   if (row) row.remove();
 }
 

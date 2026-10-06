@@ -555,14 +555,16 @@ async function renderStats() {
     const s = await api(`/api/projects/${pid}/stats`);
     if (currentPid !== pid) return;
     const bs = s.by_status || {};
-    const n = ["待办", "进行中", "已完成", "阻塞"].reduce((a, k) => a + (bs[k] || 0), 0);
+    // 五个状态都要进分母：曾漏「待审查」——项目只有待审查任务时这里显示"该项目还没有任务"，
+    // 与看板第五列直接矛盾（2026-10-06 审查发现）
+    const n = ["待办", "进行中", "待审查", "已完成", "阻塞"].reduce((a, k) => a + (bs[k] || 0), 0);
     if (!n) {
       body.innerHTML = '<div style="color:var(--text-faint)">该项目还没有任务。</div>';
       return;
     }
-    // 状态分布：一条横向堆叠条，颜色跟看板四列同一套（var(--gray/blue/green/red)）。
+    // 状态分布：一条横向堆叠条，颜色跟看板五列同一套（var(--gray/blue/purple/green/red)）。
     // 宽度按占比；最后一个非零段用 100 减已累计，避免浮点尾差让整条宽度对不齐。
-    const seg = [["待办", "var(--gray)"], ["进行中", "var(--blue)"], ["已完成", "var(--green)"], ["阻塞", "var(--red)"]];
+    const seg = [["待办", "var(--gray)"], ["进行中", "var(--blue)"], ["待审查", "var(--purple)"], ["已完成", "var(--green)"], ["阻塞", "var(--red)"]];
     const nonzero = seg.filter(([k]) => (bs[k] || 0) > 0);
     let acc = 0;
     const parts = nonzero.map(([k, col], i) => {

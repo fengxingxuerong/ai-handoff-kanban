@@ -189,8 +189,9 @@ function renderJournal(journal) {
   const items = journal || [];
   list.innerHTML = items.length
     ? items.map(e => e.folded
-        // 超出上限的早期记录被折叠成摘要（内容还在，只是压缩了）——样式上与正常记录区分
-        ? `<div class="j-row j-folded" title="更早的 ${e.folded} 条过程记录已折叠成这条摘要"><b>[${esc((e.time || "").slice(5, 16))}]</b>${esc(e.text)}</div>`
+        // 折叠摘要的 time 是首尾日期区间（2026-09-01~2026-09-20），不是普通条目的
+        // "YYYY-MM-DD HH:MM" —— 按 slice(5,16) 截会渲染成 [09-01~2026-] 这样的乱码
+        ? `<div class="j-row j-folded" title="更早的 ${e.folded} 条过程记录已折叠成这条摘要"><b>[${esc(e.time || "")}]</b>${esc(e.text)}</div>`
         : `<div class="j-row"><b>[${esc((e.time || "").slice(5, 16))}]</b>${esc(e.text)}</div>`).join("")
     : '<div class="j-row">暂无记录</div>';
 }

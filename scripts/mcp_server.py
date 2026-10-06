@@ -360,6 +360,28 @@ def _clean_notes(args: dict, stored: dict) -> list[str]:
         if lost:
             notes.append(f"{label}有 {len(lost)} 条没落上（不存在/重复/自引用/超 {cap} 条或过长）："
                          + "、".join(lost[:5]))
+    # 增量动词的「没落上」同样要说话：*_add 撞条数上限/单条超长被截时静默，
+    # 回执照样是"任务已更新" —— 整批覆盖路径有说明而增量没有，正是这个功能自己
+    # 要消灭的形状（2026-10-06 审查发现：acceptance_add 撞 10 条上限后无人吭声）。
+    # 对比基准是**落盘后**的 stored，且 norm 必须镜像后端清洗（截断到同一个长度），
+    # 否则"截断后落上了"会被误报成丢失。*_remove 不在这里说：只有 post 状态可查，
+    # "删掉了"与"本来就不存在"无法区分，而删除本来就是幂等语义。
+    add_norm = {
+        "tags": (lambda s: s.strip()[:24], "标签"),
+        "refs": (lambda s: s.strip().strip("`").strip()[:kanban.MAX_REF_LEN], "涉及代码位置"),
+        "depends_on": (lambda s: s.strip(), "前置依赖"),
+        "acceptance": (lambda s: s.strip()[:kanban.MAX_ACCEPTANCE_TEXT], "验收标准"),
+    }
+    for base, (norm_fn, label) in add_norm.items():
+        raw = args.get(base + "_add")
+        if not isinstance(raw, (list, tuple)) or not raw:
+            continue
+        got = set(stored.get(base) or [])
+        lost = [n for n in (norm_fn(x) for x in raw if isinstance(x, str))
+                if n and n not in got]
+        if lost:
+            notes.append(f"{label}要新增的 {len(lost)} 条没落上（重复/已达条数上限或单条超长）："
+                         + "、".join(lost[:5]))
     return notes
 
 

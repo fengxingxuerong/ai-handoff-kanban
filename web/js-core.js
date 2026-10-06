@@ -174,6 +174,7 @@ async function loadOverview() {
 function setFilter(el, f) {
   filter = f;
   activeViewId = "";                                   // 手动改筛选 = 脱离已保存视图快照
+  syncViewSelect();                                    // 下拉还显示着已脱离的视图名会误导（搜索框路径是同步的）
   document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
   el.classList.add("active");
   renderOverview();
@@ -313,7 +314,7 @@ const ACTIONS = {
   saveProject: () => saveProject(),
   saveTask: () => saveTask(),
   addMilestoneRow: () => addMilestoneRow(),
-  removeMilestoneRow: (arg) => removeMilestoneRow(parseInt(arg, 10)),
+  removeMilestoneRow: (arg, ev, el) => removeMilestoneRow(el),
   deleteTask: () => deleteTask(),
   saveAISettings: () => saveAISettings(),
   savePackage: (arg, ev, el) => savePackage({ currentTarget: el }),

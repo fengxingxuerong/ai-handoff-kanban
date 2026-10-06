@@ -530,3 +530,31 @@ def test_acceptance_hint_numbers_match_the_backend():
     assert re.search(
         r'acceptance:\s*document\.getElementById\("t-acceptance"\)\.value\.split\("\\n"\)',
         HTML), "saveTask 没有按行读取验收标准，界面上填了也传不出去"
+
+
+def test_stats_panel_counts_all_five_statuses():
+    """任务统计面板的求和与堆叠条必须含全部五个状态 —— 曾漏「待审查」：
+    项目只有待审查任务时面板显示"该项目还没有任务"，与看板第五列直接矛盾
+    （2026-10-06 对抗性审查发现，10-01 加状态时漏改的前端死角）。"""
+    m = re.search(r'const n = \[(.*?)\]\.reduce', HTML)
+    assert m, "找不到统计面板的状态求和"
+    statuses = re.findall(r'"([^"]+)"', m.group(1))
+    assert statuses == ["待办", "进行中", "待审查", "已完成", "阻塞"], statuses
+    seg = re.search(r'const seg = \[(.*?)\];', HTML, re.S)
+    assert seg and "待审查" in seg.group(1), "堆叠条图例漏了待审查"
+
+
+def test_milestone_rows_delete_by_element_not_stale_index():
+    """里程碑行删除按元素删：data-arg 是渲染时写死的序号，删过一行后剩余行的
+    序号与 DOM 下标错位，按下标会删错行甚至删不到（2026-10-06 审查发现）。"""
+    fn = re.search(r"function removeMilestoneRow\(btn\)\s*\{(.*?)\n\}", HTML, re.S)
+    assert fn, "removeMilestoneRow 不再按元素删除？"
+    assert 'closest(".ms-row")' in fn.group(1), fn.group(0)
+    assert "children[" not in fn.group(1), "又退回按下标删了"
+
+
+def test_set_filter_detaches_the_saved_view_in_the_dropdown_too():
+    """手动改筛选脱离已保存视图时，视图下拉必须同步回占位 —— 搜索框路径早就同步了，
+    chip 路径漏了：下拉还挂着视图名，用户会以为当前筛选仍是那个视图。"""
+    fn = re.search(r"function setFilter\(el, f\)\s*\{(.*?)\n\}", HTML, re.S)
+    assert fn and "syncViewSelect()" in fn.group(1), fn.group(0)
