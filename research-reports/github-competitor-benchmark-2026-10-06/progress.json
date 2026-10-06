@@ -1,0 +1,36 @@
+{
+  "topic": "AI 交接看板 × GitHub 同类竞品全方面对标",
+  "date": "2026-10-06",
+  "status": "research_complete",
+  "phase": "synthesis",
+  "completedQueries": [
+    "web: open source AI project management 2026",
+    "web: vibe-kanban shutdown alternatives",
+    "web: beads steve yegge",
+    "web: session handoff context capture 2026",
+    "web: mem0/letta/basic-memory comparison",
+    "web: claude-task-master features",
+    "web: backlog.md features",
+    "web: iAmCorey wake",
+    "web: AGENTS.md AAIF ecosystem",
+    "web: multica platform",
+    "web: plane changelog sep-oct 2026",
+    "web: t3code theo",
+    "api: 43 repos metadata (2 rounds)",
+    "api: 5 topic searches",
+    "readme: 7 full-text reads (multica/beads/backlog/wake/t3code/obsidian-second-brain/agent-os)"
+  ],
+  "pendingQueries": [],
+  "sourceCount": 30,
+  "authoritySourceCount": 10,
+  "crossChecks": [
+    "vibe-kanban shutdown: 4 web sources + GitHub API state",
+    "multica stars: 2 media + API",
+    "task-master stall: media + API pushed_at",
+    "plane agents/ai-memory: media + official changelog",
+    "wake stars trajectory: 3 media + API",
+    "beads stars: media + API"
+  ],
+  "updatedAt": "2026-10-06T12:00:00+08:00",
+  "nextStep": "await user output-format decision, then write final deliverable"
+}

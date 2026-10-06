@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 交接看板 × 同类开源项目：对照分析与优化方向</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1f2430; --sub:#5b6472;
+    --line:#e3e6eb; --accent:#2563eb; --good:#16a34a; --warn:#d97706; --bad:#dc2626;
+    --code:#f3f4f6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--ink);font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;line-height:1.7;padding:40px 16px;}
+  .wrap{max-width:1080px;margin:0 auto;}
+  h1{font-size:26px;line-height:1.4;margin-bottom:6px;}
+  .meta{color:var(--sub);font-size:13px;margin-bottom:28px;border-bottom:1px solid var(--line);padding-bottom:16px;}
+  .meta code{background:var(--code);padding:1px 6px;border-radius:4px;font-size:12px;}
+  h2{font-size:19px;margin:38px 0 14px;padding-left:10px;border-left:4px solid var(--accent);}
+  h3{font-size:15px;margin:20px 0 8px;}
+  p{margin-bottom:10px;font-size:14px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.03);}
+  table{width:100%;border-collapse:collapse;background:var(--card);font-size:13px;margin:10px 0 6px;border-radius:8px;overflow:hidden;}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;}
+  th{background:#eef1f6;font-weight:600;white-space:nowrap;}
+  tr:nth-child(even) td{background:#fafbfc;}
+  .tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;margin-right:4px;white-space:nowrap;}
+  .t-good{background:#e7f6ec;color:var(--good);}
+  .t-warn{background:#fdf3e3;color:var(--warn);}
+  .t-bad{background:#fdeaea;color:var(--bad);}
+  .t-mid{background:#eef1f6;color:var(--sub);}
+  .cell-y{color:var(--good);font-weight:600;}
+  .cell-n{color:var(--bad);}
+  .cell-p{color:var(--warn);}
+  ul,ol{margin:6px 0 12px 22px;font-size:14px;}
+  li{margin-bottom:5px;}
+  .num{display:inline-block;min-width:26px;height:26px;line-height:26px;text-align:center;background:var(--accent);color:#fff;border-radius:50%;font-size:13px;font-weight:700;margin-right:8px;}
+  .eff{font-size:12px;color:var(--sub);margin-left:6px;}
+  code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:12.5px;}
+  .footnote{color:var(--sub);font-size:12px;margin-top:26px;border-top:1px solid var(--line);padding-top:12px;}
+  .verdict{background:#eef6ff;border:1px solid #cfe0fb;border-radius:10px;padding:16px 20px;margin-top:8px;}
+  .verdict b{color:var(--accent);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr;}h1{font-size:21px;}table{font-size:12px;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>AI 交接看板 × 同类开源项目：对照分析与优化方向</h1>
+<div class="meta">
+  生成时间：2026-10-01 ｜ 本地版本：v1.1.0（源码态）<br>
+  数据口径：对标仓库星标/语言为 <code>2026-10-01</code> 经 <code>api.github.com</code> 实时核实；本项目能力面取自 <code>README.md</code>、<code>AGENTS.md</code> 与源码实测；联网检索补充 Plane / Huly / Vibe Kanban 产品特性。
+</div>
+
+<h2>一、先给结论</h2>
+<div class="card verdict">
+  <p><b>本项目在「AI 智能体交接」这个细分上是同类开源项目里没有直接对标物的开创者</b>：交接就绪度、交接包、8 个多智能体入口文件、MCP 双向读写、脱敏防线、数据自愈，都是周边竞品（Plane/Huly/Vibe Kanban/Kanboard）未覆盖的能力，工程成熟度（595 用例 / 90% 分支覆盖 / 变异探针 / 真浏览器 E2E）也反超多数同级项目。</p>
+  <p>真正值得补的只有三类：<b>① 与「Agent 执行闭环」的轻量衔接（审查环节）；② 交互体验向 Plane/Huly 看齐（命令面板、持久视图）；③ 开源化最后一步（许可证 + 远程 CI + 英文文档）</b>——第 ③ 项是让它能进入 GitHub 项目语境的硬门槛（目前仓库无远端、CI 从未真实跑过）。</p>
+</div>
+
+<h2>二、对标对象与定位</h2>
+<div class="card">
+<table>
+<tr><th>仓库</th><th>Stars*</th><th>主语言</th><th>定位</th><th>与本项目相关度</th></tr>
+<tr><td><code>makeplane/plane</code></td><td>60,208</td><td>TypeScript</td><td>开源 Jira/Linear 替代：issue / 迭代(cycles) / 模块(modules) / 自定义视图 / AI Pages / Command K / GitHub 双向同步，SaaS + 自托管</td><td><span class="tag t-mid">功能参照系</span>通用项目管理，无交接资产</td></tr>
+<tr><td><code>BloopAI/vibe-kanban</code></td><td>28,227</td><td>Rust</td><td>编码 Agent 编排看板：git worktree 隔离、多 Agent 并行/串行、diff 审查回环、MCP 集成、VS Code 扩展</td><td><span class="tag t-warn">最接近</span>同为「管理 Agent 的看板」，但管的是执行，本项目管的是交接</td></tr>
+<tr><td><code>hcengineering/platform</code>（Huly）</td><td>27,821</td><td>TypeScript</td><td>Linear + Jira + Slack + Notion 一体化：极致的键盘流交互、全局 Ctrl+K、团队平台</td><td><span class="tag t-mid">交互参照系</span>团队协作赛道，单机场景不适用</td></tr>
+<tr><td><code>wekan/wekan</code></td><td>21,099</td><td>JavaScript</td><td>Trello 式开源看板（Meteor），列表/卡片/标签</td><td><span class="tag t-mid">基础看板</span>功能面被本项目覆盖</td></tr>
+<tr><td><code>opf/openproject</code></td><td>16,277</td><td>Ruby</td><td>企业级项目管理：甘特、工时、路线图、IFC</td><td><span class="tag t-bad">不构成竞争</span>企业流程赛道</td></tr>
+<tr><td><code>kanboard/kanboard</code></td><td>9,893</td><td>PHP</td><td>极简看板 + 自动化规则 + 插件体系</td><td><span class="tag t-mid">基础看板</span>功能面被本项目覆盖</td></tr>
+</table>
+<p class="footnote">* Stars 为 2026-10-01 实时值，非官宣数字。Taiga 仓库 API 未返回实时数据，未列入上表。</p>
+</div>
+
+<h2>三、四层能力对照矩阵</h2>
+<div class="card">
+<table>
+<tr><th>维度</th><th>本项目（AI 交接看板）</th><th>Plane / Huly</th><th>Vibe Kanban</th></tr>
+<tr><td><b>产品定位</b></td><td>多 Agent 交接中枢：就绪度、交接包、接手页、入口文件、MCP</td><td>通用项目管理 / 团队协作</td><td>Agent 任务执行编排（worktree + diff review）</td></tr>
+<tr><td><b>多项目 / 看板 / 拖拽 / 依赖 / 截止</b></td><td class="cell-y">齐全，且多出：任务依赖图、拓扑排序、今日待办、就绪度评分</td><td class="cell-y">齐全（Plane 有 cycles/modules/views）</td><td class="cell-y">看板四列 + 状态自动流转</td></tr>
+<tr><td><b>AI 能力</b></td><td class="cell-y">监管报告 / 健康分趋势 / 交接生成 / 自然语言维护 / 会话提炼 / 多端点多 Key 网关 / 脱敏防线</td><td class="cell-p">Plane：AI Pages 辅助记录；Huly：AI 沟通整理</td><td class="cell-n">无 AI，纯编排层</td></tr>
+<tr><td><b>Agent 交接资产</b></td><td class="cell-y">独有：8 入口文件投影、交接包预算、context 活数据直链、就绪度检查清单</td><td class="cell-n">无</td><td class="cell-n">无（只有执行，不做上下文交接）</td></tr>
+<tr><td><b>MCP 能力</b></td><td class="cell-y">23 工具 + 资源 + 提示词，含脱敏/幂等/跨进程锁</td><td class="cell-n">Plane 无原生 MCP；Huly 无</td><td class="cell-p">自身可作为 MCP server，并能统一给各 agent 配 MCP</td></tr>
+<tr><td><b>数据安全</b></td><td class="cell-y">密钥锁死在本机、送模型前脱敏、导出直链仅 127.0.0.1、自愈与恢复</td><td class="cell-p">SaaS / 自托管数据库，密钥在服务端</td><td class="cell-p">本地运行，但无脱敏与密钥隔离设计</td></tr>
+<tr><td><b>架构</b></td><td>FastAPI 单进程 + 整份 JSON 读写（单机定位，几十项目个位数毫秒）；main.py 3359 行偏大</td><td>多模块工程 + PostgreSQL + 前端 Next.js 重栈</td><td>Rust + 本地 watcher + worktree 文件系统</td></tr>
+<tr><td><b>工程质量</b></td><td class="cell-y">595 用例 / 90% 分支覆盖 / 变异探针 / 真浏览器 E2E / 发版回归，远超同级</td><td class="cell-p">有 CI 与测试，但无变异探针类门禁</td><td class="cell-p">早期项目，以功能演示为主</td></tr>
+<tr><td><b>开源化状态</b></td><td class="cell-p">无 LICENSE、无远端仓库、CI 从未真实执行、纯中文界面</td><td class="cell-y">LICENSE + CI + 英文文档 + SaaS 官网齐全</td><td class="cell-y">开源 + VSCode 扩展 + 官网</td></tr>
+</table>
+</div>
+
+<h2>四、可优化方向清单（按价值/成本排序）</h2>
+
+<div class="card">
+<h3><span class="num">1</span>补「审查（Review）」任务状态，衔接 Agent 执行闭环<span class="eff">价值：高 ｜ 成本：低 ｜ 来源：vibe-kanban 已验证的需求</span></h3>
+<p>vibe-kanban 用「In Review」承接「Agent 干完活等待人验收」这个真实环节；本项目任务状态只有 待办/进行中/已完成/阻塞，Agent 自动分配（P2 已上线）把活派出去后，缺一个「等人工审查」的中间态。建议：状态机加一档「待审查」，详情页展示该任务的 diff/提交链接（git 集成已有只读能力），交接包与监管报告识别该状态。</p>
+</div>
+
+<div class="card">
+<h3><span class="num">2</span>把 Ctrl+K 从「搜索」升级为「命令面板」<span class="eff">价值：高 ｜ 成本：中 ｜ 来源：Plane / Huly 标配</span></h3>
+<p>本项目 Ctrl+K 目前只做全局搜索；Plane 与 Huly 都把它做成命令中心（新建任务/跳转项目/切换视图/执行动作）。建议扩展为：搜索 + 快捷动作（新建项目/任务、复制交接摘要、打开今日待办、导出交接包），统一走现有 <code>data-act</code> 分发，不引入新框架。</p>
+</div>
+
+<div class="card">
+<h3><span class="num">3</span>持久化自定义视图（Plane Views 的轻量版）<span class="eff">价值：中 ｜ 成本：低</span></h3>
+<p>总览已有搜索与状态筛选，但筛选组合不保存；Plane 的「Views」允许把过滤条件固化为可切换视图。本项目数据面已够（状态/优先级/截止/依赖就绪），缺的只是一层「保存筛选 → 命名视图 → 顶部切换」的薄壳，纯前端即可。</p>
+</div>
+
+<div class="card">
+<h3><span class="num">4</span>迭代/周期视角：按截止日跨项目聚合成里程碑<span class="eff">价值：中 ｜ 成本：中 ｜ 来源：Plane Cycles</span></h3>
+<p>已实现任务 <code>due_date</code> 与依赖图，但没有「这一周/这一个月要交付什么」的跨项目聚合视图。建议加一个「周期视图」：按截止日期把各项目任务聚成 周/月 分组、标注逾期与临期——复用现有临期/逾期判定逻辑，不与「今日待办」重复。</p>
+</div>
+
+<div class="card">
+<h3><span class="num">5</span>开源化最后一步：LICENSE + 远程 CI + 英文文档<span class="eff">价值：高 ｜ 成本：中 ｜ 硬门槛</span></h3>
+<p>与 GitHub 项目可比的前提是：① 补 <code>LICENSE</code>（对齐同类生态可考虑 AGPL-3.0 或 MIT）；② 仓库推到远端并让 GitHub Actions 真跑 <code>ci_local.py --with-exe</code>（AGENTS.md 明确写着「CI 一次都没有真跑过」——本地 21 项门禁是全的，只差最后一步远程执行）；③ README 提供英文版，界面可先不做完整 i18n，用「英文 README + 中文界面」起步。</p>
+</div>
+
+<div class="card">
+<h3><span class="num">6</span>（不建议现在做）多用户/团队协作/权限</h3>
+<p>Plane/Huly 的主赛道，但 AGENTS.md 已明确「不是这个项目的赛道」，会破坏单机简洁性与数据不出本机的安全边界。</p>
+</div>
+
+<div class="card">
+<h3><span class="num">7</span>（不建议）复刻 vibe-kanban 的 worktree 并行编排</h3>
+<p>git worktree 隔离、多 Agent 并行执行是 vibe-kanban 的主场，与「交接中枢」定位重合度低；正确姿态是 MCP 互操作协同（本项目上下文包喂给 vibe-kanban 的任务卡），而不是自己再写一套执行引擎。</p>
+</div>
+
+<div class="card">
+<h3><span class="num">8</span>（不建议）换存储层（SQLite/PostgreSQL）</h3>
+<p>性能基线（2026-09-19 复测）已给出触发条件：列表接口日常 &gt;300ms 才考虑，当前几十项目为个位数毫秒。现在换库只引入失效风险、换不来收益——维持整份 JSON + 跨进程锁是正确的。</p>
+</div>
+
+<h2>五、应守住并继续投资的护城河</h2>
+<div class="card">
+<ul>
+<li><b>AGENTS.md 标准对齐</b>：2025-12 起由 Linux 基金会 AAIF 托管、全球 6 万+ 开源项目采用；Claude Code 2.1.277（2026-09-28）起也原生支持 AGENTS.md——本项目「8 入口投影」已踩在行业标准上，值得继续跟随规范演进（如嵌套 AGENTS.md 支持）。</li>
+<li><b>MCP 双向能力</b>：23 工具 + 脱敏 + 幂等键 + 跨进程锁，同类中只有 vibe-kanban 有 MCP 但方向不同；这是承接「下一代 agent 工具链」的接口位。</li>
+<li><b>脱敏与密钥隔离</b>：送模型前的全路径脱敏、密钥不进项目目录、导出直链仅本机——这三个设计在开源的看板/任务工具里几乎见不到，是差异化卖点。</li>
+<li><b>工程门禁体系</b>：本地 21 项门禁、变异探针 41/41、真浏览器 E2E——转开源后直接成为项目可信度背书。</li>
+</ul>
+</div>
+
+<div class="footnote">
+参照来源：<code>api.github.com</code>（2026-10-01 实测星标）、各仓库 README；Plane/Huly/Vibe Kanban 特性综述见 2026 年公开技术媒体（腾讯云开发者社区、CSDN、知乎）与项目官方仓库；AGENTS.md 标准沿革见 agents.md 官方站点与 Linux 基金会 AAIF 公开信息（2026-01 报道）。本项目事实（版本、功能面、工程数据、边界红线）取自本地 <code>README.md</code> / <code>AGENTS.md</code> / <code>app/version.py</code>。
+</div>
+
+</div>
+</body>
+</html>

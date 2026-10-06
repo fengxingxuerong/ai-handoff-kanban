@@ -36,11 +36,19 @@
 - **机器可读接手包**：`GET /api/context/{pid}` 一次给出背景/交接说明/可执行任务/代码现状/就绪度；详情页「🧩 上下文 JSON」一键复制，MCP 工具 `kanban_context` 同步提供——智能体零粘贴接手
 - **交接内容脱敏**：交接包 / 全项目包 / AGENTS.md 支持 `?redact=1`，自动掩码 API Key / 令牌 / 密码 / 邮箱（对标 handoff redact）
 - **健康分趋势预警**：每份监管报告对比上一期，▼恶化 / ▲好转 / ◆持平 一眼看出哪个项目在滑坡
-- **多智能体入口文件**：一次生成 AGENTS.md / CLAUDE.md / Cursor / Copilot / Gemini / Cline / Aider / Windsurf 八个入口
+- **多智能体入口文件**：一次生成 AGENTS.md / CLAUDE.md / Cursor / Copilot / Gemini / Cline / Aider / Windsurf / .claude/skills（Agent Skills）九个入口
 - **git 集成**：详情页「🌿 代码现状」看分支、最近提交、未提交改动；交接包自动带上这一节；
   AI 监管能看出"看板写着进行中、代码一周没动"
 - **任务关联代码位置**：任务可填 `app/main.py:120` 这类落点，交接包与 AGENTS.md 会带上，
   换人/换工具接手不用再翻一遍找在哪改
+- **任务验收标准**：每条任务可写「怎么算完成」的逐条清单（对标 Backlog.md 的 DoD），
+  交接包 / 接手页 / MCP 全都带着走，验收与交接不再凭心情
+- **🔔 待拍板**：跨项目汇总逾期 / 待审查 / 阻塞三类「等人的事」（对标 Multica 的 Inbox 哲学：
+  依赖没满足的任务会自然流转，不算需要拍板）
+- **记忆时效**：记忆可设有效期（YYYY-MM-DD），过期后不再进交接包 / AGENTS.md / AI 监管，
+  界面划线标注、省略几条都会明说（对标 OKM 知识代谢）
+- **过程记录折叠**：单任务过程日志超上限后，溢出的旧记录折叠成一条带计数的摘要而不是消失
+  （对标 Beads 语义压缩）——体量有上限、脉络不丢
 
 ## 代码现状（git）
 
@@ -144,9 +152,9 @@ start_desktop.bat
 
 ### 多智能体入口文件（一次全出）
 
-详情页 →「AGENTS.md」→ 底部「一键写出各工具入口」：填上项目根目录，一次生成八个入口文件，
+详情页 →「AGENTS.md」→ 底部「一键写出各工具入口」：填上项目根目录，一次生成九个入口文件，
 **`AGENTS.md` 是唯一事实来源，其余都是它的投影**（`CLAUDE.md` 只写 `@AGENTS.md` 做桥接、不复制正文，
-避免八份内容各写各的慢慢漂移）：
+避免九份内容各写各的慢慢漂移）：
 
 ```
 AGENTS.md                            ← 正文（AI 生成；AI 不可用时自动用本地模板）
@@ -157,6 +165,7 @@ GEMINI.md
 .clinerules/project.md
 CONVENTIONS.md                       ← Aider
 .windsurfrules
+.claude/skills/ai-kanban/SKILL.md    ← Agent Skills 技能包（2026 起的第三个入口格式）
 ```
 
 留空目录只预览不写盘；写入同样受系统目录拦截保护；前端预览过的内容再写盘时不会重复调用模型。

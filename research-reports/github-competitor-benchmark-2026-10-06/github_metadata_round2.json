@@ -1,0 +1,135 @@
+{
+ "fetched_at": "2026-10-06 15:15:42",
+ "repos": {
+  "multica-ai/multica": {
+   "full_name": "multica-ai/multica",
+   "stars": 52016,
+   "language": "Go",
+   "created_at": "2026-01-13",
+   "pushed_at": "2026-10-04",
+   "archived": false,
+   "license": "NOASSERTION",
+   "description": "Make humans and AI agents work as one team — open-source and self-hostable."
+  },
+  "letta-ai/letta-code": {
+   "full_name": "letta-ai/letta-code",
+   "stars": 3525,
+   "language": "TypeScript",
+   "created_at": "2025-10-25",
+   "pushed_at": "2026-10-06",
+   "archived": false,
+   "license": "Apache-2.0",
+   "description": "Stateful agents that are like people, with memory, identity, and the ability to learn and adapt"
+  },
+  "mksglu/context-mode": {
+   "full_name": "mksglu/context-mode",
+   "stars": 25493,
+   "language": "TypeScript",
+   "created_at": "2026-02-23",
+   "pushed_at": "2026-10-05",
+   "archived": false,
+   "license": "NOASSERTION",
+   "description": "Context window optimization for AI coding agents. Sandboxes tool output (98% reduction), persists session memory, and   enforces routing across 17 platforms via MCP + hooks."
+  },
+  "eugeniughelbur/obsidian-second-brain": {
+   "full_name": "eugeniughelbur/obsidian-second-brain",
+   "stars": 4679,
+   "language": "Python",
+   "created_at": "2026-03-24",
+   "pushed_at": "2026-10-01",
+   "archived": false,
+   "license": "MIT",
+   "description": "Persistent memory for Claude Code and 6 other CLI agents, stored as plain markdown in your Obsidian vault. Stop re-explaining your projects, decisions and people every session. 45 commands: hybrid sem"
+  },
+  "vshulcz/deja-vu": {
+   "full_name": "vshulcz/deja-vu",
+   "stars": 1133,
+   "language": "Go",
+   "created_at": "2026-07-14",
+   "pushed_at": "2026-10-06",
+   "archived": false,
+   "license": "MIT",
+   "description": "Memory for Claude Code, Codex, Cursor and 35 more coding agents, built from the session history already on your disk. Local search, MCP and hooks, no LLM, one Go binary."
+  },
+  "Dicklesworthstone/cass_memory_system": {
+   "full_name": "Dicklesworthstone/cass_memory_system",
+   "stars": 442,
+   "language": "TypeScript",
+   "created_at": "2025-12-07",
+   "pushed_at": "2026-10-01",
+   "archived": false,
+   "license": "NOASSERTION",
+   "description": "Procedural memory for AI coding agents: transforms scattered session history into persistent, cross-agent memory so every agent learns from every other"
+  },
+  "parcadei/Continuous-Claude-v3": {
+   "full_name": "parcadei/Continuous-Claude-v3",
+   "stars": 3940,
+   "language": "Python",
+   "created_at": "2025-12-23",
+   "pushed_at": "2026-01-26",
+   "archived": false,
+   "license": "MIT",
+   "description": "Context management for Claude Code. Hooks maintain state via ledgers and handoffs. MCP execution without context pollution. Agent orchestration with isolated context windows."
+  },
+  "modiqo/waggle": {
+   "full_name": "modiqo/waggle",
+   "stars": 646,
+   "language": "Rust",
+   "created_at": "2026-07-08",
+   "pushed_at": "2026-07-20",
+   "archived": false,
+   "license": "Apache-2.0",
+   "description": "Attributed, resolvable artifact references for agent handoffs — a ~30-byte token instead of pasted context. MCP-native; the reference layer for the agent-harness world."
+  },
+  "emiliojohann/FocusClaw": {
+   "full_name": "emiliojohann/FocusClaw",
+   "stars": 18,
+   "language": "TypeScript",
+   "created_at": "2026-06-12",
+   "pushed_at": "2026-10-05",
+   "archived": false,
+   "license": "AGPL-3.0",
+   "description": "Agent-native task management for humans and AI agents, built around a local-first API, SQLite storage, projects, calendar views, backups, and plugin-ready integrations."
+  },
+  "getzep/graphiti": {
+   "full_name": "getzep/graphiti",
+   "stars": 31467,
+   "language": "Python",
+   "created_at": "2024-08-08",
+   "pushed_at": "2026-10-05",
+   "archived": false,
+   "license": "Apache-2.0",
+   "description": "Build Real-Time Knowledge Graphs for AI Agents"
+  },
+  "GembaCore/gemba-core": {
+   "full_name": "GembaCore/gemba-core",
+   "stars": 8,
+   "language": "Go",
+   "created_at": "2026-04-18",
+   "pushed_at": "2026-07-02",
+   "archived": false,
+   "license": "MIT",
+   "description": "Agent orchestration dashboard — Kanban UI for any work tracker × any agent runtime."
+  },
+  "alamops/agetor": {
+   "full_name": "alamops/agetor",
+   "stars": 86,
+   "language": "TypeScript",
+   "created_at": "2026-05-16",
+   "pushed_at": "2026-10-06",
+   "archived": false,
+   "license": "MIT",
+   "description": "The harness orchestrator — a local-first kanban for running Claude Code, Codex, and other CLI coding agents in parallel, each in its own git worktree."
+  },
+  "cortexkit/magic-context": {
+   "full_name": "cortexkit/magic-context",
+   "stars": 2270,
+   "language": "TypeScript",
+   "created_at": "2026-03-26",
+   "pushed_at": "2026-10-06",
+   "archived": false,
+   "license": "MIT",
+   "description": "Unbounded context. Memory that manages itself. One session, for life. The hippocampus for coding agents, part of CortexKit."
+  }
+ }
+}

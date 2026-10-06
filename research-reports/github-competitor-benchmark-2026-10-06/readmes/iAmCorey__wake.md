@@ -1,0 +1,209 @@
+# Wake
+
+[![License](https://img.shields.io/github/license/iAmCorey/Wake?style=flat-square)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/iAmCorey/Wake?style=flat-square)](https://github.com/iAmCorey/Wake/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-macOS%2014%2B%20%7C%20Linux%20beta%20%7C%20Windows%20beta-007AFF?style=flat-square)](https://github.com/iAmCorey/Wake/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/iAmCorey/Wake/total?style=flat-square)](https://github.com/iAmCorey/Wake/releases)
+[![Stars](https://img.shields.io/github/stars/iAmCorey/Wake?style=flat-square)](https://github.com/iAmCorey/Wake/stargazers)
+[![CI](https://img.shields.io/github/actions/workflow/status/iAmCorey/Wake/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/iAmCorey/Wake/actions/workflows/ci.yml)
+
+A native desktop app that gathers every coding-agent session on your machine into one place — browse, full-text search, and resume any conversation in seconds. Built with **Rust + GPUI** (gpui 0.2 + gpui-component 0.5). macOS first; experimental Linux support since v0.2.5, experimental Windows support since v0.2.7.
+
+Your agent history is scattered across `~/.claude`, `~/.codex`, and a dozen other private directories. Wake reads them all, read-only, and gives you one fast window into it. Everything stays local; Wake only contacts GitHub when you explicitly check for an update.
+
+![Wake — sessions list and transcript view](imgs/screenshot-1.webp)
+
+## Features
+
+- **Unified browsing** — all sessions grouped by agent / project, with Grok Build subagents nested under their parent and live file watching for incremental updates
+- **Full-text search** (⌘K / Ctrl+K) — SQLite FTS5 trigram index; handles CJK text and code substrings (like `useEffect(`) equally well; jumps straight to the matched message in the transcript
+- **Transcript view** — per-message rendering with user/assistant bubbles, inline images (copy or save them), collapsible tool-call clusters, thinking summaries, tree-sitter code highlighting (30+ languages)
+- **One-click resume** — reopens the session in your terminal (Terminal/iTerm on macOS; native terminal hosts on Linux and Windows) at the original project directory (`claude --resume`, `codex resume`, …)
+- **Manage** — star/pin (stored in Wake's own DB, original files untouched), export to Markdown or save an inline image through the system Save dialog (Wake remembers the last folder), delete (system Trash + tombstone so deleted sessions stay deleted)
+- **Insights** — a stats page for your whole library: GitHub-style activity heatmap with streaks, hour / weekday / month breakdowns, and Agents / Projects / Models leaderboards switchable between sessions, tokens, and prompts
+- **Remote hosts** — mirror the sessions on your other machines over SSH (Settings → Remote hosts); they show up next to local ones with an `@host` badge, searchable like everything else, and resume through a copied `ssh -t` command
+- **Connect your agents (MCP)** — a bundled read-only MCP server, `wake-mcp`, lets Claude Code, Codex, Cursor or any MCP client search your whole history, list recent sessions per project and read transcripts page by page, so a new agent can pick up where another one left off; Settings → Connect has copy-paste setup snippets
+- **Command line** — `wake-cli` gives the same answers to anything that can run a shell command: `wake-cli sessions --project "$PWD"`, `wake-cli search "…"`, `wake-cli show <key>`; it prints the same text an MCP client sees; `npx skills add iAmCorey/Wake` installs a skill so agents reach for it on their own; `wake-cli refresh` keeps the index fresh from a scheduled task while the app is closed
+
+![Full-text search across every agent's sessions](imgs/screenshot-2.webp)
+
+## Supported agents
+
+| Agent | Data source | Model | Via |
+|---|---|---|---|
+| Claude Code | `~/.claude/projects/**/*.jsonl` | ✅ | — |
+| Codex CLI | `~/.codex/sessions` + `state_5.sqlite` (read-only) | ✅ | ✅ |
+| Qoder CLI | `~/.qoder/projects/*/*.jsonl` (`QODER_CONFIG_DIR` is respected) | ✅ | — |
+| Copilot CLI | `~/.copilot/session-store.db` | — | — |
+| Cursor | `~/.cursor/projects/**/agent-transcripts` (agent transcripts) + `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` (IDE Chat/Composer history, read-only) | ✅ | — |
+| OpenCode | `~/.local/share/opencode/opencode.db` | ✅ | — |
+| OpenCode 2 (`opencode2`) | `~/.local/share/opencode/{opencode.db,opencode-next.db}` (`session_v2` or `session` + `session_message`); both paths are scanned | ✅ | — |
+| Kiro | `~/.kiro/sessions/cli` | ✅ | — |
+| Gemini CLI | `~/.gemini/tmp/**/chats` | — | — |
+| Pi | `~/.pi/agent/sessions/**/*.jsonl` | ✅ | — |
+| Oh My Pi | `~/.omp/agent/sessions/**/*.jsonl` | ✅ | — |
+| Grok Build | `~/.grok/sessions/**/updates.jsonl` | ✅ | — |
+| Kimi Code | `~/.kimi-code/sessions/**/wire.jsonl` | — | — |
+| Antigravity CLI | `~/.gemini/antigravity-cli/conversation_summaries.db` (metadata only — transcripts are encrypted) | — | — |
+| DeepSeek Harness (`dsh`) | `~/.dsh/sessions/**/session[.vN].jsonl[.zstd]` (the newest log format generation is read; zstd-compressed logs are decoded transparently) | ✅ | — |
+| Hermes Agent | `~/.hermes/state.db` + `profiles/*/state.db` (`HERMES_HOME` is respected) | ✅ | ✅ |
+| OpenClaw | `~/.openclaw/agents/*/agent/openclaw-agent.sqlite` + legacy `agents/*/sessions/*.jsonl` (`OPENCLAW_STATE_DIR` is respected) | ✅ | ✅ |
+| CodeBuddy | `~/.codebuddy/projects/*/*.jsonl` (`CODEBUDDY_CONFIG_DIR` is respected) | ✅ | — |
+| WorkBuddy | `~/.workbuddy/projects/*/*.jsonl` (`WORKBUDDY_CONFIG_DIR` is respected; desktop app, so no resume) | ✅ | — |
+| ZCode | `~/.zcode/cli/db/db.sqlite` + `v2/tasks-index.sqlite` (read-only; `ZCODE_STORAGE_DIR` is respected; desktop app, so no resume) | ✅ | — |
+| Craft Agents | `~/.craft-agent/workspaces/*/sessions/*/session.jsonl` (workspaces kept elsewhere can be added under Session locations; desktop app, so no resume) | ✅ | ✅ |
+| Devin | `~/.local/share/devin/cli/sessions.db` (read-only; `XDG_DATA_HOME` is respected) | ✅ | — |
+
+**Model** = whether Wake shows which LLM a session used (the model the session last used). **Via** = whether Wake shows where the session was started from (CLI, IDE extension, desktop app) — Codex records this in its local data; Hermes and OpenClaw record the channel a session came in through (Telegram, Discord, …); Craft Agents marks sessions its automations started. A "—" means the agent's local data simply doesn't record that field, not a missing feature.
+
+Craft Agents runs other agents' engines rather than its own: a Claude connection drives the Claude Agent SDK, which also saves every conversation into Claude Code's history. Wake lists the Craft session and hides that engine copy for as long as the Craft session exists — delete the session in Craft and the copy shows up again as a Claude Code session. Craft's short title-generation calls on a Claude connection are saved by the SDK too, and appear as one-message Claude Code sessions under *Unknown project*.
+
+Codex writes its background threads — the guardian auto-review, `/review`, compaction and memory consolidation — into the same `sessions` directory as your conversations. Wake recognises them from the metadata on their first line and skips them; sub-agents you start with `spawn_agent` are kept and listed under the session that spawned them; a file it cannot identify stays visible rather than risk hiding a real conversation.
+
+Cursor keeps two stores. A chat that has a full transcript under `~/.cursor/projects` is read from there; local workspace metadata and filesystem matching restore its project path, including spaces. Project metadata is refreshed on each scan even if the transcript is unchanged. Chats that only live in Cursor's own database — older ones, or Cursor versions that leave nothing but a `turn_ended` marker in the transcript — are read from `state.vscdb`. Older IDE chats that Cursor stored without a workspace show up under *Unknown project*.
+
+Token statistics depend on the usage recorded by each agent. Qoder CLI transcripts that contain only zero token counts leave token usage unknown in Wake, even when they include Credits or a context usage ratio. Those values measure different things and are not converted into tokens; the sessions remain visible in the Sessions and Prompts views of Insights.
+
+Windsurf and Trae encrypt their local data; Amp, Factory (Droid), and Warp keep sessions in the cloud — none of those are supported. Reasonix stores sessions locally but hasn't been mapped yet.
+
+## Remote hosts
+
+Wake can mirror the sessions on your other machines and show them next to the local ones. Add a host in Settings → Remote hosts (an alias from `~/.ssh/config`, or `user@host`); Wake then syncs on launch, on refresh, and whenever you click Sync now. Remote sessions carry an `@host` badge, are searchable like everything else, and resume through *Copy SSH command*, a ready-to-paste `ssh -t <host> 'cd <project> && codex resume <id>'`.
+
+Before you add a host:
+
+- SSH has to work without prompts: load your key into an agent (Wake runs without a terminal, so it can never answer a passphrase prompt) and connect once from a terminal so the host key is already trusted
+- `rsync` is needed on both ends — macOS and most Linux distributions ship one; on Windows install it yourself
+
+On Windows, use `rsync` and `ssh` from the same Cygwin/cwRsync distribution. Put its `bin` directory ahead of Windows OpenSSH in `PATH`, then restart Wake. For Chocolatey's `rsync` package, this directory is `%ChocolateyInstall%\lib\rsync\tools\bin`; the package exposes only `rsync` on `PATH` by default. Check `where.exe rsync` and `where.exe ssh` to confirm both resolve there. Windows' built-in OpenSSH may pass Wake's initial connection check but is [incompatible with Cygwin rsync's transport](https://cygwin.com/pipermail/cygwin/2022-March/251153.html). Test the bundled SSH's key, agent and host configuration before adding a host.
+
+How it works, and what it doesn't do yet:
+
+- Wake first asks the remote which of the known agent directories exist, then mirrors only those with `rsync` into `remotes/<host>/` under its own data directory. Only session data and sidecar files are copied, never credentials, and nothing on the remote is ever written
+- Remote sessions are read-only in Wake: they can't be moved to the Trash, and the mirror simply follows whatever is on the remote
+- The remote is assumed to use each agent's default paths under the login user's home (`CODEX_HOME`-style overrides on the remote aren't detected), and remote Windows machines aren't supported
+
+## Connect your agents (MCP)
+
+Wake ships `wake-mcp`, a small read-only [MCP](https://modelcontextprotocol.io) server over stdio that sits next to the app binary (`Wake.app/Contents/MacOS/wake-mcp` on macOS, beside `wake` on Linux and Windows). Point an MCP client at it and the agent gets five tools:
+
+| Tool | What it does |
+|---|---|
+| `wake_search` | Full-text search across every agent's session titles and transcripts (CJK and code substrings work); each snippet carries a `wake://session/<key>#<seq>` reference |
+| `wake_list_sessions` | Most recently updated sessions, scoped by project (pass the agent's working directory), agent, time window or starred |
+| `wake_get_session` | One transcript as compact Markdown — user and assistant messages with `[seq N]` markers, tool calls folded to a line, injected context omitted — paginated by `from_seq` |
+| `wake_list_projects` | Projects with indexed sessions, most recently active first |
+| `wake_list_memories` | The memory files agents keep for themselves (Claude Code auto-memory, Codex memories, ZCode project memory), grouped by project; read one with `wake_get_session` and its `wake://memory/…` reference |
+
+Setup is a copy-paste from Settings → Connect, or run `wake-mcp setup` in a terminal. For example, Claude Code:
+
+```bash
+claude mcp add --scope user wake -- "/Applications/Wake.app/Contents/MacOS/wake-mcp"
+```
+
+Codex reads the same server from `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.wake]
+command = "/Applications/Wake.app/Contents/MacOS/wake-mcp"
+```
+
+A few things worth knowing:
+
+- Everything is read-only: the server opens Wake's index without write access and never scans or rebuilds it; there are no delete or star tools (the one thing it can write is Wake's own data directory, which resolving the default index path creates)
+- Search and lists come from Wake's index, so keep Wake running for fresh results, or schedule `wake-cli refresh` for the times it is closed — every listing says how recent the index is. Reading a transcript parses the agent's files rather than the index, so it does not depend on the last scan (remote-host sessions are read from their local mirror)
+- Agents see the same session files Wake indexes, on this machine only (remote-host mirrors included); nothing leaves the machine
+- `wake-mcp call wake_search '{"query":"useEffect("}'` runs a single tool from the terminal, handy for checking what an agent would see
+
+The full reference — every parameter, output formats, key and reference formats, error semantics, troubleshooting — is in [docs/mcp.md](docs/mcp.md).
+
+### From a shell
+
+Not every agent speaks MCP, and sometimes you just want the answer in a terminal. `wake-cli` sits next to `wake-mcp` and covers the same ground:
+
+```bash
+wake-cli sessions --project "$PWD" --limit 5      # what happened in this repo
+wake-cli search "rate limiter" --project "$PWD"   # where was this discussed
+wake-cli show 'claude-code:1b2c3d4e-…'            # read that transcript
+wake-cli setup                                    # path, PATH setup, and a block to paste into CLAUDE.md
+wake-cli refresh                                  # update the index while Wake is closed — schedule it
+```
+
+It prints what the MCP tools return, asserted byte for byte in the test suite apart from a trailing newline the CLI adds, so an agent driving it through a shell sees what a connected one does. Full reference in [docs/cli.md](docs/cli.md).
+
+To make an agent reach for it without being told, install the bundled skill with `npx skills add iAmCorey/Wake` (or copy `skills/wake/` into `~/.claude/skills/wake/`). Claude Code can go one step further and receive the project's recent sessions the moment a session starts, through a `SessionStart` hook that runs `wake-cli` — the recipe is in [docs/cli.md](docs/cli.md#teaching-an-agent-to-use-it).
+
+## Language
+
+Wake's interface follows your system language on first launch and falls back to
+English. Simplified Chinese ships with the app; pick a fixed language under
+**Settings → General → Language**.
+
+Adding a language is one flat JSON file mapping the English text to your
+translation — drop it in Wake's config folder to use it immediately, or send it
+as a pull request. Untranslated strings simply stay English, so a partial pack is
+welcome. See [crates/wake/locales/README.md](crates/wake/locales/README.md).
+
+## Privacy stance
+
+- Agent data directories are opened **read-only**; Wake never writes to another tool's files or databases
+- Credential files (`auth.json` and friends) are never read
+- Remote hosts are mirrored read-only with `rsync` over your existing SSH setup: only session data and its sidecar files come across (never credentials), nothing on the remote machine is ever written, and the mirror lives inside Wake's own data directory (`remotes/<host>/`), so removing the host removes it
+- No background network requests — the only network actions are a user-initiated update check against Wake's public GitHub Release metadata and, if you configure remote hosts, SSH/rsync to those hosts on launch, refresh, and Sync now; session data is never sent anywhere else
+- Wake's own index lives at `~/Library/Application Support/wake/wake.db` (Linux: `~/.local/share/wake`, Windows: `%LOCALAPPDATA%\wake`) and can be rebuilt from scratch at any time (stars/pins live in a separate table and survive rebuilds). Three small preference files (`appearance`, `language`, `window.json`) sit beside it on macOS, under `~/.config/wake` on Linux and `%APPDATA%\wake` on Windows; Open In and export-folder choices live in the index database's `prefs` table
+
+## Performance
+
+On the author's machine (~310 sessions, ~800 MB of JSONL): full index ~5 s, subsequent launches are instant (mtime-based incremental scan), search results in under 1 ms.
+
+## Install
+
+Download `Wake-<version>-macos.zip` from the [latest release](https://github.com/iAmCorey/Wake/releases/latest), unzip, and drag Wake to Applications. The release is a Universal Binary for both Apple Silicon and Intel Macs. Or build from source (requires a Rust toolchain):
+
+```bash
+git clone https://github.com/iAmCorey/Wake && cd Wake
+scripts/make-app.sh          # builds dist/Wake.app (icon + Info.plist, ad-hoc signed)
+open dist/Wake.app
+```
+
+To build the same Universal Binary locally, install the `aarch64-apple-darwin` and `x86_64-apple-darwin` Rust targets, then run `scripts/make-app.sh --universal`.
+
+The app is ad-hoc signed, so if you download a prebuilt copy instead of building it yourself, macOS Gatekeeper will block the first launch — right-click the app and choose *Open*, or run `xattr -d com.apple.quarantine Wake.app`.
+
+### Linux (experimental)
+
+Prebuilt packages for arm64 and x86_64 (asset names use Debian's `amd64`) are attached to each release: a `.deb`, and a tar.gz with a user-level `install.sh` (no root needed). Or build from source:
+
+```bash
+sudo apt-get install -y libasound2-dev libfontconfig1-dev libwayland-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev libssl-dev libzstd-dev pkg-config cmake clang
+git clone https://github.com/iAmCorey/Wake && cd Wake
+scripts/make-linux.sh        # builds dist/wake-<version>-linux-<arch>.tar.gz and .deb
+```
+
+The data layer, rendering and search are fully tested on Linux; terminal-resume targets and desktop integration have seen less real-desktop mileage yet — issues welcome.
+
+### Windows (experimental)
+
+Download `wake-<version>-windows-x86_64.zip` from the [latest release](https://github.com/iAmCorey/Wake/releases/latest), unzip, and run `Wake.exe` — the binary is unsigned, so SmartScreen may block the first launch (click *More info* → *Run anyway*). Or build from source (requires a Rust toolchain with the MSVC target):
+
+```powershell
+git clone https://github.com/iAmCorey/Wake; cd Wake
+powershell -ExecutionPolicy Bypass -File scripts/make-windows.ps1   # builds dist/wake-<version>-windows-<arch>.zip
+# or just: cargo run -p wake
+```
+
+Resume opens sessions in Windows Terminal, PowerShell (7+ or the built-in Windows PowerShell), Command Prompt, Alacritty or WezTerm (whichever are installed); delete goes to the Recycle Bin. Agent data lives in the same `~/.claude`-style directories under your user profile, so everything indexed on macOS/Linux is indexed here too. Same beta caveat as Linux: the data layer is fully tested, desktop integration has seen less mileage — issues welcome.
+
+## Development
+
+```bash
+cargo run -p wake                      # run in dev mode
+scripts/test.sh                        # one-command test entry: data-layer tests + UI compile gate
+scripts/test.sh --smoke                # adds a real-data scan baseline (reads your local agent dirs, read-only)
+cargo test -p wake-core                # data-layer tests only (adapter contracts, FTS, scanner)
+cargo run -p wake-core --bin scan      # data-layer smoke test: scan and print stats (quit Wake first, or add --tmp: it will not write an index Wake holds)
+cargo run -p wake-core --bin scan -- --search "useEffect("   # search smoke test
+cargo run -p wake-core --bin wake-mcp -- setup                # print MCP setup snippets for the dev build
+cargo run -p wake-core --bin wake-mcp -- call wake_search '{"query":"useEffect("}'   # run one MCP tool against your index
+cargo run -p wake-core --bin wake-cli -- sessions --project "$PWD"   # the CLI

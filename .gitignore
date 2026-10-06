@@ -33,3 +33,7 @@ _backup_*/
 
 # pytest 指定 basetemp 时的落点（2026-09-28 用过 .basetemp 这个名字）
 .basetemp/
+
+# 会话与文档查看器的临时缓存
+.dumate/
+.tmp/

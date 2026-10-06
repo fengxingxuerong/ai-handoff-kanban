@@ -38,7 +38,7 @@
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复" |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 32 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 封顶、幂等键截断…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），跑法照旧。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁 |
+| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 41 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 封顶、幂等键截断…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
 
@@ -136,7 +136,7 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 5. **杀 exe 进程树必须 `taskkill /F /T /PID`**。PyInstaller -F 单文件会拉起子进程跑实际服务，
    `terminate()` 只杀父进程，子进程残留会占用端口与 exe 文件（历史事故：打包时 PermissionError 拒绝访问）。
    `frozen_smoke.py` 已内置进程树清理 + 端口兜底检查。
-6. **状态与优先级只能取固定值**：项目 `规划中/进行中/已暂停/已完成`，任务 `待办/进行中/已完成/阻塞`，
+6. **状态与优先级只能取固定值**：项目 `规划中/进行中/已暂停/已完成`，任务 `待办/进行中/待审查/已完成/阻塞`，
    优先级 `高/中/低`。前后端各有一层白名单：后端 `ProjectIn/TaskIn` 用 `Literal` 返回 422，
    前端用 `STATUS_SET/PRIORITY_SET` 兜底（这两个值会被拼进 class 名与文本）。
 7. **密钥绝不进项目目录**。Key 只存在于 `%USERPROFILE%\.ai-kanban\config.json` 或
@@ -228,6 +228,35 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
     **版本资源要的是"这个 exe 几点打的"**。验证要读回二进制（PowerShell `VersionInfo`），
     别只看生成脚本没报错；且读中文资源值时路径要纯 ASCII，否则 PowerShell 会
     非终止地报错却仍返回 0，把"验过了"变成空字符串蒙混过去。
+24. **任务验收标准（`acceptance`）是一个跨层字段**（2026-10-06 吸取 Backlog.md 的 DoD 清单）：
+    上限只有一对数（`MAX_ACCEPTANCE_ITEMS` / `MAX_ACCEPTANCE_TEXT`），界面提示、TaskIn 清洗、
+    MCP `_clean_notes` 全用它们（对账钉子：`test_acceptance_hint_numbers_match_the_backend`）；
+    落点有五处缺一不可 —— 交接包 Markdown（`- [ ]` 清单）、接手页任务表（`☐`）、接手包
+    `slim.acceptance`（**已完成的不带**，它已经验过了）、`kanban_get_project` 的任务行下方
+    `- [x]`、任务卡计数徽章。增量动词 `acceptance_add/remove` 走 `COLLECTION_OPS` 同一套机制，
+    整体值与增量同给必须 400。探针：`acceptance_no_cap`。
+25. **journal 超限是「折叠成摘要」，不是「静默丢弃」**（2026-10-06 吸取 Beads 语义压缩）：
+    `compress_journal()` 纯函数，溢出的最旧条目折成一条带 `folded` 计数的摘要放在最前，
+    `folded` 永远指**原始记录数**（再次溢出时继承累计）；`clean_journal()` 在读路径上做同一件事，
+    所以导入的脏数据也折叠。前端 `.j-folded` 样式区分，交接包/接手包无需特殊处理。
+    **教训重演**：`clean_journal_no_cap` 探针盯的旧代码（`raw[-MAX_JOURNAL:]`）随这次改动消失
+    而没有同步改 `old`，探针就哑火了 —— 改被探针盯着的代码必须同步改变异表（现在是
+    `journal_fold_dropped`）。
+26. **记忆有保质期就标 `expires`，过期不召回且省略要留痕**（2026-10-06 吸取 OKM 知识代谢）：
+    `expires` 只认 `YYYY-MM-DD`（到期**当天仍有效**，判定在 `_memory_expired` 一处）；
+    四个出口 —— 交接包、接手包、AGENTS.md（`_project_memories`）、模型简报 —— 都不召回过期记忆，
+    交接包省了几条要在正文开头说（否则"没写"会被读成"没有"），接手包顶层 `expired_memory_count`
+    同理；界面划线标注、MCP 列表带 `⚠️已于…过期`。`expires` 格式不对就留空 = 变成长期有效，
+    `kanban_memory_add` 必须在回执里说破（与 `due_date="下周三"` 同一类"丢得毫无声音"）。
+    探针：`memory_expiry_ignored`。
+27. **🔔 待拍板（`/api/inbox`）只列"等人的"**（2026-10-06 吸取 Multica 的 Inbox 哲学）：
+    逾期 / 待审查 / 阻塞三类，一条任务只进一类，优先级 待审查 > 阻塞 > 逾期（最接近完成的在前）。
+    **依赖没满足的任务不算**（它会随前置完成自然流转，那是「今日」的事）、临期不算（横幅已管）、
+    **已完成的绝不能出现在任何一类里**（探针：`inbox_counts_completed`）。界面徽标数量来自
+    同一个接口，别在前端拿 task_counts 另算一份。
+28. **入口文件现在是 9 个投影**：第 9 个是 `.claude/skills/ai-kanban/SKILL.md`（Agent Skills，
+    2026 起的技能包格式）。frontmatter 的 `name` 必须与目录名一致 —— 都取自 `SKILL_NAME`
+    一份常量，别写两处。Skill 是投影不是第二份内容（正文仍是 AGENTS.md 那一份）。
 
 ## MCP 服务（让代理直接读写看板）
 
@@ -456,7 +485,8 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
     "看板第几版"）。导入时若文件声明的版本比本机高**只说话不拒绝**（`schema_note`）——
     字段是超集，硬挡等于把用户关在门外，但事后发现字段被规范化掉更糟。
     接手包顶层与 `project` / `tasks` 的字段集合由
-    `test_context_package_field_set_is_pinned` 钉住：加字段要有意为之。
+    `test_context_package_field_set_is_pinned` 钉住：加字段要有意为之
+    （v2 = 2026-10-06：任务 slim 带 `acceptance`、顶层带 `expired_memory_count`）。
 15. **同一条清单不许前后端各写一份**：导出扩展名白名单是 `EXPORT_SUFFIXES`（后端），
     前端 `saveAgentsMD` 那条正则必须与它一字不差 —— 以前前端少一条 `.markdown`，
     后端明明允许却被前端挡在门外，而提示文案同时漏了 `.agentsmd`。
@@ -748,7 +778,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 当前进度与下一步
 
-**状态：v1.1.0（以 `app/version.py` 为准）、可用。** 下表六轮到 1.0.0 转正为止，1.1.0 的六个面见表格下方说明。演进过程（按提交顺序，细节见各 commit）：
+**状态：v1.2.0（以 `app/version.py` 为准）、可用。** 下表六轮到 1.0.0 转正为止，1.1.0 的六个面见表格下方说明；1.1.0 → 1.2.0 之间叠了两轮对标吸取（2026-10-01 对标 plane：自动分配/里程碑/项目统计/保存视图/待审查状态；2026-10-06 GitHub 竞品全方面对标：验收标准/journal 折叠/记忆时效/待拍板/Skill 投影，报告见仓库根 `竞品优点吸取-2026-10-06.html`）。演进过程（按提交顺序，细节见各 commit）：
 
 | 轮次 | 主题 | 关键产出 |
 | --- | --- | --- |
@@ -759,16 +789,21 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-09-29 收口）**：`pytest` 595 收集（590 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
-27 个测试文件、557 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖；
-2026-09-29 对账抓出并改名一处重名：`test_context_budget_levels` ×2，test_misc 侧改名 `_and_lines_key`）。
+**验证基线（2026-10-06 收口，v1.2.0 起）**：`pytest` 682 收集（677 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
+32 个测试文件、636 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+2026-10-01 新增「待审查」状态后补：E2E 五列归位、MCP review 分支文案、readiness 认待审查三个方向各一条。
+2026-10-06 竞品吸取轮补：`test_p1_absorb.py` 16 条（验收标准 / journal 折叠 / 记忆时效 / 待拍板）+
+MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收提示数字对账、弹窗数 13→14）。
 未覆盖数在 ±4 之间漂，是 `-n auto` 下时序类用例走了不同分支造成的，**别把它抄成一个精确值**；
 门槛 90，只统计 `app/`，`scripts/` 不进覆盖率 —— 原因见「测试约定 4」）。
-公开接口面：HTTP 51 条自有端点（`method+path` 计 52，多的那条是框架自带的 `/openapi.json`），
-其中 2026-09-23 新增 `PATCH /api/projects/{pid}`、`PATCH /api/tasks/{tid}` 两条（见数据层约定 18）
-+ MCP 23 个工具，另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
+公开接口面：HTTP 58 条自有端点（`method+path` 计 59，多的那条是框架自带的 `/openapi.json`），
+其中 2026-09-23 新增 `PATCH /api/projects/{pid}`、`PATCH /api/tasks/{tid}` 两条（见数据层约定 18）、
+2026-10-06 新增 `GET /api/inbox` 一条
++ MCP 23 个工具（工具数没变，但 `kanban_add_task`/`kanban_update_task` 的 schema 带了 `acceptance`、
+`kanban_memory_add` 带了 `expires`），另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
   4 类 uri）与提示词（`prompts/list` / `prompts/get`，3 个）。
-门禁脚本（2026-09-29 全部复跑过一遍，`ci_local` 七步全绿、变异探针 32/32 被杀）：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
+门禁脚本（2026-10-01 全部复跑过一遍，`ci_local` 七步全绿、变异探针 **44** 条 —— 2026-10-06 新增 4 条且 4/4 被杀，
+`ci_local --quick` 三步全绿）：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
 `release_regression --no-ai` 16 通过 + **2 项明确标"未验"**（`--no-ai` 下 AI 链路本就没跑，
 不许再算进"全部可用"）、`delivery_drill` 21/0、`live_check --mcp` 12/0、
 `frozen_smoke` 11/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 56 秒。
@@ -804,9 +839,26 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
      改法是备份只存掩码后的端点 + 调度/会话源 —— 代价是**恢复后 Key 要重填**，所以要用户点头。
    - **journal 是列表接口最先撞线的维度**：1000 项目 × 10 任务下，journal 从 0 条加到 20 条/任务，
      文件 4.67MB → 81MB，`_load_data` 57ms → 336ms（与项目数无关）。
-     收口办法是把 `MAX_JOURNAL` 50→20、`MAX_JOURNAL_TEXT` 500→200 —— **会看不到既有过程记录**。
+     ~~收口办法是把 `MAX_JOURNAL` 50→20、`MAX_JOURNAL_TEXT` 500→200~~（2026-10-06 起有更好的路：
+     超限**折叠成摘要**而不是截条数，见硬性约定 25 —— 治的是"无声丢历史"，本条的截断方案仍需用户点头才动）。
    - **`_projects_brief` 有两份实现且语义已分叉**（`main` 那份给 LLM、任务 `[:40]` 截断；
      MCP 那份重抄了 `/api/projects` 的计数+就绪度）。合并会同时改两处工具输出，收益不值这个风险。
+5b. **2026-10-06 全方面竞品对标后「明确不吸收」的**（研究档案：
+    `research-reports/github-competitor-benchmark-2026-10-06/`，16 组检索 + 43 仓库 API 核实；
+    吸收了五条：验收标准 / journal 折叠 / 记忆时效 / 待拍板 / Skill 投影，见硬性约定 24-28。
+    这些是**想清楚不要做的**，别再提）：
+   - **MCP 工具分档暴露**（Task Master 36 工具三档加载）：23 个工具还在可接受范围，已有只读模式
+     这个可见性开关；再加分档会让客户端工具目录漂移 —— 触发线：工具数 > 30 再议。
+   - **会话历史全文检索**（Wake 的 FTS5 trigram）：要引入索引层与新存储，本轮超预算；
+     现有「扫描 → 预览 → 提炼入库」链路覆盖主要用法。列为下一步候选，做之前先量会话文件规模。
+   - **handoff 引用化**（waggle 的 ~30 字节工件引用 token）：交接包是给人+模型读的 Markdown，
+     引用 token 伤可读性；任务 `refs` 已经是"引用而非复制"的雏形。
+   - **用量记账细化到 run/任务维度**（Multica per-issue 成本）：本板 AI 调用都是看板级
+     （监管/指令/提炼），没有 run 概念，没有可挂的成本对象。
+   - **agent 执行编排 / 团队协作 / git-worktree 并行 / 换存储引擎**：维持 10-01 结论（上文与
+     「不要再做的事」）。另记两条风险警示：vibe-kanban（28k★）死于无商业模式、Task Master
+     （28k★）四个月停更 —— 星标≠生命力；「Agents don't need memory, they need documentation」
+     （HN 2026-10）对本项目"交接包/AGENTS.md 为中心"的定位是背书，对重度记忆层路线是刹车。
 6. **接口扩面：2026-09-19 已经做过两轮**（用户点头后）。做出来的：
    - **MCP resources**：`kanban://projects`、`kanban://board/today` 两个总览 +
      每个项目 `.../handoff`（Markdown）与 `.../context`（JSON，**已脱敏**）；

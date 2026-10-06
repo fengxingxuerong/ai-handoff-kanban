@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 交接看板 竞品优点吸取 —— GitHub 同类竞品全方面对标（第二轮）</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --line:#e4e7ec; --text:#1f2329; --sub:#5f6b7a;
+    --brand:#2563eb; --brand-d:#1e40af; --p0:#dc2626; --p1:#d97706; --p2:#64748b;
+    --ok:#059669; --warn:#d97706; --bad:#dc2626;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--text); font-family:"Microsoft YaHei","PingFang SC",sans-serif; line-height:1.7; padding:32px 16px;}
+  .wrap{max-width:1080px; margin:0 auto;}
+  header.top{background:linear-gradient(135deg,#1e3a8a,#2563eb 60%,#3b82f6); color:#fff; border-radius:16px; padding:36px 40px; margin-bottom:28px;}
+  header.top h1{font-size:26px; margin-bottom:8px;}
+  header.top .sub{opacity:.92; font-size:14px;}
+  header.top .meta{margin-top:14px; font-size:13px; opacity:.8; display:flex; gap:20px; flex-wrap:wrap;}
+  .tag{display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; margin-right:6px;}
+  .tag.p0{background:#fee2e2; color:var(--p0);} .tag.p1{background:#fef3c7; color:var(--p1);} .tag.p2{background:#f1f5f9; color:var(--p2);}
+  .tag.good{background:#d1fae5; color:var(--ok);} .tag.warn{background:#fef3c7; color:var(--warn);} .tag.bad{background:#fee2e2; color:var(--bad);}
+  h2{font-size:20px; margin:36px 0 14px; padding-left:12px; border-left:4px solid var(--brand);}
+  h3{font-size:16px; margin:20px 0 8px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px 24px; margin-bottom:16px;}
+  p{margin:8px 0;}
+  ul,ol{margin:8px 0 8px 22px;}
+  li{margin:5px 0;}
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:12px 0;}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top;}
+  th{background:#eef2f7; font-weight:600; white-space:nowrap;}
+  tr:nth-child(even) td{background:#fafbfc;}
+  code{background:#eef2f7; padding:1px 6px; border-radius:4px; font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  .tl{white-space:nowrap;}
+  .note{background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:14px 18px; margin:12px 0; font-size:13.5px;}
+  .warnbox{background:#fef2f2; border:1px solid #fecaca; border-radius:10px; padding:14px 18px; margin:12px 0; font-size:13.5px;}
+  .okbox{background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:14px 18px; margin:12px 0; font-size:13.5px;}
+  .badge{display:inline-block; min-width:34px; text-align:center; border-radius:6px; color:#fff; padding:1px 8px; font-size:12px; font-weight:600;}
+  .b-p0{background:var(--p0);} .b-p1{background:var(--p1);} .b-p2{background:var(--p2);}
+  .matrix{display:flex; gap:14px; flex-wrap:wrap; margin:12px 0;}
+  .matrix .cell{flex:1 1 200px; border-radius:10px; padding:16px 18px; font-size:13.5px;}
+  .matrix .c1{background:#fee2e2; border:1px solid #fecaca;} .matrix .c2{background:#fef3c7; border:1px solid #fde68a;}
+  .matrix .c3{background:#d1fae5; border:1px solid #a7f3d0;} .matrix .c4{background:#e0e7ff; border:1px solid #c7d2fe;}
+  .matrix h4{margin-bottom:6px; font-size:14.5px;}
+  .cost{color:var(--sub); font-size:13px;}
+  footer{color:var(--sub); font-size:12.5px; text-align:center; margin:36px 0 12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>AI 交接看板 · 竞品优点吸取（落地版）</h1>
+  <div class="sub">GitHub 同类竞品全方面对标 · 第二轮 —— 在 2026-10-01 两轮（通用开源 PM + makeplane/plane）基础上的增量扫描与落地</div>
+  <div class="meta">
+    <span>日期：2026-10-06</span>
+    <span>对象：AI 交接看板 v1.1.1（工作区）</span>
+    <span>性质：已落地（代码 + 测试 + 门禁全绿）</span>
+    <span>研究档案：research-reports/github-competitor-benchmark-2026-10-06/</span>
+  </div>
+</header>
+
+<h2>一、结论速览</h2>
+<div class="card">
+  <p>本轮在 <b>16 组检索、43 个仓库 GitHub API 实时核实、7 份官方 README 全文</b>的基础上，
+  从五大类目（直接竞品 / AI 原生任务管理 / 会话捕获 / 记忆基础设施 / 标准生态）筛出
+  <b>十大候选优点</b>，逐条做了「价值 ÷ 成本 ÷ 红线」判定：<b>5 条已落地、2 条暂缓（写明触发线）、3 条明确不吸收（写明理由）</b>。</p>
+  <div class="matrix">
+    <div class="cell c3"><h4>已落地（5）</h4>
+      ① 任务验收标准（Backlog.md DoD）② journal 语义压缩（Beads）③ 记忆时效（OKM）④ 🔔 待拍板 Inbox（Multica）⑤ Skill 包投影（AAIF / Agent Skills）</div>
+    <div class="cell c2"><h4>暂缓（2，有触发线）</h4>
+      ⑥ MCP 工具分档暴露（工具数 &gt;30 再议）⑦ 会话历史全文检索（先量会话文件规模）</div>
+    <div class="cell c1"><h4>明确不吸收（3）</h4>
+      ⑧ handoff 引用化 ⑨ 用量按 run/任务记账 ⑩ agent 执行编排 / 团队协作（维持 10-01 结论）</div>
+    <div class="cell c4"><h4>定位验证</h4>
+      「单机 exe + 数据不出机 + 全链路脱敏 + 交接包/AGENTS.md 标准投影 + MCP + 记忆 + 会话提炼」
+      的四合一单机位，2026 年品类爆发后<b>仍然无人占</b></div>
+  </div>
+  <div class="okbox"><b>落地后的验证基线</b>：pytest 678 收集（673 通过 / 5 条 live 跳过）、分支覆盖率 93%（门槛 90）、
+  变异探针 44 条新增 4 条且 <b>4/4 被杀</b>、<code>ci_local --quick</code> 三步全绿（含真浏览器 live_ui_check 16/0、
+  真 MCP live_check 12/0）、HTTP 自有端点 58 条、MCP 23 工具（工具数未变，schema 扩了两个字段）。</div>
+</div>
+
+<h2>二、本轮对标的竞品格局（2026-10-06 实时核实）</h2>
+<div class="card">
+  <table>
+    <tr><th>仓库</th><th class="tl">星标</th><th>定位</th><th>对本项目的判定</th></tr>
+    <tr><td>multica-ai/multica</td><td class="tl">52,016</td><td>「人机同板」团队工作区，agent 是一等队友（Linear 形态）</td><td>赛道正面重叠，但走团队/云端/重栈（Go+PG+Electron）；<b>Inbox 哲学与 run 级记账值得学</b></td></tr>
+    <tr><td>steveyegge/beads</td><td class="tl">27,658（当日仍推送）</td><td>git/Dolt 版控图状 issue 追踪器（给编码 agent 用）</td><td><b>prime/ready/claim 与旧记录衰减摘要最有价值</b>；Dolt 存储路线不跟</td></tr>
+    <tr><td>MrLesk/Backlog.md</td><td class="tl">6,938</td><td>Markdown 即任务 + 三评审检查点 + 可复用 DoD</td><td><b>验收标准清单直接可搬</b>；其 web 只监听 127.0.0.1 与本项目同款边界</td></tr>
+    <tr><td>iAmCorey/wake</td><td class="tl">1,409（39 天从 0）</td><td>22 种 agent 会话统一浏览 + FTS5 trigram 全文检索</td><td><b>检索深度与「诚实能力矩阵」值得学</b>；全文检索本轮暂缓</td></tr>
+    <tr><td>makeplane/plane</td><td class="tl">60,415</td><td>通用开源 PM 巨头；09-15 AI Memory、09-18 Plane Agents 上线</td><td>修正 10-01 结论：巨头正式进场，但方向是团队云；<b>记忆「可见可编辑」已在 10-01 轮吸收</b></td></tr>
+    <tr><td>eyaltoledano/claude-task-master</td><td class="tl">28,160（04-28 停更）</td><td>PRD→任务分解、36 个 MCP 工具三档加载</td><td>分档思路记下（<b>23 工具暂不需要</b>）；停更本身是风险警示</td></tr>
+    <tr><td>BloopAI/vibe-kanban</td><td class="tl">28,266（社区维护）</td><td>多 agent 看板编排；2026-04-10 官方关停</td><td>商业教训样本：四家独立信源交叉核实，仓库转社区维护非删除</td></tr>
+    <tr><td>mem0 / letta / graphiti</td><td class="tl">66.6k / 25.0k / 31.5k</td><td>记忆基础设施层</td><td>借鉴<b>时效语义</b>（OKM timeless/dated、双时态），不引第三方运行时（数据不出机红线）</td></tr>
+    <tr><td>AAIF / AGENTS.md 生态</td><td class="tl">247 成员组织</td><td>Linux基金会 2025-12 成立；AGENTS.md 60k+ 仓库采用</td><td><b>本项目「入口文件投影」踩在正确的标准上</b>；Skills 成为第 9 类入口格式</td></tr>
+  </table>
+  <p class="cost">全部星标经 api.github.com 于 2026-10-06 实时核实（本地存档 github_metadata*.json）；媒体二手数字全部回落到 API 口径，关键事实（vibe-kanban 关停、Multica/Task Master 星标轨迹、Plane Agents 上线）做了双源以上交叉验证。</p>
+</div>
+
+<h2>三、十大候选优点的判定</h2>
+<div class="card">
+  <table>
+    <tr><th>#</th><th>优点（来源）</th><th>判定</th><th>理由 / 触发线</th></tr>
+    <tr><td>①</td><td>任务级验收标准 / DoD 清单（Backlog.md）</td><td><span class="tag good">已落地</span></td><td>交接质量的直接抓手：「怎么算完成」明示后，待审查→已完成有据可依，接手方有验收清单可照</td></tr>
+    <tr><td>②</td><td>旧记录衰减摘要（Beads 语义压缩）</td><td><span class="tag good">已落地</span></td><td>AGENTS.md 已承认 journal 是最先撞线的维度；折叠比「截条数」（10-01 悬而未决的方案）更好——治无声丢历史</td></tr>
+    <tr><td>③</td><td>记忆时效维度（OKM timeless/dated）</td><td><span class="tag good">已落地</span></td><td>「这把 key 用到月底」这类有保质期的事实过期后会当「当前事实」混进交接包，是真实缺陷</td></tr>
+    <tr><td>④</td><td>Inbox 式提醒哲学（Multica：需要拍板才 ping）</td><td><span class="tag good">已落地</span></td><td>逾期横幅是「广播」，缺的是「只列等人的」；依赖挡住的任务不算（会自然流转）</td></tr>
+    <tr><td>⑤</td><td>Skill 包入口（AAIF / Agent Skills 生态）</td><td><span class="tag good">已落地</span></td><td><code>npx skills add</code> 生态起量，第 9 类入口投影成本极低，且复用同一份正文</td></tr>
+    <tr><td>⑥</td><td>MCP 工具分档暴露（Task Master 三档加载）</td><td><span class="tag warn">暂缓</span></td><td>23 个工具可接受、已有只读模式这个可见性开关；分档会带来客户端工具目录漂移风险。<b>触发线：工具数 &gt;30</b></td></tr>
+    <tr><td>⑦</td><td>会话历史全文检索（Wake FTS5 trigram，中文/代码子串）</td><td><span class="tag warn">暂缓</span></td><td>需要索引层与新存储，本轮超预算；现有「扫描→预览→提炼」覆盖主用法。<b>触发线：会话源文件规模让扫描明显变慢</b></td></tr>
+    <tr><td>⑧</td><td>handoff 引用化（waggle ~30 字节工件引用 token）</td><td><span class="tag bad">不吸收</span></td><td>交接包是给人+模型读的 Markdown，引用 token 伤可读性；任务 <code>refs</code> 已是「引用而非复制」的雏形</td></tr>
+    <tr><td>⑨</td><td>用量记账细化到 run/任务（Multica per-issue 成本）</td><td><span class="tag bad">不吸收</span></td><td>本板 AI 调用都是看板级（监管/指令/提炼），没有 run 概念，没有可挂的成本对象</td></tr>
+    <tr><td>⑩</td><td>agent 执行编排 / 团队协作 / git-worktree / 换存储（Multica、t3code、Beads-Dolt）</td><td><span class="tag bad">不吸收</span></td><td>维持 10-01 结论与「不要再做的事」清单；「Agents don't need memory, they need documentation」（HN 2026-10）对本项目定位是背书</td></tr>
+  </table>
+</div>
+
+<h2>四、落地明细（每条：设计 → 改动面 → 钉子）</h2>
+
+<div class="card">
+  <h3>① 任务验收标准 <code>acceptance</code>（对标 Backlog.md 的 DoD）<span class="tag good">已落地</span></h3>
+  <p><b>设计</b>：任务新增 <code>acceptance: list[str]</code>，上限一对数
+  <code>MAX_ACCEPTANCE_ITEMS=10</code> / <code>MAX_ACCEPTANCE_TEXT=120</code>（去空去重、非字符串转写保留）。
+  五个落点缺一不可：交接包 Markdown（<code>- [ ]</code> 清单，已完成的不列）、接手页任务表（<code>☐</code> 行）、
+  接手包 <code>slim.acceptance</code>（原样保留不脱敏——接手方要照着验）、
+  MCP <code>kanban_get_project</code> 任务行下的 <code>- [x]</code>、任务卡 <code>☑ n</code> 计数徽章。</p>
+  <p><b>改动面</b>：<code>app/main.py</code>（TaskIn、clean_acceptance、_sanitize、create/apply_task、
+  COLLECTION_OPS += acceptance、_build_handoff_markdown、project_context）·
+  <code>app/handoff_page.py</code> · <code>scripts/mcp_server.py</code>（add/update schema、_clean_notes、get_project 渲染）·
+  <code>web/</code>（任务弹窗 textarea、保存/回填、卡片徽章、提示文案）。</p>
+  <p><b>钉子</b>：<code>test_p1_absorb.py</code> 6 条（上限/去重/PATCH 增量动词与冲突 400/五处流转/脏数据自愈）+
+  <code>test_mcp_server.py</code> 1 条（MCP 建任务带验收、超限在回执里说话）+
+  <code>test_frontend.py</code> 对账（提示数字与后端常量同源、saveTask 真的按行读）+
+  SCHEMA_VERSION 1→2（slim 加字段，字段集合快照同步）。</p>
+</div>
+
+<div class="card">
+  <h3>② journal 语义压缩（对标 Beads 衰减摘要）<span class="tag good">已落地</span></h3>
+  <p><b>设计</b>：超 <code>MAX_JOURNAL</code> 的最旧条目不再 <code>del</code> 掉，由纯函数
+  <code>compress_journal()</code> 折成一条摘要放最前：<code>【早期 N 条已折叠】…</code>，
+  <code>folded</code> 计数永远指原始记录数（旧摘要再次溢出时继承累计），正文受
+  <code>MAX_JOURNAL_TEXT</code> 约束（不会成为新膨胀点），<code>time</code> 是被折区间的首尾日期。
+  <code>clean_journal()</code> 在读路径做同一件事——导入的脏数据同样折叠。</p>
+  <p><b>为什么比 10-01 悬而未决的「截条数」方案好</b>：那条要 <code>MAX_JOURNAL 50→20</code>、
+  会看不到既有过程记录；折叠只压体量不压脉络，「早期为什么这么改」的证据还在。</p>
+  <p><b>钉子</b>：折叠计数/上限内任意溢出量/继承累计 3 条纯函数用例 + HTTP 折叠流转 1 条；
+  变异探针 <code>journal_fold_dropped</code>（退回丢弃即红）。
+  <b>教训顺带钉进 AGENTS.md</b>：旧探针 <code>clean_journal_no_cap</code> 盯的代码随本次改动消失，
+  探针会哑火——「改被探针盯着的代码必须同步改变异表」这句话现在是硬性约定 25 的一部分。</p>
+</div>
+
+<div class="card">
+  <h3>③ 记忆时效 <code>expires</code>（对标 OKM 知识代谢）<span class="tag good">已落地</span></h3>
+  <p><b>设计</b>：记忆可设 <code>expires</code>（只认 <code>YYYY-MM-DD</code>，格式不对留空并提示）。
+  判定收敛在 <code>_memory_expired()</code> 一处（到期当天仍有效）；<b>四个出口不召回过期记忆</b>：
+  交接包、接手包（顶层 <code>expired_memory_count</code> 留痕）、AGENTS.md（<code>_project_memories</code>）、
+  模型简报（<code>_projects_brief</code>）；交接包省几条在正文开头说话；界面划线 + MCP 列表
+  <code>⚠️已于…过期</code> 标注；<code>kanban_memory_add</code> 对格式垃圾回执说破
+  「没认出来，已按长期有效处理」。</p>
+  <p><b>钉子</b>：时效边界（昨天过期/当天有效/未设不加键）、坏格式丢弃、交接包排除+留痕、
+  AGENTS.md 召回排除 4 条；变异探针 <code>memory_expiry_ignored</code>（判定恒 False 即红）。</p>
+</div>
+
+<div class="card">
+  <h3>④ 🔔 待拍板 <code>GET /api/inbox</code>（对标 Multica Inbox 哲学）<span class="tag good">已落地</span></h3>
+  <p><b>设计</b>：跨项目汇总<b>等人的</b>三类——逾期 / 待审查 / 阻塞；一条任务只进一类，
+  优先级 待审查 &gt; 阻塞 &gt; 逾期；<b>依赖没满足的不算</b>（随前置完成自然流转，那是「今日」的事）、
+  临期不算（横幅已管）、已完成的绝不在内。前端头部铃铛 + 计数徽标（数量来自同一接口，
+  不在前端另算一份）+ 分色分组弹窗，点条目跳项目；Ctrl+K 命令面板同款入口。</p>
+  <p><b>钉子</b>：三类命中/计数/排序、空看板、脏截止日期绝不判逾期 3 条；
+  变异探针 <code>inbox_counts_completed</code>（已完成漏进清单即红）。</p>
+</div>
+
+<div class="card">
+  <h3>⑤ 第 9 个入口投影：<code>.claude/skills/ai-kanban/SKILL.md</code>（AAIF / Agent Skills）<span class="tag good">已落地</span></h3>
+  <p><b>设计</b>：<code>AGENT_ENTRY_TARGETS</code> 增加skills 目标，frontmatter
+  <code>name</code> 与目录名同取 <code>SKILL_NAME</code> 一份常量，正文仍是 AGENTS.md 那一份
+  （投影不是第二份内容）。导出端点本就 <code>mkdir(parents=True)</code>，嵌套路径零改动。</p>
+  <p><b>钉子</b>：<code>test_agent_files.py</code> 路径集合 8→9、frontmatter 契约 1 条、
+  覆盖跳过计数 7→8；界面「其余 7 个都是投影」文案与 README 同步改。</p>
+</div>
+
+<h2>五、明确不吸收与风险警示</h2>
+<div class="card">
+  <ul>
+    <li><b>handoff 引用化 / 用量按 run 记账</b>：理由见表三 ⑧⑨，想清楚了，别再提。</li>
+    <li><b>MCP 工具分档、会话全文检索</b>：暂缓，触发线写明（表三 ⑥⑦），到线再议。</li>
+    <li><b>赛道风险警示</b>：vibe-kanban（28k★）死于无商业模式、Task Master（28k★）四个月停更、
+      Letta 主仓 24.6k★ 实为壳、记忆层厂商基准第三方复现即跌——<b>星标≠生命力，引用竞品数据必须标注口径</b>。
+      本项目若开源化需先想清维护策略。</li>
+    <li><b>定位背书</b>：2026 年「agent 工作管理」品类爆发（Multica 九个月 52k★、Plane 亲自下场、
+      153 个新 kanban 编排仓无一超百星）——品类在爆炸但没有整合者，
+      「交接+记忆+会话+看板」四合一的单机位仍然空着；HN《Agents don't need memory,
+      they need documentation》思潮与本项目「文档/交接包为中心」同向。</li>
+  </ul>
+</div>
+
+<h2>六、验证记录（全部真实退出码，无一项「默默算过」）</h2>
+<div class="card">
+  <table>
+    <tr><th>门禁</th><th>结果</th><th>说明</th></tr>
+    <tr><td><code>pytest</code> 全量</td><td class="tl">673 通过 / 5 跳过 / 0 失败</td><td>覆盖率 93%（分支口径，门槛 90）；新增 28 条用例（test_p1_absorb 16 + MCP 2 + agent_files/frontend 若干）</td></tr>
+    <tr><td>变异探针</td><td class="tl">新增 4 条，4/4 被杀</td><td>总量 41→44；journal_fold_dropped / acceptance_no_cap / memory_expiry_ignored / inbox_counts_completed</td></tr>
+    <tr><td><code>ci_local --quick</code></td><td class="tl">3 步全绿</td><td>实例自证数据目录 ✓ · live_check --mcp 12/0（23 工具可读）· live_ui_check 16/0（真浏览器无 JS 报错）</td></tr>
+    <tr><td>E2E 修复</td><td class="tl">1 条上一轮遗留红点</td><td><code>test_saved_view_roundtrip_save_apply_delete</code> 为上轮未提交的新用例，点「进行中」却等 2 张卡——产品行为没错，测试目标改为「全部」（过程见 git 历史）</td></tr>
+  </table>
+  <p class="cost">改动统计：app/main.py（+约 170 行）· app/agentfiles.py · app/handoff_page.py · scripts/mcp_server.py ·
+  scripts/mutation_probe.py · web/（index.html + 4 个 js + style.css）· tests/（新增 test_p1_absorb.py，改 4 个既有测试文件）·
+  README.md · AGENTS.md。SCHEMA_VERSION 1→2（接手包加字段是有意的，字段快照钉子同步）。</p>
+</div>
+
+<footer>
+  AI 交接看板 · 竞品优点吸取报告（第二轮）· 2026-10-06<br>
+  研究过程档案：research-reports/github-competitor-benchmark-2026-10-06/（检索日志、43 仓库元数据、7 份 README 全文）
+</footer>
+
+</div>
+</body>
+</html>

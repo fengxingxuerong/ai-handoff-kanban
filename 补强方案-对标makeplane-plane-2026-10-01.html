@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 交接看板 补强方案 —— 对标 makeplane/plane</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --line:#e4e7ec; --text:#1f2329; --sub:#5f6b7a;
+    --brand:#2563eb; --brand-d:#1e40af; --p0:#dc2626; --p1:#d97706; --p2:#64748b;
+    --ok:#059669; --warn:#d97706; --bad:#dc2626;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--text); font-family:"Microsoft YaHei","PingFang SC",sans-serif; line-height:1.7; padding:32px 16px;}
+  .wrap{max-width:1080px; margin:0 auto;}
+  header.top{background:linear-gradient(135deg,#1e3a8a,#2563eb 60%,#3b82f6); color:#fff; border-radius:16px; padding:36px 40px; margin-bottom:28px;}
+  header.top h1{font-size:26px; margin-bottom:8px;}
+  header.top .sub{opacity:.92; font-size:14px;}
+  header.top .meta{margin-top:14px; font-size:13px; opacity:.8; display:flex; gap:20px; flex-wrap:wrap;}
+  .tag{display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; margin-right:6px;}
+  .tag.p0{background:#fee2e2; color:var(--p0);} .tag.p1{background:#fef3c7; color:var(--p1);} .tag.p2{background:#f1f5f9; color:var(--p2);}
+  .tag.good{background:#d1fae5; color:var(--ok);} .tag.warn{background:#fef3c7; color:var(--warn);} .tag.bad{background:#fee2e2; color:var(--bad);}
+  h2{font-size:20px; margin:36px 0 14px; padding-left:12px; border-left:4px solid var(--brand);}
+  h3{font-size:16px; margin:20px 0 8px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px 24px; margin-bottom:16px;}
+  p{margin:8px 0;}
+  ul,ol{margin:8px 0 8px 22px;}
+  li{margin:5px 0;}
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:12px 0;}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top;}
+  th{background:#eef2f7; font-weight:600; white-space:nowrap;}
+  tr:nth-child(even) td{background:#fafbfc;}
+  code{background:#eef2f7; padding:1px 6px; border-radius:4px; font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  .tl{white-space:nowrap;}
+  .note{background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:14px 18px; margin:12px 0; font-size:13.5px;}
+  .warnbox{background:#fef2f2; border:1px solid #fecaca; border-radius:10px; padding:14px 18px; margin:12px 0; font-size:13.5px;}
+  .badge{display:inline-block; min-width:34px; text-align:center; border-radius:6px; color:#fff; padding:1px 8px; font-size:12px; font-weight:600;}
+  .b-p0{background:var(--p0);} .b-p1{background:var(--p1);} .b-p2{background:var(--p2);}
+  .matrix{display:flex; gap:14px; flex-wrap:wrap; margin:12px 0;}
+  .matrix .cell{flex:1 1 200px; border-radius:10px; padding:16px 18px; font-size:13.5px;}
+  .matrix .c1{background:#fee2e2; border:1px solid #fecaca;} .matrix .c2{background:#fef3c7; border:1px solid #fde68a;}
+  .matrix .c3{background:#d1fae5; border:1px solid #a7f3d0;} .matrix .c4{background:#e0e7ff; border:1px solid #c7d2fe;}
+  .matrix h4{margin-bottom:6px; font-size:14.5px;}
+  .cost{color:var(--sub); font-size:13px;}
+  footer{color:var(--sub); font-size:12.5px; text-align:center; margin:36px 0 12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>AI 交接看板 · 补强方案</h1>
+  <div class="sub">对标开源项目管理平台 makeplane/plane（GitHub 60.2k star，开源 Jira/Linear/ClickUp 替代品）</div>
+  <div class="meta">
+    <span>日期：2026-10-01</span>
+    <span>对象：AI 交接看板 v1.1.0</span>
+    <span>性质：补强方案（仅分析，不改代码）</span>
+    <span>数据：GitHub API 实时抓取 2026-10-01</span>
+  </div>
+</header>
+
+<div class="card">
+  <h2 style="margin-top:0;">一、结论速览</h2>
+  <p>plane 是「给人类团队用的全员项目平台」，本项目是「给 AI 智能体交接用的单人看板」——<b>定位不同，但 plane 五个能力点值得吸收</b>。按「成本 / 价值 / 与本项目交接定位的契合度」筛选后，给出 <b>2 项 P0 + 3 项 P1 + 1 项 P2</b> 补强建议，全部落在现有架构的增量扩展上，不改存储模型与既有契约。</p>
+  <div class="matrix">
+    <div class="cell c1"><h4>🟥 P0 · 立即做</h4><div><b>用量与成本看板</b>（数据已有，只差界面）<br><b>项目级趋势统计</b>（复用健康预警的既有数据流）</div></div>
+    <div class="cell c2"><h4>🟨 P1 · 尽快做</h4><div><b>可保存筛选视图</b><br><b>交接包模板配置</b><br><b>会话提炼直建任务</b>（打通已有 AI 链路）</div></div>
+    <div class="cell c3"><h4>🟩 P2 · 可选</h4><div><b>里程碑轻量版</b>（不引入完整 Sprint）</div></div>
+    <div class="cell c4"><h4>⛔ 不建议吸收</h4><div>多用户权限、工作流引擎、富文本协作编辑、回收站 —— 与本项目"单机交接"定位冲突（详见第七节）</div></div>
+  </div>
+</div>
+
+<h2>二、plane 核心能力画像</h2>
+<div class="card">
+  <p>基于 plane README（2026-10-01 抓取）与产品文档，其能力可归纳为六个支柱：</p>
+  <table>
+    <tr><th style="width:110px;">能力</th><th>plane 的做法</th><th>对本项目的可借鉴度</th></tr>
+    <tr><td class="tl"><b>Work Items</b></td><td>富文本编辑器 + 文件上传 + 子属性 + 关联 issue，任务即内容载体</td><td>中 —— 本项目任务文本足够，富文本与本项目「上下文可被 LLM 读取」的契约冲突</td></tr>
+    <tr><td class="tl"><b>Cycles</b>（周期/冲刺）</td><td>按周期组织工作，燃尽图追踪进度</td><td>低-中 —— 单人看板无团队迭代刚性需求，可降级为「里程碑」</td></tr>
+    <tr><td class="tl"><b>Modules</b>（模块）</td><td>大项目拆成小模块，模块独立跟踪</td><td>低 —— 本项目「项目→任务」两级已够，模块= 加中间层，违背精简原则</td></tr>
+    <tr><td class="tl"><b>Views</b>（视图）</td><td>自定义过滤器组合成视图，可保存、可分享</td><td><b>高</b> —— 本项目有全局搜索但无「保存常用筛选」能力</td></tr>
+    <tr><td class="tl"><b>Pages</b>（页面）</td><td>AI 能力的富文本页面，笔记可转 issue</td><td>中 —— 「转行动项」与本项目 AI 指令 ∕ 会话提炼链路天然衔接</td></tr>
+    <tr><td class="tl"><b>Analytics</b></td><td>实时洞察、趋势可视化、移除阻塞（blocker）</td><td><b>高</b> —— 本项目已有健康预警 + usage.jsonl 数据，缺的是「可视化面」</td></tr>
+  </table>
+  <p class="cost">另外值得注意的 plane 设计哲学：God mode（实例级配置）、自托管 Docker/K8s、AGPL 开源 + Cloud 商业化 —— 后者正与 vibe-kanban 关停形成对照（见下方第五节风险提示）。</p>
+</div>
+
+<h2>三、差距对比（plane vs 本项目）</h2>
+<div class="card">
+  <table>
+    <tr><th style="width:150px;">维度</th><th>makeplane/plane</th><th>AI 交接看板（本项目）</th><th>差距</th></tr>
+    <tr><td>定位</td><td>团队全员项目管理平台</td><td>多智能体交接看板（单人自用）</td><td>赛道不同，重叠在「任务组织」</td></tr>
+    <tr><td>任务模型</td><td>issue + 子属性 + 关联 + 富文本</td><td>task + tags/refs/depends_on + 纯文本（LLM 友好）</td><td>任务深度：plane 更重，本项目更「机器可读」</td></tr>
+    <tr><td>进度组织</td><td>Cycles + Modules</td><td>状态列 + 截止日期 + 依赖拓扑</td><td>缺里程碑概念（低优先级）</td></tr>
+    <tr><td>视图与筛选</td><td>可保存视图 + 分享</td><td>全局搜索（Ctrl+K）+ 状态/优先级筛选</td><td><span class="tag warn">缺保存视图</span></td></tr>
+    <tr><td>分析与报表</td><td>内置 Analytics 套件</td><td>健康趋势预警（看板 vs 代码）+ usage 记账</td><td><span class="tag warn">缺可视化与统计面</span></td></tr>
+    <tr><td>AI / Agent 能力</td><td>Pages AI、AI 建议（依赖其云服务）</td><td>多端点 LLM 网关、自监管、指令窗、交接包、MCP 23 工具</td><td><b>本项目反超</b>：plane 无交接语义</td></tr>
+    <tr><td>交接 / 上下文</td><td>无（Issue 即上下文，人自己读）</td><td>交接摘要/交接包/AGENTS.md/脱敏/记忆层</td><td><b>plane 完全空白</b>（本项目护城河）</td></tr>
+    <tr><td>部署与数据</td><td>Cloud + 自托管，多人多端</td><td>单 exe 本地，数据不出机，跨进程锁</td><td>形态差异（plane 强在协作，本项目强在隐私与交接）</td></tr>
+    <tr><td>商业化</td><td>AGPL + Cloud 订阅 + 企业版</td><td>个人自用，未定</td><td>vibe-kanban 关停的教训：纯免费需先想清模式</td></tr>
+  </table>
+</div>
+
+<h2>四、补强点清单（可落地，待确认后实施）</h2>
+
+<div class="card">
+  <h3 style="margin-top:0;"><span class="badge b-p0">P0</span> 补强 1：用量与成本看板</h3>
+  <p><b>对标</b>：plane Analytics ∕ agent-teams-ai 预算告警　<span class="tag p0">高价值 · 低成本</span></p>
+  <p><b>现状</b>：<code>usage.jsonl</code> 已按端点/模型记账（<code>llm._usage_locked</code> + 裁剪上限 <code>MAX_USAGE_LINES</code>），<code>/api/usage</code> 返回数据，但界面只有数字，无趋势图、无成本维度、无超支感知。</p>
+  <p><b>补强内容</b>：新增「用量分析」视图 —— ① 按日/按端点/按模型的调用次数趋势折线（前端原生 SVG，不引第三方库）；② 估算成本（每个端点可配单价，未配则只显示次数）；③ 预算上限 + 阈值告警条（到 80% 变黄、100% 变红，复用 toast 通知）。</p>
+  <table>
+    <tr><th>项</th><th>内容</th><th>改动位置</th></tr>
+    <tr><td>数据</td><td><code>/api/usage</code> 增补按时间聚合字段（或新增 <code>/api/usage/stats</code>）</td><td><code>app/main.py</code>（路由层，数据层不动）</td></tr>
+    <tr><td>界面</td><td>设置面板新增「用量」Tab：SVG 折线 + 预算条</td><td><code>web/</code>（js-core.js 数据、js-render.js 渲染、index.html Tab 注册）</td></tr>
+    <tr><td>告警</td><td>阈值判定 + <code>toast()</code> 提示（复用 aria-live 区）</td><td><code>web/js-core.js</code></td></tr>
+    <tr><td>测试</td><td>聚合正确性（跨日边界、端点分组）+ 前端静态契约（data-act 注册）</td><td><code>tests/</code>（test_usage 或 test_ai 相关）</td></tr>
+  </table>
+  <p class="cost"><b>验收</b>：打开设置→用量 Tab 能看到至少一个端点的趋势折线与次数聚合；预算条随用量变化；无第三方依赖新增。</p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;"><span class="badge b-p0">P0</span> 补强 2：项目级趋势统计</h3>
+  <p><b>对标</b>：plane Analytics（趋势可视化、移除阻塞）</p>
+  <p><b>现状</b>：健康预警已按「代码活动 vs 看板活动」给出结论文案，但只有一句话结论，没有量化图形；任务有状态/优先级/截止日期/依赖，数据全在，只是没有聚合展示。</p>
+  <p><b>补强内容</b>：详情页「统计」区 —— ① 每项目任务状态分布（待办/进行中/已完成/阻塞，环形或堆叠条，原生 SVG）；② 截止日期热力（未来 7 天到期 / 已逾期 / 无期限计数）；③ 依赖阻塞链提示（从既有 <code>executable_tasks</code> 反推「被阻塞的任务数」+ 「阻塞了谁」）。</p>
+  <table>
+    <tr><th>项</th><th>内容</th><th>改动位置</th></tr>
+    <tr><td>数据</td><td>新增 <code>GET /api/projects/{pid}/stats</code>（聚合计算，纯函数可测）</td><td><code>app/main.py</code> 或 new <code>app/stats.py</code>（参考 taskgraph.py 的纯模块拆分方式）</td></tr>
+    <tr><td>界面</td><td>详情页新增统计卡片区，SVG 渲染</td><td><code>web/</code>（js-render.js + js-data.js + index.html）</td></tr>
+    <tr><td>测试</td><td>聚合正确性 + 与 <code>executable_tasks</code> 一致性</td><td><code>tests/</code></td></tr>
+  </table>
+  <p class="cost"><b>验收</b>：任一含 2+ 状态分布的项目，详情页可见图形与数字；阻塞计数与「可执行任务」接口结论一致；接口数字为只读、不含敏感字段。</p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;"><span class="badge b-p1">P1</span> 补强 3：可保存的筛选视图</h3>
+  <p><b>对标</b>：plane Views（自定义过滤器 → 保存 → 复用）</p>
+  <p><b>现状</b>：全局搜索支持关键词/状态/优先级/截止日过滤，但每次都要重输；交接包/列表没有「常用视角」的记忆。</p>
+  <p><b>补强内容</b>：把搜索过滤条件组合保存为命名视图（「本周到期」「阻塞中」等），存 <code>projects.json</code> 的 <code>_views</code>（沿用 <code>_client_refs</code> 的「下划线私有键」惯例，进出导出时随全量导出不脱敏即可）；保存后可一键应用、可删除。视图不进 MCP（局部 UI 便利，不值得扩协议面）。</p>
+  <table>
+    <tr><th>项</th><th>内容</th><th>改动位置</th></tr>
+    <tr><td>数据</td><td><code>_views</code> 键 + 增删查接口（<code>GET/POST/DELETE /api/views</code>）</td><td><code>app/main.py</code>（走 <code>mutate()</code>，别碰临界区纪律）</td></tr>
+    <tr><td>界面</td><td>搜索面板加「保存此筛选」「我的视图」下拉，action 均走 <code>data-act</code></td><td><code>web/</code>（js-core.js ＋ index.html ACTIONS 表）</td></tr>
+    <tr><td>测试</td><td>视图 CRUD + 越权/空名防护 + 前端 data-act 注册</td><td><code>tests/</code></td></tr>
+  </table>
+  <p class="cost"><b>验收</b>：保存一次条件组合 → 重新打开应用 → 一键还原同条件；删除视图无残留；<code>_views</code> 不参与 <code>redact</code> 判定、不泄露密钥。</p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;"><span class="badge b-p1">P1</span> 补强 4：交接包模板配置</h3>
+  <p><b>对标</b>：plane God mode（实例级配置哲学）＋ Views（可组合）</p>
+  <p><b>现状</b>：交接包小节已有 <code>omit_sections</code>（git/journal/memories/refs/done）可裁，但只能整节开关，不能调整顺序、不能加自定义小节、每次都要手动传。</p>
+  <p><b>补强内容</b>：① 项目级「交接模板」：记录该项目的常用 <code>omit_sections</code> 与自定义小节顺序（存 <code>projects.json</code> 项目内字段，如 <code>handoff_sections</code>）；② 生成交接包时若项目已配模板则默认应用，界面交接包弹窗显示当前生效顺序，可临时覆盖。</p>
+  <table>
+    <tr><th>项</th><th>内容</th><th>改动位置</th></tr>
+    <tr><td>数据</td><td>项目字段 <code>handoff_sections</code>（可选，缺失=默认全节）</td><td><code>app/main.py</code> ∕ <code>app/handoff_meta.py</code>（<code>HANDOFF_SECTIONS</code> 顺序化应用）</td></tr>
+    <tr><td>界面</td><td>编辑项目弹窗 + 列表项：交接模板选择器</td><td><code>web/</code>（js-edit.js）</td></tr>
+    <tr><td>测试</td><td>模板应用 ∕ 覆盖 ∕ 字段回填（防「列表回填丢背景」同款事故）</td><td><code>tests/</code></td></tr>
+  </table>
+  <p class="cost"><b>验收</b>：给项目配「只要 git+done」，生成的交接包只有这两节 + 预算说明；改回默认后生成全节；编辑表单从单项目接口回填（第 16 条纪律钉子继续有效）。</p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;"><span class="badge b-p1">P1</span> 补强 5：会话提炼「直建任务」</h3>
+  <p><b>对标</b>：plane Pages 「将笔记转化为可行动项」</p>
+  <p><b>现状</b>：会话捕获→提炼→入库已有（<code>/api/ai/summarize</code>），AI 指令窗也能建任务（<code>batch_ref</code> 幂等键已通），但「提炼出的行动项 → 落到看板」仍是两步手工操作，未打通。</p>
+  <p><b>补强内容</b>：提炼结果的行动项卡片增加「建为任务」按钮：一次给多个行动项打勾 → 批量建任务（自动带来源会话标记、可套用依赖关系），复用 <code>batch_ref:{n}</code> 幂等链路保证不重复。</p>
+  <table>
+    <tr><th>项</th><th>内容</th><th>改动位置</th></tr>
+    <tr><td>数据</td><td>提炼结果增加 <code>action_items[]</code> 结构化字段 + 批量创建端点</td><td><code>app/main.py</code>（<code>mutate_project</code> 内一次建多条，别分次写）</td></tr>
+    <tr><td>界面</td><td>提炼结果卡片 + 勾选 + 「建为任务」按钮（<code>data-act</code>）</td><td><code>web/</code>（js-data.js、js-render.js）</td></tr>
+    <tr><td>测试</td><td>幂等重放不重复建 + 依赖清洗走 <code>fn</code> 内 + 前端注册</td><td><code>tests/</code></td></tr>
+  </table>
+  <p class="cost"><b>验收</b>：一次提炼 → 勾 2 项 → 各建 1 任务（id 不同）；重复提交同一 <code>batch_ref</code> 返回原 id 且不落盘；任务带来源标示。</p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;"><span class="badge b-p2">P2</span> 补强 6：里程碑轻量版</h3>
+  <p><b>对标</b>：plane Cycles（降级实现，不引入 Sprint）</p>
+  <p><b>内容</b>：项目可选填「里程碑」文本字段（如「v1.1 冻结」「上线前」），任务可归入其一；详情页里程碑分组显示 + 简易完成进度条。仅此而已 —— 不做燃尽图、不做周期视图、不做报表面板（避免向 plane 的方向滑成重平台）。</p>
+  <table>
+    <tr><th>项</th><th>内容</th><th>改动位置</th></tr>
+    <tr><td>数据</td><td>项目字段 <code>milestones: [{name, done?}]</code> + 任务可选 <code>milestone</code></td><td><code>app/main.py</code>（字段白名单扩展，注意 <code>Literal</code> 不适用、走普通字符串校验）</td></tr>
+    <tr><td>界面</td><td>弹窗字段 + 详情分组</td><td><code>web/</code>（js-edit.js、js-render.js）</td></tr>
+    <tr><td>测试</td><td>字段进出 + 交接包是否纳入（可默认不纳入</td><td><code>tests/</code></td></tr>
+  </table>
+  <p class="cost"><b>验收</b>：能建里程碑、能归组、进度条正确；交接包不因本字段变长。</p>
+</div>
+
+<h2>五、实施路线与优先级矩阵</h2>
+<div class="card">
+  <table>
+    <tr><th>阶段</th><th>内容</th><th>预计工作量</th><th>收益</th></tr>
+    <tr><td>第一阶段（P0）</td><td>用量看板 + 项目统计</td><td>中（各 1 数据接口 + 1 视图）</td><td>立即获得「看得见的自监管」，与产品定位呼应</td></tr>
+    <tr><td>第二阶段（P1）</td><td>保存视图 → 交接模板 → 提炼直建任务</td><td>中-大</td><td>日常操作提速 + 交接链路闭环</td></tr>
+    <tr><td>第三阶段（P2）</td><td>里程碑</td><td>小</td><td>锦上添花，可延后或砍掉</td></tr>
+  </table>
+  <div class="note">
+    ⚠️ 若实施，必须保持的既有纪律（AGENTS.md 硬性约定）：写操作走 <code>mutate()</code> 且 <code>fn</code> 返回 <code>(changed, result)</code>；前端交互一律 <code>data-act</code> 且 ACTIONS 注册；编辑表单从单项目接口回填；新「追加型」字段设上限（视图≦10 个、里程碑≦20 个）；新增业务规则同步往 <code>mutation_probe.MUTATIONS</code> 加探针；跑 <code>scripts/ci_local.py</code> 全门禁。
+  </div>
+</div>
+
+<h2>六、风险与边界（明确不做）</h2>
+<div class="card">
+  <table>
+    <tr><th style="width:180px;">plane 能力</th><th>为什么不吸收</th></tr>
+    <tr><td>多人协作/权限体系</td><td>改变产品定位（单机交接），引入账户与鉴权大改，违背项目赛道（AGENTS.md「不要再做」明确列出）</td></tr>
+    <tr><td>富文本/文件上传工作项</td><td>任务文本会被送进 LLM 与交接包，纯文本/结构化是「机器可读」契约的一部分；富文本打破 <code>redact</code> 与提示词对齐</td></tr>
+    <tr><td>Modules 中间层</td><td>两级（项目→任务）已够，加层即加维护成本；交接包与拓扑都会变复杂</td></tr>
+    <tr><td>完整 Cycles/燃尽图</td><td>单人无团队迭代，降级为 P2 里程碑即可满足绝大部分需求</td></tr>
+    <tr><td>回收站/软删除</td><td>「删错了」已由备份/恢复覆盖（约定 4），加软删除= 每条读路径多一个分支</td></tr>
+  </table>
+  <div class="warnbox">
+    🛑 <b>商业风险提示（来自 vibe-kanban 关停事件）</b>：2026-04-10，vibe-kanban（28.2k star）母公司宣布关闭，原因是「大量免费用户、找不到可持续的商业模式」。plane 之所以活着，靠 AGPL + Cloud 订阅。本方案若落实，也建议同步思考归属：作为个人自用工具不追求增长，或为「脱敏导出/多端同步」设计可收费能力 —— 这与代码补强无关，但决定项目能活多久。
+  </div>
+</div>
+
+<footer>
+  AI 交接看板 补强方案 · 对标 makeplane/plane · 2026-10-01 · 本报告仅分析，未改动项目代码
+</footer>
+
+</div>
+</body>
+</html>
