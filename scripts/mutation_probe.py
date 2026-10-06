@@ -338,7 +338,7 @@ MUTATIONS: list[dict] = [
     },
     {
         "id": "memory_expiry_ignored",
-        "file": "app/main.py",
+        "file": "app/due.py",   # 2026-10-06 _memory_expired 随日期判定迁入 due.py，探针目标同步
         "old": "    return exp < today",
         "new": "    return False",
         "why": "过期记忆被当『当前事实』召回：交接包/AGENTS.md/模型简报带着过期结论接手",

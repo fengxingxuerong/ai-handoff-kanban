@@ -55,3 +55,20 @@ def _due_state(t: dict) -> str:
     if (d - today).days <= 2:
         return "soon"
     return "ok"
+
+
+def _memory_expired(m: dict, today: str = "") -> bool:
+    """记忆是否已过期：`expires` 设了且早于今天（到期当天仍算有效）。
+
+    2026-10-06 从 `app/main.py` 搬来（内容逐字未改）：这也是**日期类判定**，
+    与截止日期同住一个模块。两边都是 YYYY-MM-DD（写入时已归一），字符串比较即日期比较。
+
+    对标 OKM 知识代谢的时效语义：决策/约定这类长期事实没有到期日，而
+    "当前用 X 方案""下个迭代前 key 是这把"这类**有保质期**的事实必须能标过期 ——
+    否则过期结论会作为"当前事实"混进交接包，被下一个智能体当真。
+    """
+    exp = (m.get("expires") or "").strip()
+    if not exp:
+        return False
+    today = today or datetime.now().strftime("%Y-%m-%d")
+    return exp < today

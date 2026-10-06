@@ -29,6 +29,7 @@
 | `app/agentsmd.py` | AGENTS.md 文档生成（2026-10-06 拆出，同法注入）：本地兜底版收 `memory_rows`+`now`，AI 版的记忆与兜底经回调注入；`_build_agents_md_local` / `_generate_agents_md` 是 main 的原签名包装 |
 | `app/paths.py` | 数据目录定位（2026-10-06 拆出）：`data_dir` / `data_file`，所有存储模块的共同根 —— 后续拆出的模块从这里取，不必反向 import main。环境变量每次调用时读 |
 | `app/aireports.py` | 监管报告的落盘/裁剪/历史/趋势（2026-10-06 拆出）：`reports_dir` / `_save_report` / `_trim_reports` / `_latest_report_before` / `_attach_trends` / 提示词构造。**`MAX_REPORTS` 的 monkeypatch 点在这里**（main 是转发别名）；`_run_analyze` 编排留在 main |
+| `app/aiprompt.py` | AI 编排的只读计算层（2026-10-06 拆出，依赖注入式）：看板简报 `projects_brief`（记忆分桶/git 探测经回调注入，main 的 monkeypatch 照常有效）与会话提炼 `summarize_inner`（find_project 注入）。**不落库** —— 写动作仍走 main 的 mutate() 临界区 |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
 | `tests/` | pytest 套件（用例数见文末「验证基线」，此处不写死）+ 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测数字只写在文末基线那一处）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
@@ -831,10 +832,12 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 1. **`app/main.py` 继续拆分** —— 已拆出 `app/gitinfo.py`（有状态，patch 点随迁）、
    `app/handoff_md.py` / `app/agentsmd.py`（先做依赖注入再搬：渲染/生成本体只收现成数据，
    回退/取盘留在 main 包装里，原签名不变）、`app/paths.py` + `app/aireports.py`
-   （数据目录根 + 报告落盘簇，编排 `_run_analyze` 留在 main）。再往下的大块是 AI 编排
-   （`_projects_brief`、`ai_command` 的解析），其中写动作缠着 `mutate()` 临界区，
-   搬之前先把"只读计算"和"落库"切干净；拆的时候守住「写操作必须走 `mutate()`」，
-   别顺手把临界区拆散。
+   （数据目录根 + 报告落盘簇，编排 `_run_analyze` 留在 main）、`app/aiprompt.py`
+   （AI 只读计算层：看板简报 + 会话提炼；`_memory_expired` 随日期判定迁入 `app/due.py`，
+   探针目标已同步）。`ai_command` 的提示词**有意留在 main**：前端契约测试
+   `test_ai_command_prompt_keys_on_ids_not_titles` 直接 inspect 端点源码，
+   搬它要连测试一起迁，收益不值。再往下只剩数据层本体（mutate / _load_data / 自愈备份）——
+   **那是临界区的心脏，不拆**；守住「写操作必须走 `mutate()`」，别顺手把临界区拆散。
 2. **存储层**：仍是整份 JSON 读改写。触发条件是「列表接口日常 > 300ms」，
    那时直接换分片或 SQLite，**不要加缓存糊**（理由见「性能基线」）。
 3. E2E 空白已全部补齐（2026-10-06）：入口文件预览/写盘、备份与恢复的实际动作、
