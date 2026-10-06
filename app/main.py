@@ -87,6 +87,9 @@ from .taskgraph import (  # noqa: F401
 # main 这侧的 `_build_handoff_markdown` 保留原签名（MCP 与既有测试从那里调），
 # 在包装里做：记忆兜底取盘、过期记忆分账、git 回调、直链端口
 from .handoff_md import build_handoff_markdown
+# AGENTS.md 文档生成（依赖注入式）：2026-10-06 拆出。_build_agents_md_local / _generate_agents_md
+# 是本文件的注入包装（原签名保留），本体见 app/agentsmd.py
+from . import agentsmd
 # 会话扫描与文本提取：2026-09-26 从本文件整体搬出（实现逐字未改）
 from .sessions import (  # noqa: F401
     session_sources,
@@ -1987,51 +1990,8 @@ def _project_memories(pid: str) -> list[dict]:
 
 
 def _build_agents_md_local(p: dict) -> str:
-    """本地规则生成 AGENTS.md（LLM 不可用时的兜底）"""
-    lines = [f"# AGENTS.md — {p['name']}", ""]
-    lines.append(f"> 由 AI 交接看板生成 · {now_str()} · 给 AI 编码代理的项目上下文")
-    lines.append("")
-    if p.get("background"):
-        lines.append("## 项目概述")
-        lines.append("")
-        lines.append(p["background"])
-        lines.append("")
-    lines.append("## 构建与测试")
-    lines.append("")
-    lines.append(f"- 代码路径：`{p.get('repo_path') or '未指定'}`")
-    lines.append("- 精确构建/测试命令：请查看仓库 README 或 package.json / pyproject.toml 的 scripts")
-    lines.append("")
-    if p.get("handoff_note"):
-        lines.append("## 交接说明（请务必先读）")
-        lines.append("")
-        lines.append(p["handoff_note"])
-        lines.append("")
-    lines.append("## 当前进度与下一步")
-    lines.append("")
-    lines.append(f"- 状态：{p.get('status', '')}（进度 {p.get('progress', 0)}%）")
-    lines.append(f"- 下一步：{p.get('next_action') or '未明确'}")
-    lines.append("")
-    tasks = topo_order(p.get("tasks") or [])
-    by_id = {t.get("id"): t for t in (p.get("tasks") or [])}
-    if tasks:
-        lines.append("## 任务清单（按依赖排序）")
-        lines.append("")
-        for t in tasks:
-            refs = "、".join(t.get("refs") or [])
-            deps = [d for d in (t.get("depends_on") or []) if d in by_id]
-            dep_txt = "，前置：" + "、".join(by_id[d].get("title", d) for d in deps) if deps else ""
-            lines.append(f"- [{t.get('status', '待办')}] {t.get('title')}（优先级 {t.get('priority', '中')}）"
-                         + (f" — 涉及：{refs}" if refs else "") + dep_txt)
-        lines.append("")
-    mems = _project_memories(p.get("id", ""))
-    if mems:
-        lines.append("## 项目记忆（决策 / 坑 / 约定）")
-        lines.append("")
-        for m in mems:
-            lines.append(f"- 【{m.get('type') or '事实'}】{m.get('text') or ''}"
-                         f"（{m.get('time') or ''}）")
-        lines.append("")
-    return "\n".join(lines)
+    """本地规则版 AGENTS.md：依赖注入到 app/agentsmd.py（记忆与生成时间在这里取）"""
+    return agentsmd.build_agents_md_local(p, _project_memories(p.get("id", "")), now_str())
 
 
 @app.post("/api/export/agentsmd/{pid}")
@@ -2047,53 +2007,10 @@ def export_agentsmd(pid: str, redact: int = 0):
 
 
 def _generate_agents_md(p: dict) -> tuple[str, str, str]:
-    """生成 AGENTS.md 正文；返回 (内容, 来源, 端点)；LLM 不可用时退回本地规则版"""
-    sys_msg = (
-        "你是一位资深软件工程师，负责为项目编写 AGENTS.md —— 这是 Linux Foundation 标准的项目上下文文件，"
-        "相当于给 AI 编码代理看的 README。要求：\n"
-        "1) 总行数控制在 150 行以内，紧凑高信号；\n"
-        "2) 只写 AI 无法从代码直接推断的信息：精确的构建/测试命令、代码约定、关键决策、已知的坑、当前进度；\n"
-        "3) 使用 Markdown 小标题组织；具体务实，禁止空话套话（如'代码要规范'）；\n"
-        "4) 命令若有不确定，写'请查看仓库 README 或 package.json scripts'，不要编造。\n"
-        "直接输出 AGENTS.md 正文，不要任何额外说明。"
-    )
-    # 送给模型的那一份**必须脱敏**：这条不是"用户点名让润色自己写的文本"那个豁免档，
-    # 而是把整份项目状态被动推给远端模型去写文档。以前 `redact` 只作用于返回体，
-    # 送出侧的 background/handoff_note/next_action/任务标题全是原文 —— 密钥照样出本机。
-    user_msg = "项目信息：\n" + redact_text(json.dumps({
-        "name": p["name"], "repo_path": p.get("repo_path", ""),
-        "status": p.get("status", ""), "progress": p.get("progress", 0),
-        "background": p.get("background", ""), "handoff_note": p.get("handoff_note", ""),
-        "next_action": p.get("next_action", ""),
-        "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", "")}
-                  for t in (p.get("tasks") or [])],
-        # 记忆层也送进去：系统提示词第 2 条要的就是"关键决策、已知的坑"，
-        # 而这三样恰恰是用户特意记在记忆层里的东西（不送就等于白记）
-        "memories": [{"type": m.get("type", ""), "text": m.get("text", "")}
-                     for m in _project_memories(p.get("id", ""))],
-    }, ensure_ascii=False, indent=1))
-    try:
-        cfg = llm.load_config()
-        text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg},
-                                  {"role": "user", "content": user_msg}], temperature=0.2, feature="AGENTS.md")
-        if not text or len(text.strip()) < 30:
-            raise ValueError("生成内容过短")
-        return text.strip(), "ai", ep
-    except Exception:
-        return _build_agents_md_local(p), "local", ""
-
-
-# ---- 多智能体入口文件（对比同类：Claude/Cursor/Copilot/Gemini/Cline/Aider/Windsurf 各要各的入口） ----
-
-# [agentfiles.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.agentfiles 导入。
-
-# [agentfiles.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.agentfiles 导入。
-
-
-# [agentfiles.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.agentfiles 导入。
-
-
-# [agentfiles.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.agentfiles 导入。
+    """AI 版 AGENTS.md：原签名保留（MCP kanban_agents_md 与既有测试从这里调），
+    本体在 app/agentsmd.py（llm 直连，记忆与兜底经回调注入，不反向 import）"""
+    return agentsmd.generate_agents_md(
+        p, project_memories_fn=_project_memories, local_builder_fn=_build_agents_md_local)
 
 
 class AgentFilesBody(BaseModel):

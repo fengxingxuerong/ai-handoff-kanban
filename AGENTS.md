@@ -26,6 +26,7 @@
 | `app/filelock.py` | 跨进程文件锁（msvcrt/fcntl 一份实现，`main` 与 `llm` 共用）。两边不能互相 import，所以锁不放在任何一边里 |
 | `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
 | `app/handoff_md.py` | 交接包 Markdown **纯渲染器**（2026-10-06 拆出，依赖注入式）：`build_handoff_markdown` 只收现成数据（活跃记忆/过期计数/git 回调/端口），不 import main、不读盘、不跑子进程；原签名 `_build_handoff_markdown` 是 main 侧的注入包装 |
+| `app/agentsmd.py` | AGENTS.md 文档生成（2026-10-06 拆出，同法注入）：本地兜底版收 `memory_rows`+`now`，AI 版的记忆与兜底经回调注入；`_build_agents_md_local` / `_generate_agents_md` 是 main 的原签名包装 |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
 | `tests/` | pytest 套件（用例数见文末「验证基线」，此处不写死）+ 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测数字只写在文末基线那一处）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
@@ -825,11 +826,11 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 
 **下一步（按价值排序）**：
 
-1. **`app/main.py` 继续拆分** —— 已拆出 `app/gitinfo.py`（有状态，patch 点随迁）与
-   `app/handoff_md.py`（先做依赖注入再搬：渲染本体只收现成数据，回退/取盘留在 main 包装里，
-   原签名不变）。下一个候选 `_generate_agents_md` / `_build_agents_md_local` 同法可搬
-   （llm 可直接 import、记忆与 now 需注入）。拆的时候守住「写操作必须走 `mutate()`」这条，
-   别顺手把临界区拆散。
+1. **`app/main.py` 继续拆分** —— 已拆出 `app/gitinfo.py`（有状态，patch 点随迁）、
+   `app/handoff_md.py` 与 `app/agentsmd.py`（先做依赖注入再搬：渲染/生成本体只收现成数据，
+   回退/取盘留在 main 包装里，原签名不变）。再往下的大块是 AI 编排（`_projects_brief`、
+   监管分析、`ai_command`），其中写动作缠着 `mutate()` 临界区，搬之前先把"只读计算"和
+   "落库"切干净；拆的时候守住「写操作必须走 `mutate()`」，别顺手把临界区拆散。
 2. **存储层**：仍是整份 JSON 读改写。触发条件是「列表接口日常 > 300ms」，
    那时直接换分片或 SQLite，**不要加缓存糊**（理由见「性能基线」）。
 3. E2E 空白已全部补齐（2026-10-06）：入口文件预览/写盘、备份与恢复的实际动作、
