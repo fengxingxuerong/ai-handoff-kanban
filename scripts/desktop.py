@@ -26,6 +26,13 @@ PORT = int(os.environ.get("KANBAN_PORT", "18320"))
 HOST = "127.0.0.1"
 WINDOW_TITLE = "AI 交接看板"
 
+# 源码运行模式下本文件位于 scripts/，sys.path[0] 是 scripts 而非项目根，
+# 而 uvicorn.run("app.main:app") 是字符串导入 —— 不在路径里就会 ModuleNotFoundError。
+# 打包态（PyInstaller）下 app 走 --hidden-import / --paths 已可导入，这里插入项目根是无害兜底。
+_APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _APP_ROOT not in sys.path:
+    sys.path.insert(0, _APP_ROOT)
+
 try:                                        # 冻结版里 app 是 hidden-import，取不到不能让启动挂掉
     from app.version import APP_VERSION, BUILD_TIME
 except Exception:

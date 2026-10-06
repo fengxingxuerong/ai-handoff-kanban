@@ -152,6 +152,29 @@ def test_global_search_ui():
     assert "ctrlKey" in HTML, "应有 Ctrl+K 唤起"
 
 
+def test_command_palette_ui_and_targets_are_defined():
+    """Ctrl+K 命令面板：容器 + 15 条命令 + 每条 run 引用的函数必须真有定义。
+
+    与 test_every_action_target_is_actually_defined 同一价值观：注册了 ≠ 存在。
+    命令面板的按钮走 data-act="paletteRun" 统一下发（ACTIONS 注册那条已被
+    test_every_action_registered 覆盖），这里单独钉命令本体 —— 少了任何一条 run
+    引用的函数，点命令就是 ReferenceError，而全部搜索测试照样绿。
+    """
+    assert 'id="palette-commands"' in HTML, "命令面板容器应在搜索弹窗内"
+    PALETTE_BLOCK = re.search(r"const PALETTE_CMDS = \[(.*?)\n\];", HTML, re.S)
+    assert PALETTE_BLOCK, "未找到 PALETTE_CMDS"
+    assert len(re.findall(r"id: \"", PALETTE_BLOCK.group(1))) >= 15, "命令面板命令数偏少"
+    # run 里调用的函数必须存在。配合 GLOBALS（const/let/var/函数声明之外的全局名）
+    calls = set(re.findall(r"(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(", PALETTE_BLOCK.group(1)))
+    defined = set(re.findall(r"(?:async\s+)?function\s+([A-Za-z_$][\w$]*)", HTML))
+    defined |= set(re.findall(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", HTML))
+    missing = sorted(c for c in calls if c not in defined and c not in GLOBALS)
+    assert not missing, f"PALETTE_CMDS 的 run 调用了不存在的函数：{missing}"
+    # need:"detail" 的命令在没有 currentPid 时应禁用（paletteEnabled 判据必须存在）
+    assert "paletteEnabled" in defined, "paletteEnabled 判据函数缺失"
+    assert "paletteRun" in defined, "paletteRun 分发函数缺失"
+
+
 def test_theme_toggle_ui():
     """深浅色主题：按钮 + light 变量集 + localStorage 记忆"""
     assert 'data-act="toggleTheme"' in HTML
@@ -254,9 +277,10 @@ def test_detail_view_has_loading_and_error_state():
 # ---------------- 弹窗语义、焦点与滚动 ----------------
 
 def test_every_modal_is_a_labeled_dialog():
-    """12 个弹窗都要能被读屏认出来；有标题 id 的用 aria-labelledby，没有的用 aria-label"""
+    """14 个弹窗都要能被读屏认出来；有标题 id 的用 aria-labelledby，没有的用 aria-label
+    （2026-10-06 新增第 14 个：inbox-modal 待拍板）"""
     masks = re.findall(r'<div class="modal-mask" id="([^"]+)">\s*<div class="modal"[^>]*>', HTML)
-    assert len(masks) == 12, f"弹窗数量变了（{len(masks)}），确认是否有新弹窗漏加语义"
+    assert len(masks) == 14, f"弹窗数量变了（{len(masks)}），确认是否有新弹窗漏加语义"
     for mid in masks:
         block = HTML[HTML.index(f'<div class="modal-mask" id="{mid}">'):]
         tag = block.split("\n", 2)[1] if 'id="%s">' % mid in block else ""
@@ -488,3 +512,21 @@ def test_global_search_tells_the_user_the_list_was_cut():
     assert "r.truncated" in body, "没读接口的截断标记，等于替用户猜"
     assert "后面还有" in body, "截断了却没说"
     assert "gs-note" in body, "提示行不能复用 .gs-item —— 下面给结果行绑了点击"
+
+
+def test_acceptance_hint_numbers_match_the_backend():
+    """任务弹窗里验收标准的提示数字（条数 / 单条长度）与后端常量必须是同一对数。
+
+    跨语言的两份文本只靠人对齐迟早会漂（journal 上限的教训），钉在这里。
+    """
+    import app.main as kanban
+
+    m = re.search(r'id="t-acceptance"[^>]*>.*?</textarea>\s*<div[^>]*>([^<]*)</div>', HTML, re.S)
+    assert m, "找不到验收标准输入框的提示行"
+    hint = m.group(1)
+    assert f"最多 {kanban.MAX_ACCEPTANCE_ITEMS} 条" in hint, f"提示没写清条数上限：{hint}"
+    assert f"{kanban.MAX_ACCEPTANCE_TEXT} 字" in hint, f"提示没写清单条长度：{hint}"
+    # 保存路径要真的把文本框内容拆行发给后端（正则里 \\n 匹配 JS 源码里的字面 \n）
+    assert re.search(
+        r'acceptance:\s*document\.getElementById\("t-acceptance"\)\.value\.split\("\\n"\)',
+        HTML), "saveTask 没有按行读取验收标准，界面上填了也传不出去"

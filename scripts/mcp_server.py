@@ -264,6 +264,10 @@ def t_get_project(args: dict) -> str:
             if t.get("refs"):
                 row += "  ↳ 涉及：" + "、".join(t["refs"])
             lines.append(row)
+            # 验收标准跟在任务行下面：代理改完状态前要能对着它自检「怎么算完成」
+            for a in (t.get("acceptance") or []):
+                mark = "x" if t.get("status") == "已完成" else " "
+                lines.append(f"    - [{mark}] {a}")
     return _agent_text("\n".join(lines), args)
 
 
@@ -346,7 +350,8 @@ def _clean_notes(args: dict, stored: dict) -> list[str]:
     for key, label, cap, norm in (
             ("refs", "涉及代码位置", kanban.MAX_REFS,
              lambda s: s.strip().strip("`").strip()),
-            ("depends_on", "前置依赖", kanban.MAX_DEPS, lambda s: s.strip())):
+            ("depends_on", "前置依赖", kanban.MAX_DEPS, lambda s: s.strip()),
+            ("acceptance", "验收标准", kanban.MAX_ACCEPTANCE_ITEMS, lambda s: s.strip())):
         raw = args.get(key)
         if not isinstance(raw, (list, tuple)) or not raw:
             continue
@@ -369,15 +374,18 @@ def t_add_task(args: dict) -> str:
         agent=args.get("agent") or "",
         refs=args.get("refs") or [],
         depends_on=args.get("depends_on") or [],
+        acceptance=args.get("acceptance") or [],
         due_date=args.get("due_date") or "",
     )
     task = kanban.create_task(pid, body, client_ref=args.get("client_ref") or "")
     refs = ("；涉及 " + "、".join(task["refs"])) if task.get("refs") else ""
+    acc = task.get("acceptance") or []
+    acc_txt = (f"；验收标准 {len(acc)} 条已记下" if acc else "")
     replay = "（幂等重放：这条之前就存在，没有重复创建）" if task.get("client_ref_replayed") else ""
     lost = _clean_notes(args, task)
     tail = ("；" + "；".join(lost)) if lost else ""
     return (f"已在项目 [{pid}] 新增任务 [{task['id']}] {task['title']}"
-            f"（{task['status']}/{task['priority']}）{refs}{replay}{tail}")
+            f"（{task['status']}/{task['priority']}）{refs}{acc_txt}{replay}{tail}")
 
 
 def t_update_task(args: dict) -> str:
@@ -418,13 +426,18 @@ def t_next_task(args: dict) -> str:
     if not data["total"]:
         return f"「{name}」还没有任务。可以用 kanban_add_task 建第一条。"
     lines = [f"# {name} · 现在可以做"]
+    review = data.get("review") or []
     if ready:
         for t in ready:
             refs = ("（" + "、".join(t.get("refs") or []) + "）") if t.get("refs") else ""
             lines.append(f"- [{t['id']}] {t['title']} · {t.get('priority')}{refs}")
     elif data["done"] == data["total"]:
-        # 三种"没有可做的"是三件不同的事，分开说：没任务 / 都完成了 / 都在等前置
         lines.append(f"- 全部 {data['total']} 条任务都已完成，没有待办。")
+    elif review and data["done"] + len(review) == data["total"]:
+        reviewed = "、".join(f"{t['title']} [{t['id']}]" for t in review[:5])
+        tail = " …" if len(review) > 5 else ""
+        lines.append(f"- 全部干完了，{len(review)} 条在等人验收：{reviewed}{tail}"
+                     "（验收通过后 kanban_update_task 改成已完成）")
     else:
         lines.append("- 没有可以直接开工的任务（都在等前置）")
     if blocked:
@@ -603,12 +616,22 @@ def t_memory_add(args: dict) -> str:
         type=args.get("type") or "事实",
         text=args.get("text") or "",
         source="MCP",
+        expires=args.get("expires") or "",
     ))
     mem = res["memory"]
     if res.get("deduped"):
         return f"这条记忆已存在（同项目同文本不重复入），未写入。"
     where = mem.get("pid") or "（未指定项目）"
-    return f"已记下 [{mem['type']}] 到 {where}：{mem['text']}"
+    # 清洗丢了东西要说话：expires 格式不对会被留空 = 变成"长期有效"，
+    # 调用方以为设了保质期，实际这条会永远被召回（与 due_date="下周三" 同一类说谎的回执）
+    exp = mem.get("expires") or ""
+    raw_exp = (args.get("expires") or "").strip()
+    exp_note = ""
+    if raw_exp and not exp:
+        exp_note = f"（expires「{raw_exp[:40]}」没认出来，已按长期有效处理：只接受 YYYY-MM-DD）"
+    elif exp:
+        exp_note = f"（有效期到 {exp}，过期后不再召回/进交接包）"
+    return f"已记下 [{mem['type']}] 到 {where}：{mem['text']}{exp_note}"
 
 
 MEMORY_LIST_LIMIT = 50
@@ -626,8 +649,10 @@ def t_list_memories(args: dict) -> str:
     lines = [f"记忆 {len(rows)} 条（新的在前）："]
     for m in rows[:MEMORY_LIST_LIMIT]:
         text = kanban.redact_text(m.get("text") or "") if show else (m.get("text") or "")
+        exp = f" · ⚠️已于 {m['expires']} 过期" if m.get("expired") else (
+            f" · 有效期至 {m['expires']}" if m.get("expires") else "")
         lines.append(f"- [{m.get('id')}]【{m.get('type')}】{m.get('time')} "
-                     f"· {m.get('pid') or '通用'} · {text}")
+                     f"· {m.get('pid') or '通用'} · {text}{exp}")
     if len(rows) > MEMORY_LIST_LIMIT:
         lines.append(f"…… 另有 {len(rows) - MEMORY_LIST_LIMIT} 条未列出："
                      "用 project_id / type / query 收窄，别一次全塞进上下文。")
@@ -764,20 +789,24 @@ TOOLS: list[dict] = [
     },
     {
         "name": "kanban_add_task",
-        "description": "给项目加一个任务。refs 填相关代码位置（如 src/app.py:120），接手的人不用再翻一遍找在哪改。",
+        "description": "给项目加一个任务。refs 填相关代码位置（如 src/app.py:120），接手的人不用再翻一遍找在哪改；"
+                       "acceptance 填验收标准（每条一个『怎么算完成』），交接包会带着走。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "project_id": {"type": "string"},
                 "title": {"type": "string"},
-                "desc": {"type": "string", "description": "验收标准 / 补充说明"},
-                "status": {"type": "string", "enum": ["待办", "进行中", "已完成", "阻塞"]},
+                "desc": {"type": "string", "description": "补充说明（与验收标准分开，验收标准用 acceptance）"},
+                "status": {"type": "string", "enum": ["待办", "进行中", "待审查", "已完成", "阻塞"]},
                 "priority": {"type": "string", "enum": ["高", "中", "低"]},
                 "agent": {"type": "string", "description": "负责的 AI 或人"},
                 "refs": {"type": "array", "items": {"type": "string"},
                          "description": "相关代码位置，如 [\"app/main.py:120\", \"tests/test_api.py\"]"},
                 "depends_on": {"type": "array", "items": {"type": "string"},
                                "description": "前置任务 id（同一项目内），用于排「先做哪个」"},
+                "acceptance": {"type": "array", "items": {"type": "string"},
+                               "description": "验收标准（怎么算完成），如 [\"全部用例绿\", \"README 补用法\"]；"
+                                              "最多 10 条、单条 120 字，超出部分会被丢弃并在回执说明"},
                 "due_date": {"type": "string",
                              "description": "截止日期 YYYY-MM-DD，留空表示未设置"},
                 "client_ref": CLIENT_REF_SCHEMA,
@@ -787,14 +816,14 @@ TOOLS: list[dict] = [
     },
     {
         "name": "kanban_update_task",
-        "description": "更新任务（只传要改的）。开始干就把状态改成进行中，干完改成已完成，被卡住改成阻塞。",
+        "description": "更新任务（只传要改的）。开始干就把状态改成进行中，干完改成待审查等人验收，验收通过改成已完成，被卡住改成阻塞。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "task_id": {"type": "string"},
                 "title": {"type": "string"},
                 "desc": {"type": "string"},
-                "status": {"type": "string", "enum": ["待办", "进行中", "已完成", "阻塞"]},
+                "status": {"type": "string", "enum": ["待办", "进行中", "待审查", "已完成", "阻塞"]},
                 "priority": {"type": "string", "enum": ["高", "中", "低"]},
                 "agent": {"type": "string"},
                 "refs": {"type": "array", "items": {"type": "string"},
@@ -803,6 +832,9 @@ TOOLS: list[dict] = [
                                "description": "前置任务 id；不改就省略"},
                 **_add_remove_params("refs", "相关代码位置"),
                 **_add_remove_params("depends_on", "前置依赖"),
+                "acceptance": {"type": "array", "items": {"type": "string"},
+                               "description": "验收标准（整批覆盖）；不改就省略，追加用 acceptance_add"},
+                **_add_remove_params("acceptance", "验收标准"),
                 "due_date": {"type": "string",
                              "description": "截止日期 YYYY-MM-DD；不改就省略（传空串等于清掉截止日期）"},
             },
@@ -912,13 +944,17 @@ TOOLS: list[dict] = [
     },
     {
         "name": "kanban_memory_add",
-        "description": "往项目记忆层记一条长期有效的事实：决策/坑/约定。与任务不同，记忆会在交接包、AGENTS.md 和 AI 监管里自动召回。",
+        "description": "往项目记忆层记一条事实：决策/坑/约定。与任务不同，记忆会在交接包、AGENTS.md 和 AI 监管里自动召回。"
+                       "有保质期的事实（『当前用 X 方案』『这把 key 用到月底』）给 expires，过期后不再召回、不再进交接包。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "project_id": {"type": "string", "description": "留空表示跨项目的通用记忆"},
                 "type": {"type": "string", "enum": ["决策", "坑", "约定", "事实"]},
                 "text": {"type": "string", "maxLength": 2000},
+                "expires": {"type": "string",
+                            "description": "有效期到 YYYY-MM-DD（当天仍有效）；留空表示长期有效。"
+                                           "格式不对会被留空（变成长期有效）并在回执说明"},
             },
             "required": ["text"], "additionalProperties": False,
         },

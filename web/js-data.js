@@ -136,8 +136,53 @@ async function restoreData(source) {
   } catch (e) { toast("恢复失败：" + e.message); }
 }
 
-// ============ 全局任务搜索 ============
+// ============ 全局任务搜索 / 命令面板 ============
 let gsTimer = null;
+
+// —— Ctrl+K 命令面板：每个命令是一个 {id, label, hint, run, need}。
+//    走 data-act 分发（run 只写"怎么干"，paletteRun 统一负责"先关面板再干"），
+//    不写内联 onclick —— test_frontend.py 会数死这个数。
+const PALETTE_CMDS = [
+  { id: "new-project", label: "＋ 新建项目", hint: "打开项目编辑弹窗，从零建一个交接项目", run: () => openProjectModal() },
+  { id: "new-task", label: "＋ 新建任务", hint: "给当前项目加一条任务（需先在详情页）", need: "detail", run: () => openTaskModal() },
+  { id: "view-overview", label: "🏠 返回总览", hint: "切回全部项目卡片视图", run: () => showOverview() },
+  { id: "view-today", label: "📅 今日待办", hint: "打开「今天能动手的任务」面板", run: () => openToday() },
+  { id: "view-inbox", label: "🔔 需要拍板", hint: "逾期 / 待审查 / 阻塞——只列等人的事", run: () => openInbox() },
+  { id: "copy-handoff", label: "📋 复制交接摘要", hint: "把当前项目的交接摘要复制到剪贴板（接管惯性）", need: "detail", run: () => copyHandoffText() },
+  { id: "copy-handoff-md", label: "📄 复制交接 Markdown", hint: "复制当前项目完整交接文案（Markdown 格式）", need: "detail", run: () => copyHandoffMarkdown() },
+  { id: "export-package", label: "📦 导出交接包", hint: "生成当前项目完整交接包（可脱敏）", need: "detail", run: () => openHandoffPackage() },
+  { id: "export-all-package", label: "🗃️ 全项目交接包", hint: "导出所有项目的合并交接包", run: () => openAllPackage() },
+  { id: "copy-context-json", label: "🧠 复制机器可读上下文", hint: "当前项目的 JSON 上下文，贴给智能体即可接手", need: "detail", run: () => copyContextJson() },
+  { id: "ai-command", label: "🤖 AI 指令", hint: "给智能体下自然语言指令（新建/状态/交接说明）", run: () => openAICmd() },
+  { id: "ai-settings", label: "⚙️ AI 设置", hint: "端点 / Key / 模型 / 用量统计", run: () => openAISettings() },
+  { id: "session-capture", label: "📥 会话捕获", hint: "扫描本机 AI 工具会话，提炼入库", run: () => openSessionCapture() },
+  { id: "data-export", label: "💾 导出数据", hint: "把整块看板数据导出为 JSON 文件", run: () => exportData() },
+  { id: "backup-now", label: "🛡️ 立即备份", hint: "给当前数据拍一份快照（保留 10 份）", run: () => backupNow() },
+  { id: "toggle-theme", label: "🎨 切换深浅色", hint: "在深色 / 浅色主题之间切换", run: () => toggleTheme() },
+];
+
+function paletteEnabled(cmd) {
+  return cmd.need !== "detail" || !!currentPid;
+}
+
+function renderPalette(q) {
+  const box = document.getElementById("palette-commands");
+  if (!box) return;
+  const kw = (q || "").replace(/^>\s*/, "").trim().toLowerCase();
+  const list = PALETTE_CMDS.filter(c =>
+    !kw || c.label.toLowerCase().includes(kw) || c.hint.toLowerCase().includes(kw)
+      || c.id.includes(kw));
+  box.innerHTML = list.length
+    ? list.map(c => {
+        const on = paletteEnabled(c);
+        return `<button type="button" class="palette-item${on ? "" : " off"}" data-act="paletteRun" data-arg="${esc(c.id)}"
+          tabindex="0" ${on ? "" : 'disabled title="先打开一个项目详情页"'}
+          style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--bg-soft);border:1px solid var(--border);border-radius:8px;padding:8px 11px;cursor:pointer;opacity:${on ? "1" : ".5"}">
+          <span style="flex:1"><b>${esc(c.label)}</b><span style="display:block;font-size:11.5px;color:var(--text-faint)">${esc(c.hint)}</span></span>
+          <span class="badge" style="flex-shrink:0;font-size:10px">↵ 执行</span></button>`;
+      }).join("")
+    : '<div style="color:var(--text-faint);font-size:12px;padding:8px">没有匹配的命令</div>';
+}
 
 async function openGlobalSearch() {
   const stuck = [...document.querySelectorAll(".modal-mask.show")].filter(m => m.id !== "global-search-modal");
@@ -145,10 +190,22 @@ async function openGlobalSearch() {
     closeOneModal(stuck[stuck.length - 1].id);
     return;
   }
-  document.getElementById("gs-input").value = "";
-  document.getElementById("gs-results").innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:8px">输入关键词搜索所有项目的任务…</div>';
+  const input = document.getElementById("gs-input");
+  input.value = "";
+  document.getElementById("gs-results").innerHTML = "";
+  renderPalette("");
   openModal("global-search-modal");
-  setTimeout(() => document.getElementById("gs-input").focus(), 50);
+  setTimeout(() => input.focus(), 50);
+}
+
+// 命令面板是"搜索 + 命令"二合一：输入的关键词以 `>` 开头就进命令过滤，
+// 否则照旧搜任务。空输入展示全部命令（比空搜索更常用）。
+function paletteRun(id) {
+  closeOneModal("global-search-modal");
+  const cmd = PALETTE_CMDS.find(c => c.id === id);
+  if (!cmd) { toast("未知命令：" + id); return; }
+  if (!paletteEnabled(cmd)) { toast("这个命令需要先打开一个项目详情页"); return; }
+  try { cmd.run(); } catch (e) { toast("命令执行失败：" + e.message); }
 }
 
 async function runGlobalSearch(q) {
@@ -189,7 +246,14 @@ async function runGlobalSearch(q) {
   if (!input) return;
   input.addEventListener("input", () => {
     clearTimeout(gsTimer);
-    gsTimer = setTimeout(() => runGlobalSearch(input.value.trim()), 250);
+    const v = input.value.trim();
+    if (!v || v.startsWith(">")) {
+      document.getElementById("gs-results").innerHTML = "";
+      renderPalette(v);
+      return;
+    }
+    document.getElementById("palette-commands").innerHTML = "";
+    gsTimer = setTimeout(() => runGlobalSearch(v), 250);
   });
   document.addEventListener("keydown", e => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {

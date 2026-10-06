@@ -21,7 +21,10 @@ from datetime import datetime
 from pathlib import Path
 
 # 语义化版本：主版本.次版本.修订
-__version__ = "1.1.0"
+# 1.2.0（2026-10-06）：竞品吸取轮 —— 任务验收标准 / journal 折叠摘要 / 记忆时效 /
+# 待拍板 Inbox / 第 9 个入口投影（.claude/skills）；含 10-01 未发版的
+# 自动分配 / 里程碑 / 项目统计 / 保存视图。
+__version__ = "1.2.0"
 
 ROOT = Path(__file__).resolve().parent.parent
 

@@ -621,7 +621,9 @@ def run_all(api: Http, mcp: Mcp, data_dir: Path, repo_dir: Path, stub: StubLLM, 
         return expect(f"写盘 {st}：新写 {len(written)} 个、跳过已存在 {len(skipped)} 个"
                       f"（{','.join(skipped)}）；README 未动={readme_ok}，手写 AGENTS.md 未动={mine_ok}，"
                       f"src/main.py 仍在={code_ok}",
-                      st == 200 and len(written) == 7 and skipped == ["AGENTS.md"]
+                      # 2026-10-06 起入口文件是 9 个投影（新增 .claude/skills/ai-kanban/SKILL.md），
+                      # 仓库里已有手写 AGENTS.md 被跳过 → 新写 8 个
+                      st == 200 and len(written) == 8 and skipped == ["AGENTS.md"]
                       and readme_ok and mine_ok and code_ok)
 
     check("A9", "把工具入口文件写进真实仓库目录（目录里已有自己的文件）",
@@ -671,7 +673,7 @@ def run_all(api: Http, mcp: Mcp, data_dir: Path, repo_dir: Path, stub: StubLLM, 
             "分支正确": g.get("branch") == "main",
             "HEAD 有 hash": bool(head.get("hash")),
             "提交条数受 limit 约束": len(g.get("commits", [])) <= 5,
-            "认得出未提交改动": g.get("dirty_count", 0) >= 7,     # A9 刚写进去的 7 个入口文件
+            "认得出未提交改动": g.get("dirty_count", 0) >= 7,     # A9 刚写进去的 8 个入口文件
             "交接包含代码现状节": "## 代码现状（git）" in md,
             "交接包带上最新提交": (head.get("subject") or "") in md,
         }

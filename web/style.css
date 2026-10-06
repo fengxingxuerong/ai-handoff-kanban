@@ -167,6 +167,13 @@
   }
   .filter-bar .spacer { flex: 1; }
   .filter-bar .count { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .filter-bar .view-ctl { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .filter-bar .view-ctl select {
+    padding: 5px 8px; border-radius: 8px; font-size: 12px; max-width: 150px;
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    cursor: pointer;
+  }
+  .filter-bar .view-ctl select:focus { border-color: var(--accent); outline: none; }
 
   /* ---------- 总览视图 ---------- */
   #view-overview { height: calc(100vh - 118px - var(--banner-h)); overflow-y: auto; padding: 20px 22px 40px; }
@@ -208,6 +215,7 @@
   .st-规划中 { color: var(--gray); background: color-mix(in srgb, var(--gray) 12%, transparent); }
   .st-进行中 { color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, transparent); }
   .st-已暂停 { color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, transparent); }
+  .st-待审查 { color: var(--purple, #8b5cf6); background: color-mix(in srgb, var(--purple, #8b5cf6) 12%, transparent); }
   .st-已完成 { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
   .pr-高 { color: var(--red); }
   .pr-中 { color: var(--orange); }
@@ -232,6 +240,7 @@
   .stat b { font-weight: 700; }
   .stat.s-todo { color: var(--gray); }
   .stat.s-doing { color: var(--blue); }
+  .stat.s-review { color: var(--purple, #8b5cf6); }
   .stat.s-done { color: var(--green); }
   .stat.s-blocked { color: var(--red); }
 
@@ -297,7 +306,7 @@
   .handoff-box .btns { display: flex; gap: 8px; flex-wrap: wrap; }
 
   /* 任务看板 */
-  .kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .kanban { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
   @media (max-width: 1200px) { .kanban { grid-template-columns: repeat(2, 1fr); } }
   /* 窄到 700px 以下（半屏贴边、小笔记本、分屏）时四列/三列都挤成没法读的条，收成单列 */
   @media (max-width: 700px) {
@@ -318,10 +327,12 @@
   .kcol .khead .n { margin-left: auto; background: var(--bg-soft); color: var(--text-dim); font-size: 11px; padding: 1px 8px; border-radius: 10px; font-variant-numeric: tabular-nums; }
   .kcol.k-todo .dot { background: var(--gray); }
   .kcol.k-doing .dot { background: var(--blue); }
+  .kcol.k-review .dot { background: var(--purple, #8b5cf6); }
   .kcol.k-done .dot { background: var(--green); }
   .kcol.k-blocked .dot { background: var(--red); }
   .kcol.k-todo { border-top: 2px solid var(--gray); }
   .kcol.k-doing { border-top: 2px solid var(--blue); }
+  .kcol.k-review { border-top: 2px solid var(--purple, #8b5cf6); }
   .kcol.k-done { border-top: 2px solid var(--green); }
   .kcol.k-blocked { border-top: 2px solid var(--red); }
 
@@ -661,6 +672,9 @@
   .memory-item .m-del { flex-shrink: 0; border: none; background: transparent; color: var(--text-faint);
     cursor: pointer; font-size: 12px; padding: 0 2px; }
   .memory-item .m-del:hover { color: var(--red); }
+  .memory-item.expired .m-text { color: var(--text-faint); text-decoration: line-through; text-decoration-color: var(--text-faint); }
+  .memory-item .m-expired { flex-shrink: 0; font-size: 10.5px; padding: 1px 7px; border-radius: 5px;
+    background: color-mix(in srgb, var(--orange) 14%, transparent); color: var(--orange); font-weight: 600; white-space: nowrap; }
   .sess-item {
     cursor: pointer; background: var(--bg-soft); border: 1px solid var(--border);
     border-radius: 9px; padding: 9px 12px; display: flex; align-items: center; gap: 8px;
@@ -672,6 +686,20 @@
   .journal-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; max-height: 140px; overflow-y: auto; }
   .journal-list .j-row { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
   .journal-list .j-row b { color: var(--text-faint); font-weight: 400; margin-right: 4px; }
+  .journal-list .j-folded { color: var(--text-faint); font-style: italic; }
+  /* 任务卡上的验收标准计数徽章 */
+  .tcard .acc-chip { flex-shrink: 0; font-size: 10px; color: var(--accent2);
+    background: var(--accent2-soft); padding: 1px 7px; border-radius: 5px; }
+  /* 待拍板（Inbox）弹窗里的分组标题：三类各自的语义色 */
+  .inbox-group { margin-bottom: 14px; }
+  .inbox-ghead { font-size: 12.5px; font-weight: 700; margin-bottom: 7px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .inbox-ghead.k-overdue { color: var(--orange); }
+  .inbox-ghead.k-review { color: var(--accent); }
+  .inbox-ghead.k-blocked { color: var(--red); }
+  /* 头部铃铛上的待拍板计数 */
+  .inbox-badge { display: inline-block; min-width: 16px; margin-left: 4px; padding: 0 5px;
+    border-radius: 9px; background: var(--red); color: #fff; font-size: 10.5px;
+    font-weight: 700; line-height: 16px; text-align: center; vertical-align: 1px; }
   /* 看板自报进度 与 git 代码现实 并排放在同一视野里 —— 这个产品的核心目的
      就是发现"看板说有进展、代码其实没动"，两边分在两个面板里就永远对不上眼 */
   .cmp { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -691,8 +719,18 @@
   .dep-line.free { color: var(--green); }
   .idle-chip { color: var(--text-faint); font-size: 11px; }
   .idle-chip.long { color: var(--orange); }
+  .review-chip { font-size: 10.5px; color: var(--purple, #8b5cf6); border: 1px solid color-mix(in srgb, var(--purple, #8b5cf6) 45%, transparent); border-radius: 6px; padding: 1px 7px; font-weight: 600; letter-spacing: .02em; }
   .usage-box { font-size: 12px; color: var(--text-dim); line-height: 1.9; }
   .usage-box b { color: var(--text); }
+
+  /* AI 设置弹窗「设置 / 用量」Tab 头 */
+  .ai-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .ai-tab {
+    background: transparent; border: none; color: var(--text-dim); font-size: 13px; font-weight: 600;
+    padding: 6px 14px; border-radius: 8px; cursor: pointer;
+  }
+  .ai-tab:hover { background: var(--bg-soft); color: var(--text); }
+  .ai-tab.active { background: var(--accent); color: #fff; }
 
   /* ---------- 备份 / 提炼 ---------- */
   .backup-list { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-dim); max-height: 120px; overflow-y: auto; }

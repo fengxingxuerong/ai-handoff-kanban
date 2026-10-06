@@ -32,7 +32,7 @@ def readiness_items(p: dict) -> list[dict]:
         "next": bool(next_action) and next_action not in PLACEHOLDER_ACTIONS,
         "bg": bool((p.get("background") or "").strip()),
         "tasks": len(tasks) > 0,
-        "active": any(t.get("status") in ("进行中", "已完成") for t in tasks),
+        "active": any(t.get("status") in ("进行中", "待审查", "已完成") for t in tasks),
     }
     return [{"key": k, "label": label, "ok": checks[k], "score": score}
             for k, label, score in ITEMS]

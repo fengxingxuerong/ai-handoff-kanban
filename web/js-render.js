@@ -36,7 +36,7 @@ async function moveTaskTo(tid, status) {
 (function bindKanbanDnD() {
   const wrap = document.querySelector(".kanban");
   if (!wrap) return;
-  const COL_MAP = { "k-todo": "待办", "k-doing": "进行中", "k-done": "已完成", "k-blocked": "阻塞" };
+  const COL_MAP = { "k-todo": "待办", "k-doing": "进行中", "k-review": "待审查", "k-done": "已完成", "k-blocked": "阻塞" };
   wrap.addEventListener("dragover", e => {
     const col = e.target.closest(".kcol");
     if (!col) return;
@@ -530,9 +530,136 @@ async function renderGraph() {
   } catch (e) {
     if (currentPid !== pid) return;
     panel.style.display = "block";
-    body.innerHTML = `<span style="color:var(--red)">依赖图画不出来：${esc(e.message)}</span>`;
+body.innerHTML = `<span style="color:var(--red)">依赖图画不出来：${esc(e.message)}</span>`;
     note.textContent = "";
   }
+}
+
+/**
+ * 任务统计（P0-2）：数据由后端 `/api/projects/{pid}/stats` 聚合（口径与
+ * due._due_state / executable_tasks 对齐），前端只负责把三块画出来——
+ * 状态分布（SVG 堆叠条）、截止热力（逾期 / 未来 7 天 / 未设 / 更晚）、
+ * 依赖阻塞链（谁在等谁）。空任务也要说话：显式写"没有任务"，不是四张
+ * 零卡片让人猜；请求失败同样必须显形（与 renderGraph 同一条纪律）。
+ */
+async function renderStats() {
+  const panel = document.getElementById("stats-panel");
+  const body = document.getElementById("stats-body");
+  const note = document.getElementById("stats-note");
+  if (!panel || !currentPid) return;
+  const pid = currentPid;
+  panel.style.display = "block";
+  body.innerHTML = "统计读取中…";
+  note.textContent = "";
+  try {
+    const s = await api(`/api/projects/${pid}/stats`);
+    if (currentPid !== pid) return;
+    const bs = s.by_status || {};
+    const n = ["待办", "进行中", "已完成", "阻塞"].reduce((a, k) => a + (bs[k] || 0), 0);
+    if (!n) {
+      body.innerHTML = '<div style="color:var(--text-faint)">该项目还没有任务。</div>';
+      return;
+    }
+    // 状态分布：一条横向堆叠条，颜色跟看板四列同一套（var(--gray/blue/green/red)）。
+    // 宽度按占比；最后一个非零段用 100 减已累计，避免浮点尾差让整条宽度对不齐。
+    const seg = [["待办", "var(--gray)"], ["进行中", "var(--blue)"], ["已完成", "var(--green)"], ["阻塞", "var(--red)"]];
+    const nonzero = seg.filter(([k]) => (bs[k] || 0) > 0);
+    let acc = 0;
+    const parts = nonzero.map(([k, col], i) => {
+      const v = bs[k] || 0;
+      const w = v / n * 100;
+      const x = acc;
+      acc += w;
+      const wFinal = (i === nonzero.length - 1) ? (100 - x) : w;
+      return `<rect x="${x.toFixed(2)}" y="0" width="${wFinal.toFixed(2)}" height="100%" fill="${col}"><title>${esc(`${k} ${v} / ${n}`)}</title></rect>`;
+    }).join("");
+    const legend = seg.map(([k, col]) => {
+      const v = bs[k] || 0;
+      return `<span class="lg"><i style="background:${col};display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px"></i>${k}<b>${v}</b></span>`;
+    }).join("");
+    // 截止热力：四个桶，颜色传达紧急程度（逾期红 / 未来 7 天黄 / 更晚与未设灰）。
+    const due = s.due || {};
+    const heat = [
+      ["overdue", due.overdue || 0, "red", "逾期"],
+      ["within_7d", due.within_7d || 0, "#f59e0b", "未来 7 天"],
+      ["later", due.later || 0, "", "更晚"],
+      ["no_due", due.no_due || 0, "", "未设截止"],
+    ].map(([, v, col, lab]) =>
+      `<span class="heat-cell"><b style="${col ? `color:${col}` : ""}">${v}</b><span style="color:var(--text-faint)">${lab}</span></span>`).join("");
+    // 依赖阻塞链：count=0 时明确说"没阻塞"，有则列明细（阻塞源 title 只读展示，不跳转）。
+    const blk = s.blocked || { count: 0, tasks: [] };
+    const blockedHtml = blk.count === 0
+      ? `<div style="color:var(--green)">✓ 没有任务被前置阻塞</div>`
+      : `<div style="color:var(--red)">⚠ ${blk.count} 个任务被前置阻塞</div>`
+        + blk.tasks.map(t => `<div style="font-size:12px;margin-top:4px">· ${esc(t.title)} — 在等：${(t.blocked_by || []).map(x => esc(x.title)).join("、")}</div>`).join("")
+        + (blk.tasks.length < blk.count ? `<div style="font-size:11px;color:var(--text-faint);margin-top:4px">…共 ${blk.count} 条，只列前 ${blk.tasks.length} 条</div>` : "");
+    body.innerHTML = `
+      <div style="margin-bottom:10px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">状态分布</div>
+        <svg viewBox="0 0 100 10" preserveAspectRatio="none" style="width:100%;height:10px;border-radius:5px;overflow:hidden">${parts}</svg>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;font-size:12px">${legend}</div>
+      </div>
+      <div style="margin-bottom:10px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">截止日期（未完成任务）</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">${heat}</div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">依赖阻塞</div>
+        ${blockedHtml}
+      </div>`;
+    note.textContent = `共 ${n} 个任务`;
+  } catch (e) {
+    if (currentPid !== pid) return;
+    panel.style.display = "block";
+    body.innerHTML = `<span style="color:var(--red)">统计读取失败：${esc(e.message)}</span>`;
+    note.textContent = "";
+  }
+}
+
+// 里程碑分组 + 简易进度条（P2）。
+// 进度数据不在这里重算：口径唯一在后端 `milestone_progress`（详情接口已附
+// `milestones_progress`），这里只渲染 —— 「两条路给不同答案」是本项目反复出问题
+// 的形状（AGENTS.md 约定 20）。任务归组判断只读展示，不参与计算。
+function renderMilestones() {
+  const panel = document.getElementById("ms-panel");
+  const body = document.getElementById("ms-body");
+  const p = current || {};
+  const list = p.milestones_progress || [];
+  if (!list.length) {
+    panel.style.display = "none";
+    return;
+  }
+  // 未归组任务数：有任务但没归进任何里程碑的，也要说出来（方案：兜底显示、不强删）。
+  const names = new Set((p.milestones || []).map(m => (m.name || "").trim()).filter(Boolean));
+  let unassigned = 0;
+  (p.tasks || []).forEach(t => {
+    const ms = (t.milestone || "").trim();
+    if (!ms || !names.has(ms)) unassigned++;
+  });
+  const rows = list.map(m => {
+    const w = Math.max(0, Math.min(100, Number(m.progress) || 0));
+    const badge = m.done
+      ? `<span class="badge" style="background:var(--green);color:#fff;flex-shrink:0">✓ 已完结</span>`
+      : "";
+    const sub = m.total
+      ? `${m.done_tasks}/${m.total} 个任务 · ${w}%`
+      : (m.done ? "无任务，手工标记完结" : "还没有任务归入");
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-weight:600;font-size:12.5px">${esc(m.name)}</span>${badge}
+        <span style="margin-left:auto;color:var(--text-faint);font-size:11px">${esc(sub)}</span>
+      </div>
+      <div class="progress-row" style="margin:0">
+        <div class="bar"><i style="width:${w}%"></i></div>
+        <span class="num">${w}%</span>
+      </div>
+    </div>`;
+  }).join("");
+  const footer = unassigned > 0
+    ? `<div style="font-size:11px;color:var(--text-faint);margin-top:4px">还有 ${unassigned} 个任务未归入任何里程碑</div>`
+    : "";
+  body.innerHTML = rows + footer;
+  panel.style.display = "block";
 }
 
 async function loadGitInfo() {

@@ -3,7 +3,8 @@
 
 同类工具各要各的入口文件（Claude Code 只认 CLAUDE.md、Cursor 要 .cursor/rules/*.mdc、
 Copilot 要 .github/copilot-instructions.md、Gemini 要 GEMINI.md、Cline 要 .clinerules、
-Aider 要 CONVENTIONS.md、Windsurf 要 .windsurfrules）。这里验证一次生成、全部对齐，
+Aider 要 CONVENTIONS.md、Windsurf 要 .windsurfrules、Agent Skills 要
+.claude/skills/<name>/SKILL.md）。这里验证一次生成、全部对齐，
 且 AGENTS.md 是唯一事实来源（其余都是它的投影，不会各写各的慢慢漂移）。
 """
 from __future__ import annotations
@@ -27,6 +28,7 @@ EXPECTED_PATHS = [
     ".clinerules/project.md",
     "CONVENTIONS.md",
     ".windsurfrules",
+    ".claude/skills/ai-kanban/SKILL.md",
 ]
 
 
@@ -42,10 +44,20 @@ def test_all_targets_covered():
     assert sorted(AGENT_ENTRY_TARGETS.values()) == sorted(EXPECTED_PATHS)
 
 
-def test_default_generates_eight_entries():
+def test_default_generates_nine_entries():
     entries = build_agent_entries(PROJECT, CONTENT)
     assert sorted(entries) == sorted(EXPECTED_PATHS)
     assert entries["AGENTS.md"] == CONTENT
+
+
+def test_skill_entry_has_frontmatter_matching_directory():
+    """Agent Skills 格式：frontmatter 的 name 必须与目录名一致，description 供按需加载"""
+    from app.main import SKILL_NAME
+    skill = build_agent_entries(PROJECT, CONTENT)[".claude/skills/ai-kanban/SKILL.md"]
+    assert skill.startswith("---\n")
+    head = skill.split("---")[1]
+    assert f"name: {SKILL_NAME}" in head and "description:" in head
+    assert CONTENT.strip() in skill, "frontmatter 之后必须带正文（Skill 是投影，不是第二份内容）"
 
 
 def test_claude_is_a_bridge_not_a_copy():
@@ -134,7 +146,7 @@ def test_existing_files_are_not_overwritten_by_default(ai, tmp_path):
     status, res = ai.post(f"/api/export/agent-files/{pid}", {"dir": str(repo), "content": CONTENT})
     assert status == 200
     assert res["skipped_existing"] == ["AGENTS.md"]
-    assert "AGENTS.md" not in res["written"] and len(res["written"]) == 7
+    assert "AGENTS.md" not in res["written"] and len(res["written"]) == 8
     assert (repo / "AGENTS.md").read_text(encoding="utf-8") == mine, "手写文件被覆盖了"
 
 

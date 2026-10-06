@@ -91,6 +91,54 @@ function fillProjectForm(p) {
   document.getElementById("f-handoff").value = p.handoff_note || "";
   document.getElementById("f-next").value = p.next_action || "";
   resetTagChips(p.tags || []);
+  renderMilestoneRows(p.milestones || []);
+}
+
+// —— 里程碑行编辑器（P2）——
+// 数据形状约定（与后端 _clean_milestones 对齐）：[{name, done}]。
+// 行容器里每个 .ms-row 持有两个控件：.ms-name 输入 + .ms-done 勾选。
+// 保存时按行的出现顺序收集，已删除的行直接不读（DOM 里没了）。
+function renderMilestoneRows(list) {
+  const box = document.getElementById("f-milestones");
+  box.innerHTML = (list || []).map((m, i) => milestoneRowHTML(m, i)).join("");
+}
+
+function milestoneRowHTML(m, i) {
+  const name = (m && m.name ? m.name : "").trim();
+  const done = !!(m && m.done);
+  return `<div class="ms-row" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+    <input class="ms-name" value="${esc(name)}" placeholder="里程碑名称（≤40 字）" maxlength="40" style="flex:1"
+      aria-label="里程碑名称">
+    <label class="switch" style="flex-shrink:0;margin:0" title="手工标记该节点已经过去">
+      <input type="checkbox" class="ms-done"${done ? " checked" : ""} aria-label="里程碑 ${i + 1} 已完成标记">
+      <span class="slider"></span>
+    </label>
+    <button class="btn small danger" type="button" data-act="removeMilestoneRow" data-arg="${i}" aria-label="删除里程碑 ${i + 1}">✕</button>
+  </div>`;
+}
+
+function addMilestoneRow() {
+  const box = document.getElementById("f-milestones");
+  box.insertAdjacentHTML("beforeend", milestoneRowHTML({ name: "", done: false }, box.children.length));
+}
+
+function removeMilestoneRow(idx) {
+  const box = document.getElementById("f-milestones");
+  const row = box.children[idx];
+  if (row) row.remove();
+}
+
+function collectMilestones() {
+  const box = document.getElementById("f-milestones");
+  const out = [];
+  Array.from(box.children || []).forEach(c => {
+    const input = c.querySelector(".ms-name");
+    const check = c.querySelector(".ms-done");
+    const name = (input ? input.value : "").trim();
+    if (!name) return;            // 空名称的行不提交，后端同口径（`_clean_milestones`）
+    out.push({ name, done: check ? check.checked : false });
+  });
+  return out;
 }
 
 async function openProjectModal(id) {
@@ -104,8 +152,9 @@ async function openProjectModal(id) {
   document.getElementById("f-repo").value = "";
   document.getElementById("f-bg").value = "";
   document.getElementById("f-handoff").value = "";
-  document.getElementById("f-next").value = "";
+document.getElementById("f-next").value = "";
   resetTagChips([]);
+  renderMilestoneRows([]);
   if (id) {
     // 编辑**必须**从 `/api/projects/{id}` 回填，不能用总览列表里那一份：
     // 列表接口只给卡片要用的字段，不含 background / handoff_note，
@@ -150,7 +199,8 @@ async function saveProject() {
     repo_path: document.getElementById("f-repo").value.trim(),
     background: document.getElementById("f-bg").value.trim(),
     handoff_note: document.getElementById("f-handoff").value.trim(),
-    next_action: document.getElementById("f-next").value.trim(),
+next_action: document.getElementById("f-next").value.trim(),
+    milestones: collectMilestones(),
   };
   try {
     if (editProjectId) {
@@ -190,6 +240,52 @@ async function deleteProject() {
 }
 
 // ============ 任务增删改 ============
+// 自动分配：把『指定优先级 + 未完成 + 依赖已就绪』的任务批量指派给某个智能体。
+// 写入任务 agent 字段，走 POST /api/projects/{pid}/assign（锁内纯函数计算，幂等）。
+function openAssignModal() {
+  if (!currentPid) { toast("请先打开一个项目"); return; }
+  document.getElementById("assign-agent").value = "";
+  document.getElementById("assign-priority").value = "高";
+  document.getElementById("assign-overwrite").checked = false;
+  const result = document.getElementById("assign-result");
+  result.style.display = "none";
+  result.innerHTML = "";
+  openModal("assign-modal");
+}
+
+async function runAutoAssign() {
+  const agent = document.getElementById("assign-agent").value.trim();
+  if (!agent) { toast("请填写要指派给的智能体名"); return; }
+  const priority = document.getElementById("assign-priority").value;
+  const overwrite = document.getElementById("assign-overwrite").checked;
+  try {
+    const j = await api("/api/projects/" + currentPid + "/assign", {
+      method: "POST",
+      body: JSON.stringify({ agent, priority, overwrite }),
+    });
+    const box = document.getElementById("assign-result");
+    let html = "";
+    if (j.count === 0) {
+      html = '<div style="color:var(--text-dim)">没有可分配的任务。' + (j.skipped_count ? "（被跳过的 " + j.skipped_count + " 条见下方）" : "") + "</div>";
+    } else {
+      html += '<div style="font-weight:600;margin-bottom:6px">✅ 已指派 ' + j.count + " 条给「" + esc(agent) + "」</div>";
+      html += "<ul style='margin:0 0 8px;padding-left:18px'>" +
+        j.assigned.map(a => "<li>" + esc(a.title) + "</li>").join("") + "</ul>";
+    }
+    if (j.skipped && j.skipped.length) {
+      html += '<div style="color:var(--text-faint);margin-top:4px">跳过 ' + j.skipped.length + " 条：</div>";
+      html += "<ul style='margin:4px 0 0;padding-left:18px;color:var(--text-faint)'>" +
+        j.skipped.map(s => "<li>" + esc(s.title) + " —— " + esc(s.reason) + "</li>").join("") + "</ul>";
+    }
+    box.innerHTML = html;
+    box.style.display = "block";
+    toast(j.count ? "已分配 " + j.count + " 个任务给 " + agent : "没有可分配的任务");
+    current = await api("/api/projects/" + currentPid);
+    renderDetail();
+    loadOverview();
+  } catch (e) { toast("分配失败：" + e.message); }
+}
+
 function openTaskModal(taskId) {
   editTaskId = taskId || null;
   document.getElementById("task-modal-title").textContent = taskId ? "编辑任务" : "新建任务";
@@ -200,6 +296,7 @@ function openTaskModal(taskId) {
   document.getElementById("t-priority").value = "中";
   document.getElementById("t-agent").value = "";
   document.getElementById("t-refs").value = "";
+  document.getElementById("t-acceptance").value = "";
   document.getElementById("t-due").value = "";
   const journalField = document.getElementById("t-journal-field");
   if (taskId) {
@@ -211,10 +308,17 @@ function openTaskModal(taskId) {
   } else {
     journalField.style.display = "none";
   }
-  const depsSel = document.getElementById("t-deps");
+const depsSel = document.getElementById("t-deps");
   depsSel.innerHTML = (current && current.tasks ? current.tasks : [])
     .filter(x => x.id !== taskId)
     .map(x => `<option value="${esc(x.id)}">${esc(x.title)}</option>`).join("");
+  // 里程碑下拉：选项来自项目详情（编辑时 current 就是刚拉回来的那份，含 milestones）。
+  // 空选项 = 「未归入」，对应后端 TaskIn.milestone 的 "" 默认值。
+  const msSel = document.getElementById("t-milestone");
+  msSel.innerHTML = `<option value="">未归入</option>`
+    + (current && current.milestones && current.milestones.length
+        ? current.milestones.map(m => `<option value="${esc((m.name || "").trim())}">${esc((m.name || "").trim())}</option>`).join("")
+        : "");
   if (taskId) {
     const t = (current.tasks || []).find(x => x.id === taskId);
     if (t) {
@@ -223,8 +327,10 @@ function openTaskModal(taskId) {
       document.getElementById("t-status").value = t.status;
       document.getElementById("t-priority").value = t.priority;
       document.getElementById("t-agent").value = t.agent || "";
-      document.getElementById("t-refs").value = (t.refs || []).join(", ");
+document.getElementById("t-refs").value = (t.refs || []).join(", ");
+      document.getElementById("t-acceptance").value = (t.acceptance || []).join("\n");
       document.getElementById("t-due").value = t.due_date || "";
+      document.getElementById("t-milestone").value = t.milestone || "";
       const mine = t.depends_on || [];
       Array.from(depsSel.options).forEach(o => { o.selected = mine.includes(o.value); });
     }
@@ -243,7 +349,10 @@ async function saveTask() {
     agent: document.getElementById("t-agent").value.trim(),
     due_date: document.getElementById("t-due").value || "",
     refs: document.getElementById("t-refs").value.split(",").map(s => s.trim()).filter(Boolean),
+    // 验收标准一行一条；后端会再去空去重限量（超 10 条留前 10、单条超 120 字截断）
+    acceptance: document.getElementById("t-acceptance").value.split("\n").map(s => s.trim()).filter(Boolean),
     depends_on: Array.from(document.getElementById("t-deps").selectedOptions).map(o => o.value),
+    milestone: document.getElementById("t-milestone").value,
   };
   try {
     if (editTaskId) {
@@ -306,8 +415,12 @@ async function openAISettings() {
     document.getElementById("ai-sched-time").value = s.time || "09:00";
     document.getElementById("ai-sched-last").textContent = s.last_run || "—";
     document.getElementById("mcp-readonly").checked = !!(aiConfig.ai.mcp_readonly);
+    document.getElementById("ai-budget-limit").value = Number(aiConfig.ai.budget_limit || 0) || 0;
+    // 打开时回设置页（用量 Tab 首次切入才加载），否则上次关在用量 Tab、这次打开还停在用量
+    const usagePane = document.getElementById("ai-pane-usage");
+    if (usagePane) usagePane.dataset.loaded = "";
+    switchAITab("settings");
     loadBackups();
-    loadUsage();
     openModal("ai-settings-modal");
   } catch (e) { toast("加载配置失败：" + e.message); }
 }
@@ -326,6 +439,12 @@ function renderEndpoints(eps) {
         <textarea data-i="${i}" data-f="keys" placeholder="sk-... 每行一个">${esc((ep.api_keys || []).join("\n"))}</textarea></div>
       <div class="field"><label>模型（逗号分隔，按优先级排序）</label>
         <input data-i="${i}" data-f="models" value="${esc((ep.models || []).join(", "))}"></div>
+      <div class="field" style="flex-direction:row;gap:10px;align-items:flex-end">
+        <div style="flex:1"><label>输入单价（$/千 token，0=不估算）</label>
+          <input type="number" data-i="${i}" data-f="price_in" min="0" step="0.0001" value="${Number(ep.price_per_1k_input || 0) || 0}"></div>
+        <div style="flex:1"><label>输出单价（$/千 token）</label>
+          <input type="number" data-i="${i}" data-f="price_out" min="0" step="0.0001" value="${Number(ep.price_per_1k_output || 0) || 0}"></div>
+      </div>
     </div>`).join("");
 }
 
@@ -337,11 +456,15 @@ async function saveAISettings() {
     api_keys: card.querySelector('[data-f="keys"]').value.split("\n").map(s => s.trim()).filter(Boolean),
     models: card.querySelector('[data-f="models"]').value.split(/[,，]/).map(s => s.trim()).filter(Boolean),
     enabled: card.querySelector('[data-f="enabled"]').checked,
+    price_per_1k_input: Number(card.querySelector('[data-f="price_in"]').value) || 0,
+    price_per_1k_output: Number(card.querySelector('[data-f="price_out"]').value) || 0,
   }));
+  const budgetEl = document.getElementById("ai-budget-limit");
   const body = {
     endpoints,
     active_model: document.getElementById("ai-active-model").value,
     mcp_readonly: document.getElementById("mcp-readonly").checked,
+    budget_limit: budgetEl ? Number(budgetEl.value) || 0 : 0,
     schedule: {
       enabled: document.getElementById("ai-sched-enabled").checked,
       frequency: document.getElementById("ai-sched-freq").value,

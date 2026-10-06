@@ -42,6 +42,16 @@ def test_completed_tasks_still_count_as_active():
     assert readiness_score(done_only) == 100
 
 
+def test_review_tasks_count_as_active():
+    """active 项也认『待审查』（2026-10-01 补）：Agent 干完活等人验收算推进。
+
+    变异 readiness_active_narrowed 现在注入的是只认『进行中』的元组，
+    待审查任务若从推进判定里摘掉，一个"活全干完、在等人验收"的项目会掉 10 分。
+    """
+    review_only = {**FULL, "tasks": [{"id": "t1", "title": "A", "status": "待审查"}]}
+    assert readiness_score(review_only) == 100
+
+
 def test_empty_project_scores_zero_and_lists_all_missing():
     assert readiness_score({}) == 0
     line = readiness_line({})

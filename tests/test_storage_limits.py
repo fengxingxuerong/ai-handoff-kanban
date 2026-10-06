@@ -105,7 +105,7 @@ def test_journal_text_is_truncated(app_client, monkeypatch):
 
 
 def test_clean_journal_normalizes_dirty_data(monkeypatch):
-    """导入的脏数据也要收口：非字典条目丢掉、超长截断、超量只留最近"""
+    """导入的脏数据也要收口：非字典条目丢掉、超长截断、超量折叠成摘要（不是丢掉）"""
     import app.main as kanban
     from app.main import MAX_JOURNAL_TEXT, clean_journal
 
@@ -117,11 +117,16 @@ def test_clean_journal_normalizes_dirty_data(monkeypatch):
 
     # 导入路径的条数上限（2026-09-29 补）：上面的脏数据只有 3 条，够不到 MAX_JOURNAL，
     # 变异 clean_journal_no_cap（摘掉 raw[-MAX_JOURNAL:]）曾因此存活 —— 一次脏导入
-    # 能把 projects.json 撑大几 MB 却没有用例红。收窄上限后必须留最近 N 条。
+    # 能把 projects.json 撑大几 MB 却没有用例红。收窄上限后总条数必须回到上限内。
+    # 2026-10-06 起超出部分**折叠成摘要**而不是直接丢（对标 Beads 语义压缩）：
+    # 丢掉会把"早期为什么这么做"的证据无声清空，折叠只压体量、不压脉络。
     monkeypatch.setattr(kanban, "MAX_JOURNAL", 2)
     out2 = clean_journal([{"text": f"第{i}条"} for i in range(6)])
-    assert len(out2) == 2, f"导入超量应只留最近 2 条，实际 {len(out2)}"
-    assert [x["text"] for x in out2] == ["第4条", "第5条"], "留下的必须是最新的两条"
+    assert len(out2) == 2, f"导入超量应折叠到 2 条，实际 {len(out2)}"
+    folded, newest = out2
+    assert newest["text"] == "第5条", "最新一条必须原样保留"
+    assert folded["folded"] == 5 and "已折叠" in folded["text"], "摘要要带折叠计数"
+    assert "第4条" in folded["text"], "摘要里要能认出折进去的旧记录"
 
 
 # ---------------- 会话捕获：只能读已配置的源 ----------------

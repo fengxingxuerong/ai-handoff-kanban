@@ -16,7 +16,7 @@ let editTaskId = null;
 let editProjectId = null;
 
 const STATUS_COLORS = { "规划中": "gray", "进行中": "blue", "已暂停": "orange", "已完成": "green" };
-const TASK_STATUSES = ["待办", "进行中", "已完成", "阻塞"];
+const TASK_STATUSES = ["待办", "进行中", "待审查", "已完成", "阻塞"];
 const STATUS_SET = new Set(["规划中", "进行中", "已暂停", "已完成"]);
 const PRIORITY_SET = new Set(["高", "中", "低"]);
 // 项目状态与任务状态是两套枚举（"待办"/"阻塞"只属于任务），别拿一个去校验另一个
@@ -154,6 +154,8 @@ async function loadOverview() {
     }
     renderDash();
     checkReminders(stats);
+    // 需要拍板的数量（逾期/待审查/阻塞）：单独一条请求，失败不拖累总览加载
+    api("/api/inbox").then(r => updateInboxBadge(r.counts)).catch(() => {});
     // 总览是隐藏的时候（人在详情页里保存任务、拖卡片、改状态都会调到这里）
     // 数据要拉新，但把 N 张项目卡全删全建是白干 —— 切回总览时 showOverview 会再调一次，
     // 那时才真正渲染。真实规模下这是一次点击里最贵的一段 DOM 工作。
@@ -171,6 +173,7 @@ async function loadOverview() {
 
 function setFilter(el, f) {
   filter = f;
+  activeViewId = "";                                   // 手动改筛选 = 脱离已保存视图快照
   document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
   el.classList.add("active");
   renderOverview();
@@ -237,6 +240,7 @@ function cardHTML(p) {
     <div class="stats">
       <span class="stat s-todo">待办 <b>${c["待办"] || 0}</b></span>
       <span class="stat s-doing">进行中 <b>${c["进行中"] || 0}</b></span>
+      <span class="stat s-review">待审查 <b>${c["待审查"] || 0}</b></span>
       <span class="stat s-done">已完成 <b>${c["已完成"] || 0}</b></span>
       <span class="stat s-blocked">阻塞 <b>${c["阻塞"] || 0}</b></span>
     </div>
@@ -279,14 +283,18 @@ const ACTIONS = {
   // 写成 `() => openReport()` 会把 rid 丢掉，点历史条目变成重新跑一次分析。
   openReport: (arg) => openReport(arg),
   openAISettings: () => openAISettings(),
+  switchAITab: (arg) => switchAITab(arg),
   setFilter: (arg, ev, el) => setFilter(el, arg),
   showOverview: () => showOverview(),
   openTrends: () => openTrends(),
   openAllPackage: () => openAllPackage(),
   openToday: () => openToday(),
+  openInbox: () => openInbox(),
   gotoTask: (arg) => gotoTask(arg),
   // —— 详情页 ——
   openTaskModal: () => openTaskModal(),
+  openAssignModal: () => openAssignModal(),
+  runAutoAssign: () => runAutoAssign(),
   editProject: () => editProject(),
   deleteProject: () => deleteProject(),
   copyHandoffText: () => copyHandoffText(),
@@ -304,6 +312,8 @@ const ACTIONS = {
   // —— 表单保存 ——
   saveProject: () => saveProject(),
   saveTask: () => saveTask(),
+  addMilestoneRow: () => addMilestoneRow(),
+  removeMilestoneRow: (arg) => removeMilestoneRow(parseInt(arg, 10)),
   deleteTask: () => deleteTask(),
   saveAISettings: () => saveAISettings(),
   savePackage: (arg, ev, el) => savePackage({ currentTarget: el }),
@@ -314,6 +324,7 @@ const ACTIONS = {
   exportData: () => exportData(),
   importData: () => importData(),
   openGlobalSearch: () => openGlobalSearch(),
+  paletteRun: (arg) => paletteRun(arg),
   retryDetail: (arg) => openDetail(arg),
   loadOverview: () => loadOverview(),
   toggleTheme: () => toggleTheme(),
@@ -321,6 +332,9 @@ const ACTIONS = {
   toggleMemoryForm: () => toggleMemoryForm(),
   saveMemory: () => saveMemory(),
   deleteMemory: (arg, ev, el) => deleteMemory(el.dataset.mid),
+  toggleViewForm: () => toggleViewForm(),
+  saveView: () => saveView(),
+  deleteView: () => deleteView(),
   appendJournal: () => appendJournal(),
   openSessionCapture: () => openSessionCapture(),
   scanSessions: () => scanSessions(),
@@ -365,6 +379,25 @@ document.addEventListener("click", e => {
   runAction(el.dataset.act, e, el);
 });
 
+// ============ AI 设置弹窗 Tab 切换 ============
+// 「设置 / 用量」是两个 tabpanel：切换只有一条路，aria-selected 与 hidden 同进退，
+// 免得出现"按钮亮在用量、页面还停在设置"的错位。打开弹窗默认回设置页（openAISettings 里调）。
+function switchAITab(name) {
+  const btn = document.getElementById("ai-tab-btn-" + name);
+  if (!btn) return;
+  document.querySelectorAll("#ai-settings-modal .ai-tab").forEach(b => b.classList.toggle("active", b === btn));
+  document.querySelectorAll("#ai-settings-modal .ai-tab").forEach(b => b.setAttribute("aria-selected", String(b === btn)));
+  const paneSettings = document.getElementById("ai-pane-settings");
+  const paneUsage = document.getElementById("ai-pane-usage");
+  paneSettings.hidden = name !== "settings";
+  paneUsage.hidden = name !== "usage";
+  // 首次进入用量页且还没加载过就补一次（打开设置时不急着拉，切进来再看）
+  if (name === "usage" && !paneUsage.dataset.loaded) {
+    paneUsage.dataset.loaded = "1";
+    loadUsage();
+  }
+}
+
 document.addEventListener("keydown", e => {
   if (e.key === "Tab") { trapTab(e); return; }
   if (e.key !== "Enter") return;
@@ -377,10 +410,90 @@ let searchTimer = null;
 const searchInput = document.getElementById("search");
 if (searchInput) {
   searchInput.addEventListener("input", () => {
+    if (activeViewId) {                               // 手动改搜索 = 脱离已保存视图
+      activeViewId = "";
+      syncViewSelect();
+    }
     clearTimeout(searchTimer);
     searchTimer = setTimeout(renderOverview, 120);
   });
 }
+
+// ============ 保存的视图（Plane Views 轻量版） ============
+// 保存的不是"当前画面"，而是`筛选状态 + 搜索词`——它俩是总览卡片的全部过滤维度。
+// 打开总览时并行拉一次，保存/删除后本地刷新，不随每次 loadOverview 重新拉。
+let savedViews = [];          // [{id, name, filter, q}]
+let activeViewId = "";        // 当前应用中的视图 id（手动改 chip/搜索即清空）
+
+async function loadViews() {
+  try {
+    const r = await api("/api/views");
+    savedViews = r.views || [];
+  } catch (e) { savedViews = []; }
+  syncViewSelect();
+}
+
+function syncViewSelect() {
+  const sel = document.getElementById("view-sel");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">视图</option>'
+    + savedViews.map(v => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join("");
+  sel.value = activeViewId;
+}
+
+function toggleViewForm() {
+  const f = document.getElementById("view-form");
+  const show = f.style.display === "none";
+  f.style.display = show ? "flex" : "none";
+  if (show) document.getElementById("view-name").focus();
+}
+
+function applyView(vid) {
+  const v = savedViews.find(x => x.id === vid);
+  activeViewId = vid || "";
+  if (!v) return;
+  filter = v.filter || "全部";
+  document.querySelectorAll(".filter-bar .chip").forEach(c =>
+    c.classList.toggle("active", c.dataset.f === filter));
+  const box = document.getElementById("search");
+  if (box) box.value = v.q || "";
+  renderOverview();
+}
+
+async function saveView() {
+  const inp = document.getElementById("view-name");
+  const name = (inp.value || "").trim();
+  if (!name) { toast("先给视图起个名字"); inp.focus(); return; }
+  const q = (document.getElementById("search").value || "").trim();
+  try {
+    const r = await api("/api/views", { method: "POST", body: JSON.stringify({ name, filter, q }) });
+    activeViewId = r.id;
+    inp.value = "";
+    document.getElementById("view-form").style.display = "none";
+    await loadViews();
+    toast(r.updated ? `视图「${name}」已更新 ✓` : `视图「${name}」已保存 ✓`);
+  } catch (e) { toast("保存视图失败：" + e.message); }
+}
+
+async function deleteView() {
+  const vid = document.getElementById("view-sel").value;
+  if (!vid) { toast("先在视图下拉里选中要删除的视图"); return; }
+  const v = savedViews.find(x => x.id === vid);
+  if (!v) return;
+  if (!confirm(`删除视图「${v.name}」？这只影响筛选菜单，不会动任何项目数据。`)) return;
+  try {
+    await api("/api/views/" + vid, { method: "DELETE" });
+    activeViewId = "";
+    document.getElementById("view-form").style.display = "none";
+    await loadViews();
+    toast("视图已删除 ✓");
+  } catch (e) { toast("删除视图失败：" + e.message); }
+}
+
+(function bindViewSelect() {
+  const sel = document.getElementById("view-sel");
+  if (sel) sel.addEventListener("change", () => applyView(sel.value));
+})();
 
 // ============ 详情 ============
 function setDetailState(mode, err, pid) {
@@ -481,10 +594,11 @@ function renderDetail() {
   document.getElementById("d-next").innerHTML = renderMarkdown(p.next_action || "（未填写）");
   renderReadiness(p.id);
   renderMemories(p.id);
+  renderMilestones();
   const tasks = sortTasks(p.tasks || [], taskSortMode);
   document.getElementById("d-task-total").textContent = "共 " + tasks.length + " 个任务";
-  const cols = { "待办": "col-todo", "进行中": "col-doing", "已完成": "col-done", "阻塞": "col-blocked" };
-  const counts = { "待办": 0, "进行中": 0, "已完成": 0, "阻塞": 0 };
+  const cols = { "待办": "col-todo", "进行中": "col-doing", "待审查": "col-review", "已完成": "col-done", "阻塞": "col-blocked" };
+  const counts = { "待办": 0, "进行中": 0, "待审查": 0, "已完成": 0, "阻塞": 0 };
   for (const k of Object.keys(cols)) document.getElementById(cols[k]).innerHTML = "";
   tasks.forEach(t => {
     const tst = taskStCls(t.status);
@@ -505,6 +619,8 @@ function renderDetail() {
     const refHtml = (t.refs && t.refs.length)
       ? `<div class="td" style="font-family:Consolas,monospace;font-size:11px">📍 ${t.refs.map(r => esc(r)).join("、")}</div>`
       : "";
+    const accCnt = (t.acceptance && t.acceptance.length) || 0;
+    const accHtml = accCnt ? `<span class="acc-chip" title="验收标准 ${accCnt} 条（编辑任务可查看）">☑ ${accCnt}</span>` : "";
     const depHtml = (t.depends_on && t.depends_on.length && t.status !== "已完成")
       ? (() => {
           // 光列「前置：A、B」没回答那个真正的问题：**这条现在能不能动手**。
@@ -528,6 +644,8 @@ function renderDetail() {
     const idleD = daysSince(lastBeat);
     const idleHtml = (t.status !== "已完成" && idleD !== null && idleD >= 7)
       ? `<span class="idle-chip long">⏱ ${idleD} 天没记录</span>` : "";
+    const reviewHtml = (t.status === "待审查" && current && current.repo_path)
+      ? `<span class="review-chip" title="验收时去详情页「代码现实」对照最近提交">🛂 待审查</span>` : "";
     const di = dueInfo(t);
     const dueHtml = di ? `<span class="due-badge ${di.cls}">📅 ${esc(di.text)}</span>` : "";
     el.innerHTML = `
@@ -538,14 +656,16 @@ function renderDetail() {
       <div class="tfoot">
         <span class="tag2 pri-${tpri}">${esc(tpri)}</span>
         ${t.agent ? `<span class="agent">🤖 ${esc(t.agent)}</span>` : ""}
-        ${idleHtml ? `<span style="margin-left:auto">${idleHtml}</span>` : ""}
+        ${accHtml}
+        ${reviewHtml ? `<span style="margin-left:auto">${reviewHtml}</span>` : idleHtml ? `<span style="margin-left:auto">${idleHtml}</span>` : ""}
       </div>`;
     document.getElementById(cols[tst] || "col-todo").appendChild(el);
   });
   for (const [k, v] of Object.entries(counts)) {
-    document.getElementById("c-" + ({ "待办": "todo", "进行中": "doing", "已完成": "done", "阻塞": "blocked" }[k])).textContent = v;
+    document.getElementById("c-" + ({ "待办": "todo", "进行中": "doing", "待审查": "review", "已完成": "done", "阻塞": "blocked" }[k])).textContent = v;
   }
-  renderReality();
+renderReality();
   renderGraph();
+  renderStats();
 }
 

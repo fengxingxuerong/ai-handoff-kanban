@@ -174,6 +174,47 @@ def test_global_search_jumps_to_project(ui):
     page.wait_for_selector("#view-detail.active", timeout=10000)
 
 
+def test_palette_shows_commands_and_runs_new_project(ui):
+    """Ctrl+K 现在是命令面板：空输入展示命令，点「新建项目」能真的开出项目弹窗"""
+    page, api, _ = ui
+    make_project(api, "面板项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+
+    page.click("[data-act='openGlobalSearch']")
+    page.wait_for_selector("#palette-commands", timeout=10000)
+    assert "新建项目" in page.locator("#palette-commands").inner_text()
+    assert "今日待办" in page.locator("#palette-commands").inner_text()
+
+    # 命令面板关闭后 project-modal 应正常弹出（面板不能挡在后面）
+    page.locator("[data-act='paletteRun'][data-arg='new-project']").click()
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    assert not page.locator("#global-search-modal").is_visible(), "执行命令后面板应该已关闭"
+
+
+def test_palette_filters_commands_with_gt_prefix(ui):
+    """输入 `>` 后只留匹配的命令；普通关键词则走任务搜索"""
+    page, api, _ = ui
+    make_project(api, "过滤项目")
+    api.post(f"/api/projects/{make_project(api, '过滤项目2')['id']}/tasks",
+             {"title": "过滤关键词任务", "status": "待办"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+
+    page.click("[data-act='openGlobalSearch']")
+    page.wait_for_selector("#palette-commands", timeout=10000)
+    page.fill("#gs-input", ">导出")
+    # 带 `>` 前缀 → 命令过滤；「导出交接包」在列表里，"新建项目"被滤掉
+    page.wait_for_selector("#palette-commands .palette-item", timeout=10000)
+    text = page.locator("#palette-commands").inner_text()
+    assert "导出交接包" in text and "新建项目" not in text, f"过滤结果不对：{text}"
+    assert page.locator("#gs-results").inner_text() == "", "命令模式下不该渲染搜索结果"
+
+    page.fill("#gs-input", "过滤关键词任务")
+    page.wait_for_selector(".gs-item", timeout=10000)
+    assert "过滤关键词任务" in page.locator("#gs-results").inner_text()
+
+
 def test_delete_project_asks_confirmation(ui):
     page, api, _ = ui
     make_project(api, "待删项目")
@@ -605,6 +646,51 @@ def test_task_sort_reorders_cards(ui):
     assert "高优先" in first_after, f"按优先级排序后高优先应在前，实际首张：{first_after}"
 
 
+def test_saved_view_roundtrip_save_apply_delete(ui):
+    """保存筛选为视图 → 切换筛选 → 应用视图恢复 → 删除视图。
+    视图菜单是总览卡片的过滤条件快照，保存/应用/删除三条路径都要真的能用。"""
+    page, api, _ = ui
+    make_project(api, "视图检查甲", status="进行中")
+    make_project(api, "视图检查乙", status="已完成")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+
+    # 1) 保存当前筛选（已完成）+ 搜索词为命名视图
+    page.click(".filter-bar .chip:has-text('已完成')")
+    page.fill("#search", "视图检查")
+    page.wait_for_function("() => document.querySelectorAll('.pcard').length === 1", timeout=10000)
+    page.click("[data-act='toggleViewForm']")
+    page.fill("#view-name", "只看已完成")
+    page.click("[data-act='saveView']")
+    page.wait_for_function("() => document.getElementById('toast').classList.contains('show') "
+                           "&& document.getElementById('toast').textContent.includes('已保存')", timeout=10000)
+    assert page.locator("#view-sel option").count() == 2, "下拉里应有「视图」占位 + 新视图"
+
+    # 记录该视图的 option value，后面应用与删除都靠它
+    vid = page.locator("#view-sel option").nth(1).get_attribute("value")
+    assert vid
+
+    # 2) 换一个筛选（全部——甲乙两张卡都回来）并清空搜索，再从视图下拉切回
+    #    → chip、搜索词、卡片数都该回到已保存的快照（q 维度也要恢复）
+    page.click(".filter-bar .chip:has-text('全部')")
+    page.fill("#search", "")
+    page.wait_for_function("() => document.querySelectorAll('.pcard').length === 2", timeout=10000)
+
+    page.select_option("#view-sel", vid)
+    page.wait_for_function("() => document.querySelector('.filter-bar .chip.active').textContent === '已完成'",
+                           timeout=10000)
+    page.wait_for_function("() => document.getElementById('search').value === '视图检查'", timeout=10000)
+    page.wait_for_function("() => document.querySelectorAll('.pcard').length === 1", timeout=10000)
+
+    page.click("[data-act='toggleViewForm']")        # 删除按钮在折叠的表单里
+    page.on("dialog", lambda d: d.accept())          # deleteView 前有 confirm
+    page.click("[data-act='deleteView']")
+    page.wait_for_function("() => document.querySelectorAll('#view-sel option').length === 1", timeout=10000)
+    assert "只看已完成" not in page.locator("#view-sel").inner_html(), "视图删除后选项仍在"
+    page.wait_for_function("() => document.getElementById('toast').classList.contains('show') "
+                           "&& document.getElementById('toast').textContent.includes('视图已删除')", timeout=10000)
+
+
 def test_today_panel_lists_tasks_and_jumps_to_project(ui):
     """跨项目待办：点开能看到任务，点一条直接跳到它的项目"""
     page, api, _ = ui
@@ -622,23 +708,24 @@ def test_today_panel_lists_tasks_and_jumps_to_project(ui):
 
 
 def test_task_statuses_land_in_their_own_column(ui):
-    """四列各归各位。
+    """五列各归各位。
 
     曾经 renderDetail 拿「项目」状态白名单（规划中/进行中/已暂停/已完成）去筛「任务」状态，
     于是「阻塞」不在集合里 → 被兜底塞进待办列，阻塞列永远是空的；
     而套件里此前没有任何用例看过 #col-blocked，所以每次回归都全绿。
+    2026-10-01 加第五列「待审查」：Agent 干完活到人验收之间的中间态，应与其余状态一样落在自己的列。
     """
     page, api, _ = ui
-    p = make_project(api, "四列归位项目")
+    p = make_project(api, "五列归位项目")
     for title, st in [("待办的", "待办"), ("在做的", "进行中"),
-                      ("做完的", "已完成"), ("卡住的", "阻塞")]:
+                      ("等验收的", "待审查"), ("做完的", "已完成"), ("卡住的", "阻塞")]:
         api.post(f"/api/projects/{p['id']}/tasks", {"title": title, "status": st})
     page.reload(wait_until="domcontentloaded")
 
-    page.click(".pcard:has-text('四列归位项目')")
+    page.click(".pcard:has-text('五列归位项目')")
     page.wait_for_selector("#view-detail.active", timeout=10000)
     for col, title in (("col-todo", "待办的"), ("col-doing", "在做的"),
-                       ("col-done", "做完的"), ("col-blocked", "卡住的")):
+                       ("col-review", "等验收的"), ("col-done", "做完的"), ("col-blocked", "卡住的")):
         page.wait_for_selector("#" + col + " .tcard", timeout=10000)
         text = page.locator("#" + col).inner_text()
         assert title in text, f"「{title}」应落在 #{col}，该列实际内容：{text[:80]}"
@@ -1050,3 +1137,101 @@ def test_long_modal_reopens_at_its_previous_scroll(ui):
     mask_box = mask.bounding_box()
     assert head_top >= mask_box["y"] - 1 and head_top <= mask_box["y"] + 60, \
         f"标题滚出视野了（head y={head_top}, mask y={mask_box['y']}）"
+
+
+# ---------------- 2026-10-06 竞品吸取轮：验收标准 / 待拍板 / 记忆时效 / journal 折叠 ----------------
+
+def test_acceptance_roundtrip_card_badge_and_modal_fill(ui):
+    """验收标准：卡片上有计数徽章、任务弹窗按行回填、加一条保存后徽章跟着涨"""
+    page, api, _ = ui
+    p = make_project(api, "验收流转项目")
+    api.post(f"/api/projects/{p['id']}/tasks",
+             {"title": "带验收的任务", "acceptance": ["全部用例通过", "README 补全"]})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('验收流转项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+
+    card = page.locator(".tcard:has-text('带验收的任务')")
+    assert "☑ 2" in card.inner_text(), "卡片上没有验收计数徽章"
+
+    card.click()
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    assert page.locator("#t-acceptance").input_value() == "全部用例通过\nREADME 补全", \
+        "编辑时没有按行回填验收标准"
+
+    page.fill("#t-acceptance", "全部用例通过\nREADME 补全\n界面人工核对")
+    page.click("[data-act='saveTask']")
+    page.wait_for_function(
+        "() => document.getElementById('toast').textContent.includes('已更新')", timeout=10000)
+    page.wait_for_selector("#task-modal", state="hidden", timeout=10000)
+    assert "☑ 3" in page.locator(".tcard:has-text('带验收的任务')").inner_text()
+
+
+def test_inbox_badge_modal_and_jump(ui):
+    """待拍板：徽标计数、弹窗分组列出、点一条跳到项目"""
+    from datetime import datetime, timedelta
+    page, api, _ = ui
+    p = make_project(api, "拍板面板项目")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "逾期任务", "due_date": yesterday})
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "验收任务", "status": "待审查"})
+    page.reload(wait_until="domcontentloaded")
+
+    page.wait_for_function(
+        "() => document.getElementById('inbox-badge') "
+        "&& document.getElementById('inbox-badge').style.display !== 'none'", timeout=15000)
+    assert page.locator("#inbox-badge").inner_text() == "2"
+
+    page.click("[data-act='openInbox']")
+    page.wait_for_selector("#inbox-modal.show", timeout=10000)
+    body = page.locator("#inbox-body").inner_text()
+    assert "逾期任务" in body and "验收任务" in body, body
+
+    page.click("#inbox-body .tcard:has-text('验收任务')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    assert "拍板面板项目" in page.locator("#view-detail").inner_text()
+
+
+def test_expired_memory_is_marked_in_the_panel(ui):
+    """过期记忆：面板里划线 + ⚠️ 标注，没设时效的不受影响"""
+    from datetime import datetime, timedelta
+    page, api, _ = ui
+    p = make_project(api, "时效记忆面板项目")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    api.post("/api/memories", {"pid": p["id"], "type": "事实",
+                               "text": "已经过期的方案", "expires": yesterday})
+    api.post("/api/memories", {"pid": p["id"], "type": "约定", "text": "长期有效的约定"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('时效记忆面板项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.wait_for_selector(".memory-item", timeout=10000)
+
+    expired = page.locator(".memory-item.expired:has-text('已经过期的方案')")
+    assert expired.count() == 1, "过期记忆没有拿到 .expired 样式"
+    assert "⚠️ 已过期" in expired.inner_text()
+    fresh = page.locator(".memory-item:has-text('长期有效的约定')")
+    assert "expired" not in (fresh.get_attribute("class") or ""), "未设时效的记忆不该被标过期"
+
+
+def test_journal_overflow_folds_in_task_modal(ui):
+    """过程记录超上限后，任务弹窗里能看到折叠摘要行（不是无声消失）"""
+    page, api, _ = ui
+    p = make_project(api, "折叠面板项目")
+    t = api.post(f"/api/projects/{p['id']}/tasks", {"title": "高频流转任务"})[1]
+    for i in range(55):                      # 默认 MAX_JOURNAL=50，55 次状态流转必然溢出
+        api.put(f"/api/tasks/{t['id']}",
+                {"title": "高频流转任务", "status": "进行中" if i % 2 == 0 else "待办"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('折叠面板项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.click(".tcard:has-text('高频流转任务')")
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+
+    folded = page.locator("#t-journal-list .j-folded")
+    assert folded.count() == 1, "折叠摘要没有渲染"
+    assert "已折叠" in folded.inner_text() and "状态：" in folded.inner_text()
+    rows = page.locator("#t-journal-list .j-row")
+    assert rows.count() <= 50, "折叠后总条数必须压回上限内"

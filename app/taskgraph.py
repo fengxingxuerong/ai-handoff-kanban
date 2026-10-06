@@ -132,7 +132,7 @@ def executable_tasks(tasks: list[dict]) -> list[dict]:
     done_ids = {t.get("id") for t in tasks if t.get("status") == "已完成"}
     known_ids = {t.get("id") for t in tasks}      # 只算一次：原来这个集合是在下面按任务逐个重建的
     return [t for t in tasks
-            if t.get("status") != "已完成"
+            if t.get("status") not in ("已完成", "待审查")
             and all(d in done_ids or d not in known_ids
                     for d in (t.get("depends_on") or []))]
 

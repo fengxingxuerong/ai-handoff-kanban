@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -313,7 +314,7 @@ def test_write_tools_use_enums_for_status(mcp):
     """状态/优先级必须给 enum，避免模型自己编值"""
     tools = {t["name"]: t for t in mcp.call("tools/list")["result"]["tools"]}
     add_task = tools["kanban_add_task"]["inputSchema"]["properties"]
-    assert set(add_task["status"]["enum"]) == {"待办", "进行中", "已完成", "阻塞"}
+    assert set(add_task["status"]["enum"]) == {"待办", "进行中", "待审查", "已完成", "阻塞"}
     assert set(add_task["priority"]["enum"]) == {"高", "中", "低"}
     upd = tools["kanban_update_project"]["inputSchema"]["properties"]
     assert set(upd["status"]["enum"]) == {"规划中", "进行中", "已暂停", "已完成"}
@@ -1205,6 +1206,19 @@ def test_next_task_tool_names_the_reason_when_nothing_is_ready(mcp):
     text3, _ = mcp.tool("kanban_next_task", {"project_id": wait})
     assert f"- [{a}] 前置甲" in text3, text3        # 能做的照实列出来
     assert "被前置挡住" in text3 and "前置甲" in text3.split("被前置挡住")[1], text3
+
+def test_next_task_tool_says_when_all_done_await_review(mcp):
+    """全部干完但有人没验收，和『都完成了』、『都在等前置』是三件不同的事，要分开说"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "等验收的项目"})[0])
+    t = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "Agent 干完的活"})[0])
+    mcp.tool("kanban_update_task", {"task_id": t, "status": "待审查"})
+    text, err = mcp.tool("kanban_next_task", {"project_id": pid})
+    assert not err and "全部干完了" in text and "等人验收" in text, text
+    assert "都已完成" not in text and "等前置" not in text, "别把『在等审查』说成『已完成』或『在等前置』"
+
+    mcp.tool("kanban_update_task", {"task_id": t, "status": "已完成"})
+    text2, _ = mcp.tool("kanban_next_task", {"project_id": pid})
+    assert "都已" in text2 and "等人验收" not in text2, text2
     # 说明：无环数据里"一条都动不了"其实到不了（拓扑上必然有入度为 0 的一条），
     # 那行文案是兜底，不为它编一个假场景来测。
 
@@ -1440,3 +1454,47 @@ def test_setting_a_repo_path_says_what_the_board_will_do_with_it(mcp):
     assert "之后看板会在那里跑 git" in text, text
     plain = mcp.tool("kanban_create_project", {"name": "没设路径的项目"})[0]
     assert "跑 git" not in plain, plain
+
+
+# ---------------- 2026-10 竞品吸取：验收标准 / 记忆时效 ----------------
+
+def test_add_task_acceptance_is_kept_and_reported(mcp):
+    """对标 Backlog.md 的 DoD：代理建任务时应能写验收标准，交接包带着走。
+    超限被截断时 `_clean_notes` 必须说出来（清洗丢了东西要在回执里说话）。"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "验收 MCP 项目"})[0])
+    text, is_err = mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "带验收的任务",
+        "acceptance": ["全部用例通过", "README 补用法"]})
+    assert not is_err and "验收标准 2 条已记下" in text, text
+    detail = mcp.tool("kanban_get_project", {"project_id": pid})[0]
+    assert "全部用例通过" in detail, "验收标准要进代理读得到的项目详情"
+
+    many = [f"标准{i}" for i in range(15)]      # 12 条会被截到 10 条
+    text2, _ = mcp.tool("kanban_add_task", {"project_id": pid, "title": "超限的", "acceptance": many})
+    assert "没落上" in text2 and "验收标准" in text2, text2
+
+    # 增量动词与 HTTP 侧同一套语义
+    tid = last_id(mcp.tool("kanban_add_task", {"project_id": pid, "title": "增量验收",
+                                               "acceptance": ["甲"]})[0])
+    text3, _ = mcp.tool("kanban_update_task", {"task_id": tid, "acceptance_add": ["乙"]})
+    assert not is_err, text3
+    got = mcp.tool("kanban_get_project", {"project_id": pid})[0]
+    assert "乙" in got
+
+
+def test_memory_add_with_expires_reports_the_window_and_garbage(mcp):
+    """对标 OKM 时效语义：有保质期的事实给 expires；格式不对要说『按长期有效处理』，
+    不许回一句『已记下』让调用方以为设上了。"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "时效记忆 MCP 项目"})[0])
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    text, _ = mcp.tool("kanban_memory_add", {
+        "project_id": pid, "type": "事实", "text": "这把 key 用到明天",
+        "expires": tomorrow})
+    assert f"有效期到 {tomorrow}" in text, text
+
+    text2, _ = mcp.tool("kanban_memory_add", {
+        "project_id": pid, "type": "事实", "text": "下周三过期", "expires": "下周三"})
+    assert "没认出来" in text2 and "长期有效" in text2, text2
+
+    listed = mcp.tool("kanban_list_memories", {"project_id": pid})[0]
+    assert f"有效期至 {tomorrow}" in listed, listed

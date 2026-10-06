@@ -49,6 +49,11 @@ from .due import (  # noqa: F401  —— 这些名字仍可从 app.main 取，�
     _clean_due_date,
     _due_state,
 )
+# LLM 用量聚合：2026-10-01 P0-1 从本文件的 usage_stats() 抽出（纯函数，穷举测试）
+from . import usage_stats as usage_metrics
+from . import project_stats as project_metrics
+# 任务自动分配：2026-10-01 新增（纯函数，就绪口径复用 taskgraph.executable_tasks）
+from . import assign as assign_module
 # 交接内容脱敏：2026-09-26 从本文件整体搬出（实现逐字未改）
 from .redact import (  # noqa: F401  —— 这些名字仍可从 app.main 取，既有 import 与 monkeypatch 路径不变
     MASK_MARK,
@@ -88,10 +93,12 @@ from .sessions import (  # noqa: F401
     is_allowed_session_file,
 )
 # 多智能体入口文件生成：2026-09-26 从本文件整体搬出（实现逐字未改）
-from .agentfiles import (  # noqa: F401
+from .agentfiles import (  # noqa: F401  —— 这些名字仍可从 app.main 取，既有 import 与 monkeypatch 路径不变
     AGENT_ENTRY_TARGETS,
     CLAUDE_BRIDGE,
+    SKILL_NAME,
     _cursor_rule,
+    _skill_entry,
     build_agent_entries,
 )
 from .readiness import readiness_items, readiness_score
@@ -102,13 +109,14 @@ APP_NAME = "ai-kanban"
 # 用户没设时两边都落回 18320。服务没开时链接取不到，交接包正文仍可用（它是快照）。
 SERVICE_PORT = os.environ.get("KANBAN_PORT", "18320")
 DEFAULT_STATUS = ["规划中", "进行中", "已暂停", "已完成"]
-DEFAULT_TASK_STATUS = ["待办", "进行中", "已完成", "阻塞"]
+DEFAULT_TASK_STATUS = ["待办", "进行中", "待审查", "已完成", "阻塞"]
 DEFAULT_PRIORITY = ["高", "中", "低"]
 
 # 数据文档与机器可读交接包的**结构版本**，与 APP_VERSION（发布号）分开：
 # 换机导入时"这份 JSON 的字段形状是哪一版"和"看板是第几版"是两件事。
 # 加字段/改字段语义时 +1，并在 tests/test_api.py 的接手包字段集合快照里同步。
-SCHEMA_VERSION = 1
+# v2（2026-10-06）：任务 slim 带 `acceptance`（验收标准）、顶层带 `expired_memory_count`。
+SCHEMA_VERSION = 2
 
 # 导出落盘允许的扩展名。前端 `saveAgentsMD` 里那条正则必须与这份一字不差
 # （以前前端少一条 `.markdown`，后端明明允许却被前端挡在门外），
@@ -265,6 +273,10 @@ def _sanitize(data: dict) -> dict:
     """规范化读入的数据：修正非法状态/优先级，保证前端不拿到越界值"""
     if not isinstance(data, dict):
         return {"projects": []}
+    # 自定义视图是全局配置（"保存当前筛选 → 命名 → 切换"），同样收一道：
+    # 导入/恢复来的脏视图在每次读上清掉，保证前端永远拿到形状稳定的列表。
+    if isinstance(data.get("views"), list):
+        data["views"] = _clean_views(data["views"])
     projects = data.get("projects")
     if not isinstance(projects, list):
         data["projects"] = []
@@ -283,6 +295,10 @@ def _sanitize(data: dict) -> dict:
             p["progress"] = 0
         if not isinstance(p.get("tags"), list):
             p["tags"] = []
+        if isinstance(p.get("milestones"), list):
+            # 里程碑是「追加型」字段，导入/恢复时同样收一道：
+            # 同名、超长、超过上限的条目在这里清掉，保证前端拿到稳定形状。
+            p["milestones"] = _clean_milestones(p["milestones"])
         tasks = p.get("tasks")
         if not isinstance(tasks, list):
             p["tasks"] = tasks = []
@@ -295,12 +311,18 @@ def _sanitize(data: dict) -> dict:
             if t.get("priority") not in DEFAULT_PRIORITY:
                 t["priority"] = "中"
             t["refs"] = clean_refs(t.get("refs"))      # 老数据没有这个字段，顺带补齐
+            t["acceptance"] = clean_acceptance(t.get("acceptance"))   # 同上：老数据补空列表
             t["journal"] = clean_journal(t.get("journal"))   # 过程轨迹也收一道，防导入的脏数据撑大文件
             if t.get("due_date"):
                 # 只在本来就有值时归一：不给老数据凭空加键（导出体积与前端判断都按"有没有"走）
                 t["due_date"] = _clean_due_date(t["due_date"])
             if not isinstance(t.get("depends_on"), list):
                 t["depends_on"] = []
+            if t.get("milestone") is not None:
+                # 只在本来就有值时归一（与 due_date 同一纪律）：不给老数据凭空加键；
+                # 只留字符串、去首尾空白、截断 40，别的类型一律置 ""（归不进任何里程碑）。
+                m = t["milestone"]
+                t["milestone"] = str(m).strip()[:MAX_MILESTONE_NAME] if isinstance(m, str) else ""
         # 顺手清掉指向已删除任务的依赖（否则任务永远"等一个不存在的东西"）
         ids = {t.get("id") for t in tasks if isinstance(t, dict)}
         for t in tasks:
@@ -497,6 +519,82 @@ def _readiness_score(p: dict) -> int:
 
 # ---------------- 请求模型 ----------------
 
+# 自定义视图（Plane Views 轻量版）：总览筛选条件的「命名 → 保存 → 切换」薄壳。
+# 它是追加型存储（存 projects.json 顶层 `views`），按硬性约定 11 必须有上限。
+MAX_SAVED_VIEWS = 30
+MAX_VIEW_NAME = 40
+MAX_VIEW_QUERY = 200   # 视图里保存的搜索词上限
+
+
+def _clean_views(v) -> list[dict]:
+    """清洗顶层 `views`：`[{id, name, filter, q, created_at, updated_at}]`。
+
+    纪律与 `_clean_milestones` 一致：只认带非空 id/name 的 dict，类型不对的整条丢弃；
+    name 去首尾空白并截断、**id 与 name 双重去重**（首现者胜）；
+    `filter` 只放行「全部」或项目状态枚举；`q` 截断；总量封顶 `MAX_SAVED_VIEWS`。
+    id 缺失不补（与项目/任务同纪律：视图 id 由服务端生成，缺 id = 脏数据）。
+    挂在每次读的 `_sanitize` 上，导入/恢复过来的脏视图同样过这道。
+    """
+    out: list[dict] = []
+    if not isinstance(v, (list, tuple)):
+        return []
+    seen_ids: set = set()
+    seen_names: set = set()
+    for item in v:
+        if not isinstance(item, dict):
+            continue
+        vid = str(item.get("id") or "").strip()[:24]
+        name = str(item.get("name") or "").strip()[:MAX_VIEW_NAME]
+        if not vid or not name or vid in seen_ids or name in seen_names:
+            continue
+        f = str(item.get("filter") or "全部").strip()
+        if f not in ("全部", *DEFAULT_STATUS):
+            f = "全部"
+        q = str(item.get("q") or "").strip()[:MAX_VIEW_QUERY]
+        seen_ids.add(vid)
+        seen_names.add(name)
+        out.append({
+            "id": vid,
+            "name": name,
+            "filter": f,
+            "q": q,
+            "created_at": str(item.get("created_at") or "")[:30],
+            "updated_at": str(item.get("updated_at") or "")[:30],
+        })
+        if len(out) >= MAX_SAVED_VIEWS:
+            break
+    return out
+
+
+# 里程碑（P2 轻量版）上限：方案明确「追加型字段设上限，里程碑≦20 个」。
+MAX_MILESTONES = 20
+MAX_MILESTONE_NAME = 40   # 也用于任务的 milestone 归属字段（与名称同一截断口径）
+
+
+def _clean_milestones(v) -> list[dict]:
+    """清洗项目的里程碑数组：`[{name, done?}]`。
+
+    规则：只认带非空 name 的 dict（类型不对的整条丢弃）；name 去首尾空白并截断；
+    同名去重（按首次出现的顺序保留）；`done` 只当布尔用，其余值一律按 False；
+    总量封顶 `MAX_MILESTONES`。清出来的结构保证前端与统计模块拿到稳定形状。
+    """
+    out: list[dict] = []
+    if isinstance(v, str):
+        v = [{"name": x} for x in v.replace("\n", ",").split(",")]
+    if not isinstance(v, (list, tuple)):
+        return []
+    for item in v:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()[:MAX_MILESTONE_NAME]
+        if not name or name in [m["name"] for m in out]:
+            continue
+        out.append({"name": name, "done": bool(item.get("done"))})
+        if len(out) >= MAX_MILESTONES:
+            break
+    return out
+
+
 class ProjectIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     status: Literal["规划中", "进行中", "已暂停", "已完成"] = "规划中"
@@ -507,6 +605,10 @@ class ProjectIn(BaseModel):
     background: str = ""
     handoff_note: str = ""
     next_action: str = ""
+    # 类型放宽为 list：清洗全部交给 _clean_milestones（非 dict 元素按规则丢弃、
+    # 不 422 —— 方案口径是「类型不对的整条丢弃」）。若钉死 list[dict]，
+    # pydantic 会在 validator 之前就把非 dict 元素拒掉，容错永远走不到。
+    milestones: list = []
 
     @field_validator("tags")
     @classmethod
@@ -518,17 +620,24 @@ class ProjectIn(BaseModel):
                 out.append(t)
         return out[:12]
 
+    @field_validator("milestones")
+    @classmethod
+    def _clean_milestones_val(cls, v):
+        return _clean_milestones(v)
+
 
 class TaskIn(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     desc: str = ""
-    status: Literal["待办", "进行中", "已完成", "阻塞"] = "待办"
+    status: Literal["待办", "进行中", "待审查", "已完成", "阻塞"] = "待办"
     priority: Literal["高", "中", "低"] = "中"
     agent: str = ""
     due_date: str = ""            # 截止日期 YYYY-MM-DD，空=未设置
     refs: list[str] = []          # 相关代码位置，如 app/main.py:120；交接时用来说明"改哪里"
     depends_on: list[str] = []    # 前置任务 id（同一项目内），用于排"先做哪个"
-
+    milestone: str = ""           # 归入的项目里程碑名（空=未归入）；普通字符串校验，非 Literal
+    acceptance: list[str] = []    # 验收标准（对标 Backlog.md 的 DoD）：逐条"怎么算完成"，
+                                  # 交接包与接手页带着走，待审查→已完成时照着验
     @field_validator("due_date", mode="before")
     @classmethod
     def _clean_due(cls, v):
@@ -540,6 +649,12 @@ class TaskIn(BaseModel):
         except ValueError:
             return ""
         return v
+
+    @field_validator("milestone", mode="before")
+    @classmethod
+    def _clean_milestone(cls, v):
+        v = (v or "").strip()
+        return v[:MAX_MILESTONE_NAME] if v else ""
 
     @field_validator("refs", mode="before")
     @classmethod
@@ -554,6 +669,38 @@ class TaskIn(BaseModel):
         if not isinstance(v, (list, tuple)):
             return []
         return [str(x).strip() for x in v if str(x).strip()]
+
+    @field_validator("acceptance", mode="before")
+    @classmethod
+    def _clean_acceptance(cls, v):
+        return clean_acceptance(v)
+
+
+class AssignIn(BaseModel):
+    """任务自动分配请求：把项目内『指定优先级、未完成、依赖已就绪』的任务批量指派给某智能体。
+
+    `overwrite=True` 时连已有负责人的任务一起覆盖（默认跳过，保护手工指派）。
+    """
+    agent: str = Field(..., min_length=1, max_length=60, description="要指派给的智能体名，如 cline / 豆包")
+    priority: Literal["高", "中", "低"] = "高"
+    overwrite: bool = False
+
+
+class ViewIn(BaseModel):
+    """持久化自定义视图（Plane Views 轻量版）：`filter` 放行项目状态白名单，`q` 是搜索词。
+
+    保存语义是「upsert-by-name」：同名再存 = 更新该视图并返回原 id（带 `updated: true`），
+    不产生重复条目 —— 菜单里"把当前筛选存成同名视图"是常见动作，报 409 只会让人困惑。
+    """
+    name: str = Field(..., min_length=1, max_length=MAX_VIEW_NAME, description="视图名，同名即覆盖更新")
+    filter: str = Field("全部", description="项目状态筛选：全部/规划中/进行中/已暂停/已完成")
+    q: str = Field("", max_length=MAX_VIEW_QUERY, description="保存的搜索词，应用视图时回填搜索框")
+
+    @field_validator("filter")
+    @classmethod
+    def _clean_view_filter(cls, v):
+        v = (v or "").strip()
+        return v if v in ("全部", *DEFAULT_STATUS) else "全部"
 
 
 # ---------------- 应用 ----------------
@@ -669,6 +816,9 @@ def project_context(pid: str, redact: int = 0):
             d["agent"] = t["agent"]
         if t.get("refs"):
             d["refs"] = t["refs"]
+        if t.get("acceptance"):
+            # 验收标准原样保留：接手方要照着验"怎么算完成"，盖了就没法当清单用
+            d["acceptance"] = t["acceptance"]
         if t.get("desc"):
             d["desc"] = mask((t.get("desc") or ""))[:200]
         jr = t.get("journal") or []
@@ -682,6 +832,10 @@ def project_context(pid: str, redact: int = 0):
         return d
 
     missing = [it["label"] for it in _readiness_items(p) if not it["ok"]]
+    # 过期记忆不进接手包（"轮换 sk-xxx 这把"这类有保质期的事实过期后就是误导），
+    # 但**省了几个要说话**：接手方得知道这里少了几条、为什么少。
+    pid_memories = [m for m in _load_memories() if m.get("pid") == p.get("id")]
+    expired_cnt = sum(1 for m in pid_memories if _memory_expired(m))
     return {
         "app": "ai-kanban",
         "schema_version": SCHEMA_VERSION,
@@ -696,7 +850,8 @@ def project_context(pid: str, redact: int = 0):
             "next_action": mask(p.get("next_action", "")),
         },
         "memories": [{**m, "text": mask(m.get("text") or "")}
-                     for m in _load_memories() if m.get("pid") == p.get("id")][-15:],
+                     for m in pid_memories if not _memory_expired(m)][-15:],
+        "expired_memory_count": expired_cnt,
         "code_reality": ({
             "available": True,
             "branch": snap.get("branch", ""),
@@ -717,6 +872,7 @@ def project_context(pid: str, redact: int = 0):
         "tasks": {
             "todo": [slim(t) for t in tasks if t.get("status") == "待办"],
             "in_progress": [slim(t) for t in tasks if t.get("status") == "进行中"],
+            "review": [slim(t) for t in tasks if t.get("status") == "待审查"],
             "blocked": [slim(t) for t in tasks if t.get("status") == "阻塞"],
             "done_count": sum(1 for t in tasks if t.get("status") == "已完成"),
         },
@@ -795,7 +951,7 @@ def list_projects():
     out = []
     for p in data.get("projects", []):
         tasks = p.get("tasks", [])
-        counts = {"待办": 0, "进行中": 0, "已完成": 0, "阻塞": 0}
+        counts = {"待办": 0, "进行中": 0, "待审查": 0, "已完成": 0, "阻塞": 0}
         for t in tasks:
             counts[t.get("status", "待办")] = counts.get(t.get("status", "待办"), 0) + 1
         out.append({
@@ -831,7 +987,8 @@ def create_project(body: ProjectIn, client_ref: str = ""):
         "progress": body.progress, "priority": body.priority,
         "tags": body.tags or [], "repo_path": body.repo_path.strip(),
         "background": body.background, "handoff_note": body.handoff_note,
-        "next_action": body.next_action, "tasks": [],
+        "next_action": body.next_action, "milestones": body.milestones or [],
+        "tasks": [],
         "created_at": now, "updated_at": now,
     }
     ref = _clean_ref(client_ref)
@@ -844,7 +1001,7 @@ def create_project(body: ProjectIn, client_ref: str = ""):
                     if p.get("id") == hit:
                         return False, p      # 重试：原样返回，一个字节都不写
                 data.get(IDEM_KEY, {}).pop(ref, None)   # 键指向的记录已被删，别再认它
-        # 首次落盘：磁盘上还没有数据文件时，说明看板从未被真正使用过，
+# 首次落盘：磁盘上还没有数据文件时，说明看板从未被真正使用过，
         # 内置示例数据只用于引导界面，不该跟着用户的第一条真实数据一起写进去。
         if not data_file().exists():
             data["projects"] = []
@@ -859,12 +1016,155 @@ def create_project(body: ProjectIn, client_ref: str = ""):
     return result
 
 
+# ---- 持久化自定义视图（Plane Views 轻量版） ----
+# 视图 = 一条「当前筛选」快照：项目状态 filter + 搜索词 q，命名保存、一键切换。
+# 存 projects.json 顶层 `views`（与项目同文件，走 mutate 单临界区），上限 MAX_SAVED_VIEWS。
+# 保存语义是 upsert-by-name：同名再存 = 更新该视图并返回原 id（updated: true），不产生重复条目。
+# 这部分是纯界面配置，不走 MCP（代理不需要替用户改界面偏好）。
+
+@app.get("/api/views")
+def list_views():
+    """视图列表（含 0 条）。按创建顺序返回，前端下拉即用。"""
+    return {"views": get_projects_data().get("views") or []}
+
+
+@app.post("/api/views", status_code=201)
+def save_view(body: ViewIn):
+    """保存视图：name 已存在则更新其 filter/q（upsert），否则新建。"""
+    now = now_str()
+    name = body.name.strip()
+
+    def worker(data: dict):
+        views = data.setdefault("views", [])
+        for v in views:
+            if v.get("name") == name:
+                v["filter"], v["q"] = body.filter, body.q.strip()
+                v["updated_at"] = now
+                return True, {**v, "updated": True}   # 复制后打标记，不回传 storage 引用
+        if len(views) >= MAX_SAVED_VIEWS:
+            raise HTTPException(400, f"最多保存 {MAX_SAVED_VIEWS} 个视图，先删掉不用的再存")
+        view = {"id": uuid.uuid4().hex[:12], "name": name,
+                "filter": body.filter, "q": body.q.strip(),
+                "created_at": now, "updated_at": now}
+        views.append(view)
+        return True, view
+
+    changed, result = mutate(worker)
+    return result
+
+
+@app.patch("/api/views/{vid}")
+def rename_view(vid: str, body: ViewIn):
+    """更新视图（改名/改条件）。改名撞同名视为重复保存（upsert 语义：直接改目标视图）。"""
+    now = now_str()
+
+    def worker(data: dict):
+        views = data.get("views") or []
+        for i, v in enumerate(views):
+            if v.get("id") != vid:
+                continue
+            target = i
+            new_name = body.name.strip()
+            if new_name != v.get("name"):
+                # 名字换给别的视图 = 撞名冲突，报 409（避免前端两个下拉项长得一样）。
+                if any(x.get("name") == new_name for x in views if x.get("id") != vid):
+                    raise HTTPException(409, "已有同名视图")
+            views[target] = {"id": vid, "name": new_name, "filter": body.filter,
+                             "q": body.q.strip(), "created_at": v.get("created_at", ""),
+                             "updated_at": now}
+            return True, views[target]
+        raise HTTPException(404, "视图不存在")
+
+    changed, result = mutate(worker)
+    return result
+
+
+@app.delete("/api/views/{vid}")
+def delete_view(vid: str):
+    """删除视图。视图是界面配置，删除后只影响菜单，不动任何项目数据。"""
+    def worker(data: dict):
+        views = data.get("views") or []
+        nxt = [v for v in views if v.get("id") != vid]
+        if len(nxt) == len(views):
+            raise HTTPException(404, "视图不存在")
+        data["views"] = nxt
+        return True, {"ok": True}
+
+    changed, result = mutate(worker)
+    return result
+
+
 @app.get("/api/projects/{pid}")
 def get_project(pid: str):
+    """项目详情（P2 起附带 `milestones_progress`）。
+
+    `milestones_progress` 由 `app/project_stats.py::milestone_progress` 计算：
+    每个里程碑下已归组任务的完成进度（任务按 `milestone` 字段匹配里程碑 name）。
+    进度口径只有这一处实现 —— 前端不重算，避免「两条路给不同答案」
+    （本项目纪律，见 AGENTS.md 约定 20）。浅拷贝后再附加，绝不写进存储引用。
+    """
     found = find_project(pid)
     if not found:
         raise HTTPException(404, "项目不存在")
-    return found[1]
+    p = dict(found[1])
+    p["milestones_progress"] = project_metrics.milestone_progress(
+        p.get("milestones") or [], p.get("tasks") or [])
+    return p
+
+
+@app.get("/api/projects/{pid}/stats")
+def get_project_stats(pid: str):
+    """项目级统计（P0-2）：任务状态分布 / 截止日期热力 / 依赖阻塞链。
+
+    纯函数聚合在 `app/project_stats.py`（口径与 due._due_state、taskgraph.executable_tasks
+对齐）；这里只负责找项目。读路径不写任何数据。
+    """
+    found = find_project(pid)
+    if not found:
+        raise HTTPException(404, "项目不存在")
+    return project_metrics.project_stats(found[1].get("tasks") or [])
+
+
+@app.post("/api/projects/{pid}/assign")
+def auto_assign_tasks(pid: str, body: AssignIn):
+    """自动分配（P1）：把项目内『指定优先级 + 未完成 + 依赖已就绪』的任务批量指派智能体。
+
+    写路径走 `mutate_project` 单临界区；分配计划由 `app/assign.py::plan_assign` 纯函数
+    计算（就绪口径复用 `executable_tasks`，与 /next、/stats 同源，不在接口里重写一遍）。
+    返回 `{assigned: [...], skipped: [...], count, skipped_count}` —— 跳过的任务带原因，
+    调用方据此知道『没被分到的是没人做，还是已经有主』，不猜。
+    """
+    agent = (body.agent or "").strip()
+    box: dict = {"result": None}
+
+    def apply(p: dict, _data: dict):
+        tasks = [t for t in (p.get("tasks") or []) if isinstance(t, dict)]
+        to_assign, skipped = assign_module.plan_assign(
+            tasks, agent, priority=body.priority, overwrite=body.overwrite)
+        if not to_assign:
+            box["result"] = {"assigned": [], "skipped": skipped,
+                             "count": 0, "skipped_count": len(skipped),
+                             "priority": body.priority, "agent": agent}
+            return False                 # 一个字节都不写：没人需要分配
+        now = now_str()
+        for t in to_assign:
+            t["agent"] = agent
+            t["updated_at"] = now
+        p["updated_at"] = now
+        box["result"] = {
+            "assigned": [{"id": t.get("id"), "title": t.get("title") or "(未命名任务)"}
+                         for t in to_assign],
+            "skipped": skipped,
+            "count": len(to_assign),
+            "skipped_count": len(skipped),
+            "priority": body.priority,
+            "agent": agent,
+        }
+
+    p = mutate_project(pid, apply)
+    if p is None:
+        raise HTTPException(404, "项目不存在")
+    return box["result"]
 
 
 def _apply_project(p: dict, body: ProjectIn) -> None:
@@ -873,7 +1173,8 @@ def _apply_project(p: dict, body: ProjectIn) -> None:
         "progress": body.progress, "priority": body.priority,
         "tags": body.tags or [], "repo_path": body.repo_path.strip(),
         "background": body.background, "handoff_note": body.handoff_note,
-        "next_action": body.next_action, "updated_at": now_str(),
+        "next_action": body.next_action, "milestones": body.milestones or [],
+        "updated_at": now_str(),
     })
 
 
@@ -892,7 +1193,8 @@ def _as_list(v) -> list:
 # 而那一次读发生在临界区**外面** —— 期间桌面端加进去的 refs 会被这次写回整体抹掉。
 # 这正是硬性约定 1 的丢更新形状，Backlog.md 的 `task_edit`（planSet/planAppend/planClear）
 # 与 GitHub labels 的 PUT/POST/DELETE 三件套都是同一个解法。
-COLLECTION_OPS = {"tags": "tags_add", "refs": "refs_add", "depends_on": "depends_on_add"}
+COLLECTION_OPS = {"tags": "tags_add", "refs": "refs_add", "depends_on": "depends_on_add",
+                  "acceptance": "acceptance_add"}
 
 
 def _expand_ops(model, current: dict, changes: dict) -> dict:
@@ -1024,8 +1326,10 @@ def create_task(pid: str, body: TaskIn, client_ref: str = ""):
         "title": body.title.strip(), "desc": body.desc,
         "status": body.status, "priority": body.priority,
         "agent": body.agent.strip(), "due_date": body.due_date,
-        "created_at": now, "updated_at": now, "journal": [],
+        "milestone": body.milestone, "created_at": now, "updated_at": now,
+        "journal": [],
         "refs": clean_refs(body.refs),
+        "acceptance": clean_acceptance(body.acceptance),
         "depends_on": [],          # 依赖在锁内算，见 apply
     }
     replay: dict = {}
@@ -1079,8 +1383,9 @@ def _apply_task(t: dict, p: dict, tid: str, body: TaskIn) -> None:
         "title": body.title.strip(), "desc": body.desc,
         "status": body.status, "priority": body.priority,
         "agent": body.agent.strip(), "due_date": body.due_date,
-        "updated_at": now,
+        "milestone": body.milestone, "updated_at": now,
         "refs": clean_refs(body.refs),
+        "acceptance": clean_acceptance(body.acceptance),
         "depends_on": deps,
     })
     # 状态流转自动沉淀过程轨迹
@@ -1159,36 +1464,90 @@ def update_task(tid: str, body: TaskIn):
 
 MAX_JOURNAL = 50           # 每个任务最多留多少条过程记录
 MAX_JOURNAL_TEXT = 500     # 单条正文上限：这一个数同时是 HTTP/MCP 的入参上限与落盘长度
+JOURNAL_SNIPPET = 60       # 折叠摘要里每条旧记录保留的字符数（摘要整体仍受 MAX_JOURNAL_TEXT 约束）
+# 验收标准（对标 Backlog.md 的可复用 DoD 清单）：任务"怎么算完成"要明说，
+# 否则"待审查→已完成"全凭当时的人/智能体心情，接手方也没有验收清单可照。
+MAX_ACCEPTANCE_ITEMS = 10  # 每个任务最多多少条验收标准
+MAX_ACCEPTANCE_TEXT = 120  # 单条验收标准长度上限
                            # （以前入参收 2000、落盘悄悄截到 500，两侧的"1200 字记录"
                            # 会少掉 700 字而回执不说 —— 现在超限在边界就被挡）
 
 
 def _append_journal(t: dict, text: str, when: str = "") -> None:
-    """追加一条过程轨迹，并裁掉超出的部分。
+    """追加一条过程轨迹，超出上限的旧条目**折叠成摘要**而不是直接丢掉。
 
     journal 存在 projects.json 里 —— 那是每次读写都要整份解析的核心文件，
     状态流转还会自动追加，不设上限就是"悄悄变胖"：读写变慢、备份变大、交接包变长。
+    但"只留最近 N 条"意味着早期记录无声消失（为什么改方向、哪天开始卡住的）——
+    对标 Beads 的旧记录衰减摘要：溢出部分折成一条摘要留在最前面，体量有上限、脉络不丢。
     """
     j = t.get("journal")
     if not isinstance(j, list):
         j = t["journal"] = []
     j.append({"time": when or now_str(), "text": (text or "")[:MAX_JOURNAL_TEXT]})
     if len(j) > MAX_JOURNAL:
-        del j[:-MAX_JOURNAL]
+        t["journal"] = compress_journal(j)
+
+
+def compress_journal(entries: list[dict]) -> list[dict]:
+    """把超出 `MAX_JOURNAL` 的最旧条目折成一条摘要，总条数压回上限内。
+
+    纯函数：不修改入参。摘要条目带 `folded` 计数（累计折进去多少条原始记录，
+    再次折叠时继承），`time` 是被折区间的首尾日期，正文仍是受限的普通文本 ——
+    前端/交接包不需要任何特殊处理就能显示，只是这条以【早期…已折叠】开头。
+    """
+    entries = [e for e in entries if isinstance(e, dict)]
+    if len(entries) <= MAX_JOURNAL:
+        return entries
+    cut = len(entries) - MAX_JOURNAL          # 溢出条数；再多折 1 条进来给摘要腾位置
+    overflow, keep = entries[:cut + 1], entries[cut + 1:]
+    folded = sum(int(e.get("folded") or 0) or 1 for e in overflow)
+    digest = "；".join((e.get("text") or "")[:JOURNAL_SNIPPET] for e in overflow)
+    summary = {
+        "time": f"{(overflow[0].get('time') or '')[:10]}~{(overflow[-1].get('time') or '')[:10]}",
+        "text": (f"【早期 {folded} 条已折叠】{digest}")[:MAX_JOURNAL_TEXT],
+        "folded": folded,
+    }
+    return [summary] + keep
 
 
 def clean_journal(raw) -> list[dict]:
-    """规范化过程轨迹：只留字典条目、限长限量（导入的脏数据也走这里）"""
+    """规范化过程轨迹：只留字典条目、限长，超出 `MAX_JOURNAL` 的折叠成摘要
+    （导入的脏数据与手改的 projects.json 也走这里，读路径上自愈）"""
     if not isinstance(raw, list):
         return []
     out = []
-    for item in raw[-MAX_JOURNAL:]:
+    for item in raw:
         if not isinstance(item, dict):
             continue
-        out.append({
+        e = {
             "time": str(item.get("time") or "")[:32],
             "text": str(item.get("text") or "")[:MAX_JOURNAL_TEXT],
-        })
+        }
+        # folded 计数跟着条目走：折叠摘要再次落入溢出区时要按它折进来的原始条数累计
+        if isinstance(item.get("folded"), int) and item["folded"] > 0:
+            e["folded"] = item["folded"]
+        out.append(e)
+    return compress_journal(out)
+
+
+def clean_acceptance(raw) -> list[str]:
+    """规范化验收标准（对标 Backlog.md 的 DoD 清单）：只留字符串、去空去重、限量限长。
+
+    接受字符串或列表（列表元素逐条清洗）；非字符串条目转成字符串保留 ——
+    智能体经 MCP 传数字/布尔时，转写比整条丢弃更接近调用方本意。
+    """
+    if isinstance(raw, str):
+        raw = raw.replace("\r", "").split("\n")
+    if not isinstance(raw, (list, tuple)):
+        return []
+    out = []
+    for item in raw:
+        s = (item if isinstance(item, str) else str(item)).strip()[:MAX_ACCEPTANCE_TEXT]
+        if s and s not in out:
+            out.append(s)
+        if len(out) >= MAX_ACCEPTANCE_ITEMS:
+            break
     return out
 
 
@@ -1345,8 +1704,26 @@ def _build_handoff_markdown(p: dict, memory_rows: list[dict] | None = None,
                 for e in j[-3:]:
                     lines.append(f"- [{e.get('time', '')}] {e.get('text', '')}")
                 lines.append("")
+        # 验收标准（对标 Backlog.md 的 DoD）：已完成的不再列（它已经验过了），
+        # 其余的带着走 —— 接手方验收"这条到底怎么算完"时照着勾。
+        with_acc = [(t, t.get("acceptance") or []) for t in shown
+                    if t.get("acceptance") and t.get("status") != "已完成"]
+        if with_acc:
+            lines.append("### 验收标准（怎么算完成）")
+            lines.append("")
+            for t, acc in with_acc:
+                lines.append(f"**{t.get('title', '')}**")
+                lines += [f"- [ ] {a}" for a in acc]
+                lines.append("")
         mems = memory_rows if memory_rows is not None else \
             [m for m in _load_memories() if m.get("pid") == p.get("id")]
+        expired_mems = [m for m in mems if _memory_expired(m)]
+        mems = [m for m in mems if not _memory_expired(m)]
+        if expired_mems and "memories" not in omit:
+            # 省了几个要说话：过期记忆是有意不带的，但接手方不能把"没写"读成"没有"
+            lines.append(f"> ⚠️ 另有 {len(expired_mems)} 条已过时效的记忆未列入"
+                         "（expires 早于今天；要翻旧账去看板「项目记忆」面板）。")
+            lines.append("")
         if mems and "memories" not in omit:
             lines.append("### 已沉淀记忆（结构化要点）")
             lines.append("")
@@ -1598,6 +1975,48 @@ def today_tasks(limit: int = 30):
     }
 
 
+@app.get("/api/inbox")
+def inbox():
+    """需要人拍板的事，跨项目汇总：逾期（改期还是推进？）、待审查（验不验收？）、
+    阻塞（障碍解不解？）。
+
+    对标 Multica 的 Inbox 哲学——"agent 需要人拍板才 ping 你，不是每步都 ping"：
+    这里**只列等人的**。依赖没满足的任务会随前置完成自然流转（/api/today 管"现在能
+    做什么"），临期（2 天内）只是提醒不是决定（顶部横幅已经管了），都不进这份清单。
+    每条任务只进一类，优先级：待审查（最接近完成）> 阻塞 > 逾期。
+    """
+    data = get_projects_data()
+    today = datetime.now().strftime("%Y-%m-%d")
+    items = []
+    for p in data.get("projects", []):
+        for t in (p.get("tasks") or []):
+            if not isinstance(t, dict) or t.get("status") == "已完成":
+                continue
+            kind = ""
+            if t.get("status") == "待审查":
+                kind = "review"
+            elif t.get("status") == "阻塞":
+                kind = "blocked"
+            else:
+                due = (t.get("due_date") or "").strip()
+                if due and due < today:
+                    kind = "overdue"
+            if kind:
+                items.append({
+                    "kind": kind,
+                    "project_id": p.get("id"), "project_name": p.get("name", ""),
+                    "task_id": t.get("id"), "title": t.get("title", ""),
+                    "priority": t.get("priority", "中"),
+                    "due_date": t.get("due_date") or "",
+                })
+    order = {"review": 0, "blocked": 1, "overdue": 2}
+    items.sort(key=lambda x: (order[x["kind"]], x["priority"] == "低",
+                              x["due_date"] or "9999-12-31"))
+    counts = {k: sum(1 for i in items if i["kind"] == k) for k in ("review", "blocked", "overdue")}
+    return {"items": items, "counts": counts, "total": len(items),
+            "generated_at": now_str()}
+
+
 @app.get("/api/export/page/{pid}")
 def export_handoff_page(pid: str, redact: int = 0):
     """自包含接手页：单文件 HTML，离线可用，人和智能体都能读。
@@ -1661,8 +2080,9 @@ def _project_memories(pid: str) -> list[dict]:
     而以前只有前两处真读了记忆 —— 声明与实现不一致时，用户按说明记了坑，
     换工具接手还是踩一遍。这里把最后一处接上，并限死条数（整份文件是给代理看的，
     无限追加会把真正重要的构建约定挤出去）。
+    已过期的不召回（`expires` 就是"过了这天别再当真"的意思）。
     """
-    rows = list_memories(pid=pid)["memories"]      # 排序只有一份：与 /api/memories 同一个口径
+    rows = [m for m in list_memories(pid=pid)["memories"] if not m.get("expired")]
     return rows[:AGENTS_MEMORY_LINES]
 
 
@@ -1910,6 +2330,8 @@ def export_all_data():
         "projects": data.get("projects", []),
         # 记忆层单独存一个文件，不带出去就等于换机后"决策/坑/约定"全丢
         "memories": _load_memories(),
+        # 自定义视图是全局界面配置，换机不带着走 = 用户攒的筛选快照白存
+        "views": data.get("views", []),
     }
 
 
@@ -1965,11 +2387,17 @@ def import_all_data(body: ImportBody):
     if not isinstance(projects, list):
         raise HTTPException(400, "文件里没有 projects 数据")
     projects, dropped = _writable_projects(projects)
-    # 记忆层：老导出文件里没有这个键 —— 那就**不动**当前记忆，不能因为导入而清空
+# 记忆层：老导出文件里没有这个键 —— 那就**不动**当前记忆，不能因为导入而清空
     raw_mem = cleaned.get("memories")
     mem_items = None
     if isinstance(raw_mem, list):
         mem_items = _writable_memories(raw_mem)
+    # 自定义视图：同一语义 —— 老导出没有 `views` 键就是不动现有视图；
+    # 有了就整份替换（它是全局配置，不属于任何项目，按目录快照整体迁移才对）。
+    raw_views = cleaned.get("views")
+    view_items = None
+    if isinstance(raw_views, list):
+        view_items = _clean_views(raw_views)   # _sanitize 已清一道，这里再兜一道
 
     # 导入前自动留一份快照（零删除安全网，随时可从备份回滚）
     try:
@@ -1981,6 +2409,8 @@ def import_all_data(body: ImportBody):
         # 读-改-写必须在同一个临界区里（硬性约定 1）：先前这里取了一次读锁拿快照、
         # 再取一次写锁整份覆盖，两次取锁之间别的进程/接口写入的项目会被无声抹掉。
         data["projects"] = projects
+        if view_items is not None:
+            data["views"] = view_items
         return True, {"ok": True, "imported": len(projects)}
 
     result = mutate(worker)[1]
@@ -2019,22 +2449,23 @@ def usage_stats():
                 recs.append(json.loads(line))
             except Exception:
                 continue
-    ok = [r for r in recs if r.get("ok")]
-    totals = {"calls": len(ok), "prompt_tokens": 0, "completion_tokens": 0, "failed": len(recs) - len(ok)}
-    by_feature, by_model = {}, {}
-    for r in ok:
-        pt = r.get("prompt_tokens") or 0
-        ct = r.get("completion_tokens") or 0
-        totals["prompt_tokens"] += pt
-        totals["completion_tokens"] += ct
-        bf = by_feature.setdefault(r.get("feature", "?"), {"calls": 0, "tokens": 0})
-        bf["calls"] += 1
-        bf["tokens"] += pt + ct
-        bm = by_model.setdefault(r.get("model", "?"), {"calls": 0, "tokens": 0})
-        bm["calls"] += 1
-        bm["tokens"] += pt + ct
+    # 价格与预算来自 AI 配置（端点级单价 / ai 级月度预算），
+    # 物化为纯函数输入后聚合 —— 路由只负责"读文件 + 读配置 + 透传"。
+    cfg = llm.load_config()
+    price_map = usage_metrics.price_map_from_endpoints((cfg.get("ai") or {}).get("endpoints"))
+    budget_limit = (cfg.get("ai") or {}).get("budget_limit")
+    agg = usage_metrics.aggregate(recs, price_map)
+    budget = usage_metrics.budget_status(recs, price_map, budget_limit)
     recent = sorted(recs, key=lambda r: r.get("time", ""), reverse=True)[:20]
-    return {"totals": totals, "by_feature": by_feature, "by_model": by_model, "recent": recent}
+    return {
+        "totals": agg["totals"],
+        "by_feature": agg["by_feature"],
+        "by_model": agg["by_model"],
+        "by_date": agg["by_date"],
+        "by_endpoint": agg["by_endpoint"],
+        "recent": recent,
+        "budget": budget,
+    }
 
 
 # ---- 项目记忆层（结构化、可检索，对标 Mem0 的本地轻量版） ----
@@ -2109,15 +2540,46 @@ def _trim_memories(items: list[dict]) -> None:
         del items[:-KEEP_MEMORIES_ON_TRIM]
 
 
+def _memory_expired(m: dict, today: str = "") -> bool:
+    """记忆是否已过期：`expires` 设了且早于今天（到期当天仍算有效）。
+
+    对标 OKM 知识代谢的时效语义：决策/约定这类长期事实没有到期日，而
+    "当前用 X 方案""下个迭代前 key 是这把"这类**有保质期**的事实必须能标过期 ——
+    否则过期结论会作为"当前事实"混进交接包，被下一个智能体当真。
+    两边都是 YYYY-MM-DD（写入时已归一），字符串比较即日期比较。
+    """
+    exp = (m.get("expires") or "").strip()
+    if not exp:
+        return False
+    today = today or datetime.now().strftime("%Y-%m-%d")
+    return exp < today
+
+
 class MemoryIn(BaseModel):
     pid: str = ""
     type: str = "事实"
     text: str = Field(..., min_length=1, max_length=2000)
     source: str = "手动"
+    expires: str = ""   # 时效（YYYY-MM-DD，空=长期有效）；过期后不进交接包/AGENTS.md
+
+    @field_validator("expires", mode="before")
+    @classmethod
+    def _clean_expires(cls, v):
+        v = (v or "").strip()
+        if not v:
+            return ""
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            return ""
+        return v
 
 
 @app.get("/api/memories")
 def list_memories(pid: str = "", q: str = "", mtype: str = ""):
+    """`expired` 是每次读**算出来的**（不是存出来的）：跨过到期日后，盘上的数据一个
+    字节没变，但任何出口都不该再把这条当"当前事实"。要不要真删由人决定 ——
+    界面和 MCP 都会把过期条目标出来，照常可以删。"""
     items = _load_memories()
     if pid:
         items = [m for m in items if m.get("pid") == pid]
@@ -2127,7 +2589,9 @@ def list_memories(pid: str = "", q: str = "", mtype: str = ""):
         ql = q.strip().lower()
         items = [m for m in items if ql in (m.get("text") or "").lower()]
     items = sorted(items, key=lambda m: m.get("time", ""), reverse=True)
-    return {"memories": items}
+    items = [{**m, "expired": _memory_expired(m)} for m in items]
+    return {"memories": items,
+            "expired_count": sum(1 for m in items if m["expired"])}
 
 
 @app.post("/api/memories", status_code=201)
@@ -2146,6 +2610,8 @@ def add_memory(body: MemoryIn):
         "text": body.text.strip(),
         "source": body.source, "time": now_str(),
     }
+    if body.expires:
+        entry["expires"] = body.expires
 
     def worker(items: list[dict]):
         # 去重：同项目同文本不重复入
@@ -2353,7 +2819,7 @@ def restore_data(body: RestoreBody):
     kept, dropped = _writable_projects(restored["projects"])
     if not kept:
         raise HTTPException(400, f"该来源里没有任何可恢复的项目（{len(dropped)} 条都缺 id 或名称），"
-                                 "已放弃恢复；当前数据保持原样")
+"已放弃恢复；当前数据保持原样")
     restored["projects"] = kept
     # 约定 13：幂等键表是"本进程刚才那次重试"的窗口，导出/导入都不带它。
     # 恢复同样是时间机器（`backup_*/projects.json` 里原样躺着当时整张表），
@@ -2367,8 +2833,13 @@ def restore_data(body: RestoreBody):
                 shutil.copy2(data_file(), before_restore_file())
         except Exception:
             pass
+        # 自定义视图与记忆层同语义：来源里没有 `views` 键 = 保持现状。
+        # 老备份是"视图功能上线前"拍的，不能因为回滚旧数据把攒下来的界面配置一起清掉。
+        kept_views = data.get("views") if "views" not in restored else None
         data.clear()
         data.update(restored)
+        if kept_views is not None:
+            data["views"] = kept_views
         return True, restored
 
     mutate(worker)
@@ -2431,7 +2902,7 @@ def _summarize_inner(pid: str, text: str) -> dict:
         "你是任务看板的会话提炼助手。用户会把一段与某个项目相关的 AI 对话/聊天记录粘给你，"
         "请提炼有价值的信息，输出 JSON（不要输出其他内容）：\n"
         '{"summary": "这段会话的一句话总结", '
-        '"new_tasks": [{"title": "任务标题", "desc": "描述", "priority": "高/中/低", "status": "待办/进行中/已完成/阻塞"}], '
+        '"new_tasks": [{"title": "任务标题", "desc": "描述", "priority": "高/中/低", "status": "待办/进行中/待审查/已完成/阻塞"}], '
         '"next_action": "建议的下一步行动（若没有则为空字符串）", '
         '"memories": [{"type": "决策/坑/约定/事实", "text": "值得长期记住的要点"}], '
         '"handoff_note_updates": "建议补充进交接说明的要点（纯文本一段，若没有则为空字符串）"}\n'
@@ -2640,11 +3111,13 @@ def next_tasks(pid: str):
         "done": sum(1 for t in tasks if t.get("status") == "已完成"),
         "next": [{"id": t["id"], "title": t.get("title"), "priority": t.get("priority"),
                   "refs": t.get("refs") or []} for t in ready],
+        "review": [{"id": t["id"], "title": t.get("title")}
+                   for t in tasks if t.get("status") == "待审查"],
         "blocked": [{"id": t["id"], "title": t.get("title"),
                      "waiting_for": [by_id[d].get("title", d)
                                      for d in (t.get("depends_on") or [])
                                      if d in by_id and by_id[d].get("status") != "已完成"]}
-                    for t in tasks if t.get("id") not in ready_ids and t.get("status") != "已完成"],
+                    for t in tasks if t.get("id") not in ready_ids and t.get("status") not in ("已完成", "待审查")],
     }
 
 
@@ -2744,7 +3217,7 @@ def _projects_brief(projects: list[dict]) -> list[dict]:
                           if t.get("journal") else {})}
                       for t in (p.get("tasks") or [])[:40]],
             "memories": [{**m, "text": redact_text(m.get("text") or "")}
-                         for m in mems_by_pid.get(p["id"], [])][-10:],
+                         for m in mems_by_pid.get(p["id"], []) if not _memory_expired(m)][-10:],
         }
         # 截断必须留痕：以前静默给前 40 条，模型以为"这项目的活就这些"，
         # 于是监管报告漏掉第 41 条之后的阻塞。看板自己的场景测试就造过 45 条的项目。
@@ -2772,6 +3245,7 @@ class AIConfigIn(BaseModel):
     schedule: dict | None = None
     mcp_readonly: bool | None = None
     session_sources: list[dict] | None = None
+    budget_limit: float | None = None
 
 
 def _merge_keys(old_keys: list[str], new_keys: list[str], fallback_pool: list[str] | None = None) -> list[str]:
@@ -2822,8 +3296,14 @@ def put_ai_config(body: AIConfigIn):
                     "api_keys": _merge_keys(old.get(name, []), ep.get("api_keys", []), pool),
                     "models": [m for m in (ep.get("models") or []) if m.strip()],
                     "enabled": bool(ep.get("enabled", True)),
+                    # 每千 token 单价（美元）：成本估算的数据源，走白名单+上限钳制。
+                    # 端点没配 = 0（成本不估算），由 /api/usage 侧按"定价未配置"提示区分。
+                    "price_per_1k_input": usage_metrics.clamp_price(ep.get("price_per_1k_input")),
+                    "price_per_1k_output": usage_metrics.clamp_price(ep.get("price_per_1k_output")),
                 })
             cfg["ai"]["endpoints"] = new_eps
+        if body.budget_limit is not None:
+            cfg["ai"]["budget_limit"] = usage_metrics.clamp_budget(body.budget_limit)
         if body.active_model is not None:
             cfg["ai"]["active_model"] = body.active_model.strip()
         if body.schedule is not None:
@@ -3138,7 +3618,7 @@ def ai_command(body: CommandBody):
         "你是任务看板的自然语言操作助手。用户会用中文下达操作指令，请把它解析成结构化操作。"
         f"支持的操作类型：{_CMD_TYPES}\n"
         "输出 JSON（不要输出其他内容）：\n"
-        '{"actions": [{"type": "create_task", "project_id": "...", "title": "...", "desc": "...", "priority": "高/中/低", "status": "待办/进行中/已完成/阻塞", "agent": "..."}, '
+        '{"actions": [{"type": "create_task", "project_id": "...", "title": "...", "desc": "...", "priority": "高/中/低", "status": "待办/进行中/待审查/已完成/阻塞", "agent": "..."}, '
         '{"type": "update_task", "project_id": "...", "task_id": "...", "field": "...", "value": "..."}, ...]}\n'
         "规则：1) **项目与任务一律用 id 标识** —— 看板数据里每条任务都带 `id`，"
         "改/删任务时同时回传 `project_id` 与 `task_id`；标题可能带脱敏掩码，"

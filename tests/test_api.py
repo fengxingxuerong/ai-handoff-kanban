@@ -657,15 +657,18 @@ def test_machine_readable_packages_declare_schema_version(app_client):
 
 
 def test_context_package_field_set_is_pinned(app_client):
-    """接手包是给别的程序读的：字段集合变了必须是有意为之，不能顺手。"""
+    """接手包是给别的程序读的：字段集合变了必须是有意为之，不能顺手。
+    v2（2026-10-06，对标 Backlog.md/OKM 后新增）：任务 slim 带 `acceptance`（验收标准）、
+    顶层带 `expired_memory_count`（过期记忆省略必须留痕）。"""
     import app.main as kanban
     _, p = app_client.create_project("字段快照")
     _, ctx = app_client.get(f"/api/context/{p['id']}")
     assert set(ctx) == {"app", "schema_version", "generated_at", "usage_hint", "project",
-                        "memories", "code_reality", "start_here", "tasks", "readiness"}
+                        "memories", "expired_memory_count", "code_reality", "start_here",
+                        "tasks", "readiness"}
     assert set(ctx["project"]) == {"id", "name", "status", "progress", "priority", "tags",
                                    "repo_path", "background", "handoff_note", "next_action"}
-    assert set(ctx["tasks"]) == {"todo", "in_progress", "blocked", "done_count"}
+    assert set(ctx["tasks"]) == {"todo", "in_progress", "review", "blocked", "done_count"}
     assert ctx["schema_version"] == kanban.SCHEMA_VERSION
 
 
@@ -878,7 +881,7 @@ def test_local_url_follows_the_serving_port(monkeypatch):
     import app.main as kanban
 
     monkeypatch.setenv("KANBAN_PORT", "18999")
-    kanban.SERVICE_PORT = "18999"
+    monkeypatch.setattr(kanban, "SERVICE_PORT", "18999")
     url = kanban._local_url("/api/context/p1")
     assert url == "http://127.0.0.1:18999/api/context/p1", url
     assert not url.startswith("http://127.0.0.1:18321"), "写死的历史缺陷端口"

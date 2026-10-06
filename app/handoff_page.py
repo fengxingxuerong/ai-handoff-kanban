@@ -169,10 +169,16 @@ def build_handoff_page(p: dict, md: str = "", *, git_block: str = "",
         deps = [d for d in (t.get("depends_on") or []) if d in by_id]
         dep_txt = "、".join(esc(by_id[d].get("title") or d) for d in deps) if deps else "—"
         refs = "、".join(f"<code>{esc(r)}</code>" for r in (t.get("refs") or []))
+        # 验收标准跟着任务走：接手的人验收"怎么算完成"时照着勾（已完成的不列）
+        desc = esc(t.get("desc") or "")
+        acc = t.get("acceptance") or []
+        if acc and t.get("status") != "已完成":
+            acc_html = "<br>".join(f"☐ {esc(a)}" for a in acc)
+            desc = (desc + "<br>" if desc else "") + acc_html
         rows.append(
             f"<tr><td>{esc(t.get('title'))}</td><td>{esc(t.get('status', '待办'))}</td>"
             f"<td>{esc(t.get('priority', '中'))}</td><td>{esc(t.get('agent') or '—')}</td>"
-            f"<td>{dep_txt}</td><td>{esc(t.get('desc') or '—')}</td>"
+            f"<td>{dep_txt}</td><td>{desc or '—'}</td>"
             f"<td>{refs or '—'}</td></tr>")
 
     svg = dep_graph_svg(tasks)

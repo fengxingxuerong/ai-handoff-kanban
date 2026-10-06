@@ -87,6 +87,7 @@ def default_config() -> dict:
             "schedule": {"enabled": False, "frequency": "daily", "time": "09:00", "last_run": ""},
             "session_sources": [],   # 自定义会话捕获源 [{name, path, type}]
             "mcp_readonly": False,   # MCP 只读模式（外部智能体只能读不能写）
+            "budget_limit": 0.0,     # 月度用量预算上限（美元）；0 = 不启用预算告警
         }
     }
 
