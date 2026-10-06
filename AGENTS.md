@@ -25,6 +25,7 @@
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `app/filelock.py` | 跨进程文件锁（msvcrt/fcntl 一份实现，`main` 与 `llm` 共用）。两边不能互相 import，所以锁不放在任何一边里 |
 | `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
+| `app/handoff_md.py` | 交接包 Markdown **纯渲染器**（2026-10-06 拆出，依赖注入式）：`build_handoff_markdown` 只收现成数据（活跃记忆/过期计数/git 回调/端口），不 import main、不读盘、不跑子进程；原签名 `_build_handoff_markdown` 是 main 侧的注入包装 |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
 | `tests/` | pytest 套件（用例数见文末「验证基线」，此处不写死）+ 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测数字只写在文末基线那一处）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
@@ -790,8 +791,8 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-10-06 收口，v1.2.0 起）**：`pytest` 685 收集（680 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
-32 个测试文件、643 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+**验证基线（2026-10-06 收口，v1.2.0 起）**：`pytest` 687 收集（682 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
+32 个测试文件、645 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
 2026-10-01 新增「待审查」状态后补：E2E 五列归位、MCP review 分支文案、readiness 认待审查三个方向各一条。
 2026-10-06 竞品吸取轮补：`test_p1_absorb.py` 16 条（验收标准 / journal 折叠 / 记忆时效 / 待拍板）+
 MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收提示数字对账、弹窗数 13→14）。
@@ -824,15 +825,17 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 
 **下一步（按价值排序）**：
 
-1. **`app/main.py` 继续拆分** —— 2026-10-06 拆出了 `app/gitinfo.py`（git 集成，逐字迁移；
-   有状态名字的 patch 点随迁）。剩下的候选里 `_build_handoff_markdown` / `_generate_agents_md`
-   不是纯函数（回退路径读 `_load_memories`、依赖 `now_str`/git），照旧模式搬要先做依赖注入，
-   别硬搬。拆的时候守住「写操作必须走 `mutate()`」这条，别顺手把临界区拆散。
+1. **`app/main.py` 继续拆分** —— 已拆出 `app/gitinfo.py`（有状态，patch 点随迁）与
+   `app/handoff_md.py`（先做依赖注入再搬：渲染本体只收现成数据，回退/取盘留在 main 包装里，
+   原签名不变）。下一个候选 `_generate_agents_md` / `_build_agents_md_local` 同法可搬
+   （llm 可直接 import、记忆与 now 需注入）。拆的时候守住「写操作必须走 `mutate()`」这条，
+   别顺手把临界区拆散。
 2. **存储层**：仍是整份 JSON 读改写。触发条件是「列表接口日常 > 300ms」，
    那时直接换分片或 SQLite，**不要加缓存糊**（理由见「性能基线」）。
-3. E2E 三个空白已于 2026-10-06 补齐（入口文件预览/写盘、备份与恢复面板的实际恢复动作、
-   监管趋势图）。还剩的：会话捕获弹窗的全流程、AI 指令的多步确认、接手页下载后的文件校验。
-   需要哪个就把对应的 `data-act` 点一遍 —— 夹具 `ai_ui` 已经把假端点配好了。
+3. E2E 空白已全部补齐（2026-10-06）：入口文件预览/写盘、备份与恢复的实际动作、
+   监管趋势图、接手页下载文件校验、会话捕获全流程（扫描→预览→提炼→人工确认入库）。
+   新增浏览器层用例时优先挑"从未有人点过"的路径 —— 恢复面板多来源、报告遮罩与按钮
+   同 data-act 这类坑就是这么现形的。
 4. 剩下的未覆盖行（数目以「验证基线」为准，不在这里写死）基本是异常分支（`Path.resolve()` 失败、
    系统目录判定异常、各类 500 兜底）。
    要补就得构造畸形环境，收益递减 —— 别为了数字硬凑。

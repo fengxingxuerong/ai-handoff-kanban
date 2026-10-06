@@ -362,3 +362,35 @@ def test_connection(cfg: dict) -> dict:
         return {"ok": True, "endpoint": ep_name, "reply": (text or "")[:50]}
     except LLMError as e:
         return {"ok": False, "error": str(e)}
+
+
+# ---- LLM 输出容错提取（2026-10-06 从 app/main.py 移入：解析的是模型输出，职责在网关侧） ----
+
+def _extract_json(text: str) -> dict | list:
+    """从 LLM 输出中容错提取 JSON（去除 markdown 代码块、前后缀文本）"""
+    if not text:
+        raise ValueError("LLM 返回为空")
+    s = text.strip()
+    if s.startswith("```"):
+        s = s.split("```", 2)[1]
+        if s.startswith("json"):
+            s = s[4:]
+        s = s.strip()
+    try:
+        return json.loads(s)
+    except Exception:
+        pass
+    # 前后缀有噪声时，取「出现位置更靠前」的那个候选：
+    # 否则像「前缀 [{"a":1}] 后缀」这种会先命中内层对象，把数组吞掉。
+    candidates = []
+    for open_ch, close_ch in (("{", "}"), ("[", "]")):
+        start = s.find(open_ch)
+        end = s.rfind(close_ch)
+        if start != -1 and end > start:
+            candidates.append((start, s[start:end + 1]))
+    for _, chunk in sorted(candidates, key=lambda x: x[0]):
+        try:
+            return json.loads(chunk)
+        except Exception:
+            continue
+    raise ValueError("无法从 LLM 输出中解析 JSON")

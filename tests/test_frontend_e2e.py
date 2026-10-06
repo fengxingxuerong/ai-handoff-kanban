@@ -1342,3 +1342,80 @@ def test_trends_modal_renders_chart_after_a_report(ai_ui):
         "() => !document.querySelector('#trend-body .spinner')", timeout=15000)
     assert page.locator("#trend-body .trend-wrap svg").count() >= 1, "趋势图没有画出来"
     assert "趋势项目" in page.locator("#trend-body").inner_text()
+
+
+def test_handoff_page_download_is_self_contained(ui, tmp_path):
+    """接手页下载：拿到的文件含依赖图与任务清单，且不引任何第三方资源（离线可用）"""
+    page, api, _ = ui
+    p = make_project(api, "接手页下载项目", handoff_note="先读交接说明再动手")
+    t1 = api.post(f"/api/projects/{p['id']}/tasks", {"title": "前置任务"})[1]
+    api.post(f"/api/projects/{p['id']}/tasks",
+             {"title": "后置任务", "depends_on": [t1["id"]], "acceptance": ["用例全绿"]})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('接手页下载项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+
+    target = tmp_path / "handoff.html"
+    with page.expect_download(timeout=15000) as dl:
+        page.click("[data-act='downloadHandoffPage']")
+    dl.value.save_as(str(target))
+
+    html = target.read_text(encoding="utf-8")
+    assert html.startswith("<!DOCTYPE html>"), "拿到的不是完整 HTML 文件"
+    assert "接手页下载项目" in html and "先读交接说明再动手" in html
+    assert "<svg" in html, "依赖图没有内联渲染"
+    assert "☐ 用例全绿" in html, "验收标准没进接手页"
+    # 自包含硬约定：不引任何第三方资源（数据不出本机）
+    third_party = [ln for ln in html.splitlines()
+                   if re.search(r'(src|href)="https?://', ln)
+                   and "127.0.0.1" not in ln]
+    assert not third_party, f"接手页里有第三方外链：{third_party[:3]}"
+
+
+def test_session_capture_full_flow_to_project(ai_ui, tmp_path):
+    """会话捕获全流程：扫描发现本机会话 → 预览 → AI 提炼 → 人工确认入库（任务/下一步/记忆）"""
+    page, api, stub, _ = ai_ui
+    src = tmp_path / "captured_sessions"
+    src.mkdir()
+    (src / "chat.json").write_text(json.dumps([
+        {"say": "user", "text": "我们决定登录方案换成 JWT"},
+        {"say": "assistant", "text": "好的，先改签发端再改校验端"},
+    ], ensure_ascii=False), encoding="utf-8")
+    _, cfg = api.put("/api/ai/config", {"session_sources": [
+        {"name": "测试源", "path": str(src), "type": "text"}]})
+    pid = make_project(api, "会话入库项目")["id"]
+    stub.push_json({
+        "summary": "决定换 JWT 方案",
+        "new_tasks": [{"title": "迁移登录到 JWT", "priority": "高"}],
+        "next_action": "先改签发端",
+        "handoff_note_updates": "登录方案已定为 JWT",
+        "memories": [{"type": "决策", "text": "登录用 JWT"}],
+    })
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("[data-act='openProjectModal']", timeout=20000)
+
+    page.click("[data-act='openSessionCapture']")
+    page.wait_for_selector("#session-modal.show", timeout=10000)
+    page.wait_for_selector(".sess-item", timeout=15000)
+    # 本机真实的 Claude Code 会话也会被扫进来，必须点名自己的那个文件
+    page.click(".sess-item:has-text('chat.json')")
+    page.wait_for_function(
+        "() => document.getElementById('session-preview').value.includes('JWT')", timeout=15000)
+    page.select_option("#session-pid", pid)
+    page.click("[data-act='ingestSession']")
+    page.wait_for_function(
+        "() => document.getElementById('session-result').textContent.includes('迁移登录到 JWT')",
+        timeout=20000)
+
+    page.on("dialog", lambda d: d.accept())      # 应用前有 confirm
+    page.click("[data-act='applySummarize'][data-arg='session-modal']")
+    page.wait_for_function(
+        "() => document.getElementById('toast').textContent.includes('应用完成')", timeout=15000)
+
+    _, proj = api.get(f"/api/projects/{pid}")
+    titles = [t["title"] for t in proj["tasks"]]
+    assert "迁移登录到 JWT" in titles, "提炼任务没入库"
+    assert proj["next_action"] == "先改签发端", "下一步行动没更新"
+    _, mems = api.get(f"/api/memories?pid={pid}")
+    assert any(m["text"] == "登录用 JWT" for m in mems["memories"]), "决策记忆没沉淀"
