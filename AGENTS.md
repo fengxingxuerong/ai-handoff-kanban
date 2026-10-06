@@ -20,7 +20,8 @@
 | `app/idem.py` | 创建幂等键 `client_ref` 的清洗与记账（纯函数） |
 | `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note` |
 | `app/sessions.py` | 会话扫描与文本提取（目录遍历有界、只读文件尾部、源内外校验） |
-| `app/agentfiles.py` | 多智能体入口文件投影（`AGENT_ENTRY_TARGETS` 白名单 → 各工具要求的相对路径） |
+| `app/gitinfo.py` | git 集成（2026-10-06 从 main 搬出）：`git_snapshot` / `_run_git` / `_git_cache`。只读、列表传参、绝不拼 shell。**`_run_git`/`_git_cache`/`GIT_TIMEOUT` 的 monkeypatch 点在这里**（main 里是转发别名） |
+| `app/agentfiles.py` | 多智能体入口文件投影（`AGENT_ENTRY_TARGETS` 白名单 → 各工具要求的相对路径，含第 9 个 `.claude/skills` 投影） |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
 | `app/filelock.py` | 跨进程文件锁（msvcrt/fcntl 一份实现，`main` 与 `llm` 共用）。两边不能互相 import，所以锁不放在任何一边里 |
 | `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
@@ -789,8 +790,8 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-10-06 收口，v1.2.0 起）**：`pytest` 682 收集（677 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
-32 个测试文件、636 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+**验证基线（2026-10-06 收口，v1.2.0 起）**：`pytest` 685 收集（680 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
+32 个测试文件、643 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
 2026-10-01 新增「待审查」状态后补：E2E 五列归位、MCP review 分支文案、readiness 认待审查三个方向各一条。
 2026-10-06 竞品吸取轮补：`test_p1_absorb.py` 16 条（验收标准 / journal 折叠 / 记忆时效 / 待拍板）+
 MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收提示数字对账、弹窗数 13→14）。
@@ -823,13 +824,15 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 
 **下一步（按价值排序）**：
 
-1. **`app/main.py` 拆分** —— 2971 行单模块（接口/数据层/AI/git/入口文件生成全在一起）。
-   拆的时候守住「写操作必须走 `mutate()`」这条，别顺手把临界区拆散。
+1. **`app/main.py` 继续拆分** —— 2026-10-06 拆出了 `app/gitinfo.py`（git 集成，逐字迁移；
+   有状态名字的 patch 点随迁）。剩下的候选里 `_build_handoff_markdown` / `_generate_agents_md`
+   不是纯函数（回退路径读 `_load_memories`、依赖 `now_str`/git），照旧模式搬要先做依赖注入，
+   别硬搬。拆的时候守住「写操作必须走 `mutate()`」这条，别顺手把临界区拆散。
 2. **存储层**：仍是整份 JSON 读改写。触发条件是「列表接口日常 > 300ms」，
    那时直接换分片或 SQLite，**不要加缓存糊**（理由见「性能基线」）。
-3. E2E 已覆盖到 AI 交互（报告渲染、指令的人工闸门、提炼落地、测连接）。
-   还没进浏览器层的：AGENTS.md / 多工具入口文件的预览与写盘、备份与恢复面板的实际恢复动作、
-   监管趋势图。需要哪个就把对应的 `data-act` 点一遍 —— 夹具 `ai_ui` 已经把假端点配好了。
+3. E2E 三个空白已于 2026-10-06 补齐（入口文件预览/写盘、备份与恢复面板的实际恢复动作、
+   监管趋势图）。还剩的：会话捕获弹窗的全流程、AI 指令的多步确认、接手页下载后的文件校验。
+   需要哪个就把对应的 `data-act` 点一遍 —— 夹具 `ai_ui` 已经把假端点配好了。
 4. 剩下的未覆盖行（数目以「验证基线」为准，不在这里写死）基本是异常分支（`Path.resolve()` 失败、
    系统目录判定异常、各类 500 兜底）。
    要补就得构造畸形环境，收益递减 —— 别为了数字硬凑。

@@ -457,37 +457,37 @@ def test_export_save_reports_500_when_every_candidate_fails(app_client, monkeypa
 # ---------------- 9. git 调用的三条降级路径 ----------------
 
 def test_run_git_degrades_on_missing_git(monkeypatch):
-    import app.main as kanban
+    import app.gitinfo as gitinfo
 
     def boom(*a, **k):
         raise FileNotFoundError()
 
-    monkeypatch.setattr(kanban.subprocess, "run", boom)
-    code, msg = kanban._run_git(["status"], Path("."))
+    monkeypatch.setattr(gitinfo.subprocess, "run", boom)
+    code, msg = gitinfo._run_git(["status"], Path("."))
     assert code == 127 and "未找到 git" in msg
 
 
 def test_run_git_degrades_on_timeout(monkeypatch):
     import subprocess
 
-    import app.main as kanban
+    import app.gitinfo as gitinfo
 
     def boom(*a, **k):
         raise subprocess.TimeoutExpired(cmd="git", timeout=6)
 
-    monkeypatch.setattr(kanban.subprocess, "run", boom)
-    code, msg = kanban._run_git(["log"], Path("."))
+    monkeypatch.setattr(gitinfo.subprocess, "run", boom)
+    code, msg = gitinfo._run_git(["log"], Path("."))
     assert code == 124 and "超时" in msg
 
 
 def test_run_git_degrades_on_other_error(monkeypatch):
-    import app.main as kanban
+    import app.gitinfo as gitinfo
 
     def boom(*a, **k):
         raise RuntimeError("权限被拒")
 
-    monkeypatch.setattr(kanban.subprocess, "run", boom)
-    code, msg = kanban._run_git(["log"], Path("."))
+    monkeypatch.setattr(gitinfo.subprocess, "run", boom)
+    code, msg = gitinfo._run_git(["log"], Path("."))
     assert code == 1 and "权限被拒" in msg
 
 

@@ -1235,3 +1235,110 @@ def test_journal_overflow_folds_in_task_modal(ui):
     assert "已折叠" in folded.inner_text() and "状态：" in folded.inner_text()
     rows = page.locator("#t-journal-list .j-row")
     assert rows.count() <= 50, "折叠后总条数必须压回上限内"
+
+
+# ---------------- 路线图 #3：入口文件写盘 / 备份恢复动作 / 健康趋势图 ----------------
+
+def test_agentsmd_preview_then_write_nine_entries(ui, tmp_path):
+    """入口文件：预览不落盘 → 写盘真的落 9 个（含第 9 个 .claude/skills SKILL.md）。
+    ui 夹具没配 LLM，生成走本地模板兜底 —— 这条链路本身就该断网可用。"""
+    page, api, _ = ui
+    make_project(api, "入口文件落盘项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('入口文件落盘项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+
+    page.click("[data-act='openAgentsMD']")
+    page.wait_for_selector("#agentsmd-modal.show", timeout=10000)
+    repo = tmp_path / "entry-repo"
+    repo.mkdir()
+
+    # ① 纯预览：dir 留空 = 只预览不写盘（后端语义：填了 dir 连预览都会落盘，带覆盖保护）
+    page.click("[data-act='previewAgentFiles']")
+    page.wait_for_function(
+        "() => document.getElementById('agentsmd-files').style.display === 'block'", timeout=15000)
+    files_box = page.locator("#agentsmd-files").inner_text()
+    assert "预览（未写盘）" in files_box, files_box
+    assert ".claude/skills/ai-kanban/SKILL.md" in files_box, "第 9 个投影没出现在预览里"
+    assert not (repo / "AGENTS.md").exists(), "纯预览不该落盘"
+
+    # ② 写盘：9 个入口全部落到位
+    page.fill("#agentsmd-dir", str(repo))
+    page.click("[data-act='writeAgentFiles']")
+    page.wait_for_function(
+        "() => document.getElementById('toast').textContent.includes('已写入 9 个文件')",
+        timeout=15000)
+    assert (repo / "AGENTS.md").exists()
+    assert "@AGENTS.md" in (repo / "CLAUDE.md").read_text(encoding="utf-8"), "CLAUDE.md 必须是桥接"
+    skill = repo / ".claude" / "skills" / "ai-kanban" / "SKILL.md"
+    assert skill.exists(), "嵌套目录的 Skill 入口没有写出"
+    assert skill.read_text(encoding="utf-8").startswith("---\n"), "SKILL.md 缺 frontmatter"
+
+
+def test_backup_then_restore_roundtrip(ui):
+    """备份与恢复面板的实际动作：拍快照 → 快照之后再造一个项目 → 恢复 → 它消失"""
+    page, api, _ = ui
+    make_project(api, "恢复前项目甲")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+
+    page.click("header [data-act='openAISettings']")
+    page.wait_for_selector("#ai-settings-modal.show", timeout=10000)
+    page.click("[data-act='backupNow']")
+    page.wait_for_function(
+        "() => document.getElementById('toast').textContent.includes('备份成功')", timeout=15000)
+    page.click("[data-act='showRecoverable']")
+    page.wait_for_function(
+        "() => document.getElementById('recover-list').textContent.includes('恢复前项目甲')",
+        timeout=15000)
+
+    # 快照之后才建的项目乙：恢复后应该消失
+    make_project(api, "恢复后才建的项目乙")
+    page.click("#ai-settings-modal .mhead [data-act='closeModal']")   # 关掉再重开，让面板拿到新数据
+    page.click("header [data-act='openAISettings']")
+    page.wait_for_selector("#ai-settings-modal.show", timeout=10000)
+    page.click("[data-act='showRecoverable']")
+    page.wait_for_function(
+        "() => document.getElementById('recover-list').textContent.includes('2 个项目')",
+        timeout=15000)
+
+    page.on("dialog", lambda d: d.accept())          # 恢复前有 confirm
+    # 恢复来源有多个（last-good / 手动快照…），必须点「手动快照」那一个 ——
+    # 点第一个恢复的是 last-good（当前数据的别名），那就不是"回滚到快照"了
+    page.click("#recover-list [data-arg^='backup_']")
+    page.wait_for_function(
+        "() => document.getElementById('toast').textContent.includes('已恢复 1 个项目')",
+        timeout=15000)
+
+    page.click("#ai-settings-modal .mhead [data-act='closeModal']")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    assert page.locator(".pcard:has-text('恢复前项目甲')").count() == 1
+    assert page.locator(".pcard:has-text('恢复后才建的项目乙')").count() == 0, \
+        "恢复没有回滚：快照之后建的项目还在"
+
+
+def test_trends_modal_renders_chart_after_a_report(ai_ui):
+    """健康趋势：有过一次监管报告后，仪表盘的趋势按钮能画出 SVG 折线"""
+    page, api, stub, _ = ai_ui
+    pid = make_project(api, "趋势项目")["id"]
+    stub.push_json({
+        "summary": "节奏正常",
+        "insights": [{"id": pid, "name": "趋势项目", "health": 76, "reason": "推进稳定",
+                      "risks": [], "suggestions": []}],
+        "global_suggestions": [],
+    })
+    page.click("[data-act='openReport']")
+    page.wait_for_selector("#report-panel.show", timeout=15000)
+    page.locator("#report-body").locator("text=节奏正常").first.wait_for(timeout=15000)
+    # 遮罩与返回按钮都是 closeReport，必须点面板里那个 —— 点遮罩会被面板挡住点不到
+    page.click("#report-panel .r-head [data-act='closeReport']")
+    page.wait_for_selector("#report-panel", state="hidden", timeout=10000)
+
+    page.click("#dash [data-act='openTrends']")
+    page.wait_for_selector("#trend-modal.show", timeout=10000)
+    page.wait_for_function(
+        "() => !document.querySelector('#trend-body .spinner')", timeout=15000)
+    assert page.locator("#trend-body .trend-wrap svg").count() >= 1, "趋势图没有画出来"
+    assert "趋势项目" in page.locator("#trend-body").inner_text()

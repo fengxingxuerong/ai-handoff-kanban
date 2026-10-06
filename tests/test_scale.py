@@ -298,14 +298,17 @@ def test_git_snapshot_probes_a_repo_once_per_ttl_not_once_per_limit(tmp_path, mo
     repo = tmp_path / "r"
     repo.mkdir()
     calls: list[list[str]] = []
-    real = kanban._run_git
+    import app.gitinfo as gitinfo
 
-    def counting(args, cwd, timeout=kanban.GIT_TIMEOUT):
+    real = gitinfo._run_git
+
+    def counting(args, cwd, timeout=gitinfo.GIT_TIMEOUT):
         calls.append(list(args))
         return real(args, cwd, timeout)
 
-    monkeypatch.setattr(kanban, "_run_git", counting)
-    monkeypatch.setattr(kanban, "_git_cache", {})
+    # 有状态名字的 patch 点随模块迁移打在 app.gitinfo 上（main 里是转发别名）
+    monkeypatch.setattr(gitinfo, "_run_git", counting)
+    monkeypatch.setattr(gitinfo, "_git_cache", {})
     kanban.subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     for i in range(6):        # 比测试里问到的最大 limit(5) 还多，否则"给不满"是正常行为不是缺陷
         (repo / f"f{i}.txt").write_text(str(i), encoding="utf-8")
