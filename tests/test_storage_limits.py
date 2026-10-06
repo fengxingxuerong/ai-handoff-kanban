@@ -178,7 +178,9 @@ def test_reports_dir_is_capped_and_keeps_the_newest(tmp_path, monkeypatch):
     开了定时监管每天一份，一年就是几百份。"""
     from app import main
 
-    monkeypatch.setattr(main, "MAX_REPORTS", 5)
+    import app.aireports as aireports
+    # MAX_REPORTS 的 patch 点随模块迁移打在 app.aireports 上（main 是转发别名）
+    monkeypatch.setattr(aireports, "MAX_REPORTS", 5)
     for i in range(9):
         main._save_report({"id": f"2026{i:04d}", "summary": "s", "insights": []})
     names = sorted(p.stem for p in main.reports_dir().glob("*.json"))

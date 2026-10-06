@@ -27,6 +27,8 @@
 | `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
 | `app/handoff_md.py` | 交接包 Markdown **纯渲染器**（2026-10-06 拆出，依赖注入式）：`build_handoff_markdown` 只收现成数据（活跃记忆/过期计数/git 回调/端口），不 import main、不读盘、不跑子进程；原签名 `_build_handoff_markdown` 是 main 侧的注入包装 |
 | `app/agentsmd.py` | AGENTS.md 文档生成（2026-10-06 拆出，同法注入）：本地兜底版收 `memory_rows`+`now`，AI 版的记忆与兜底经回调注入；`_build_agents_md_local` / `_generate_agents_md` 是 main 的原签名包装 |
+| `app/paths.py` | 数据目录定位（2026-10-06 拆出）：`data_dir` / `data_file`，所有存储模块的共同根 —— 后续拆出的模块从这里取，不必反向 import main。环境变量每次调用时读 |
+| `app/aireports.py` | 监管报告的落盘/裁剪/历史/趋势（2026-10-06 拆出）：`reports_dir` / `_save_report` / `_trim_reports` / `_latest_report_before` / `_attach_trends` / 提示词构造。**`MAX_REPORTS` 的 monkeypatch 点在这里**（main 是转发别名）；`_run_analyze` 编排留在 main |
 | `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
 | `tests/` | pytest 套件（用例数见文末「验证基线」，此处不写死）+ 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测数字只写在文末基线那一处）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
@@ -827,10 +829,12 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 **下一步（按价值排序）**：
 
 1. **`app/main.py` 继续拆分** —— 已拆出 `app/gitinfo.py`（有状态，patch 点随迁）、
-   `app/handoff_md.py` 与 `app/agentsmd.py`（先做依赖注入再搬：渲染/生成本体只收现成数据，
-   回退/取盘留在 main 包装里，原签名不变）。再往下的大块是 AI 编排（`_projects_brief`、
-   监管分析、`ai_command`），其中写动作缠着 `mutate()` 临界区，搬之前先把"只读计算"和
-   "落库"切干净；拆的时候守住「写操作必须走 `mutate()`」，别顺手把临界区拆散。
+   `app/handoff_md.py` / `app/agentsmd.py`（先做依赖注入再搬：渲染/生成本体只收现成数据，
+   回退/取盘留在 main 包装里，原签名不变）、`app/paths.py` + `app/aireports.py`
+   （数据目录根 + 报告落盘簇，编排 `_run_analyze` 留在 main）。再往下的大块是 AI 编排
+   （`_projects_brief`、`ai_command` 的解析），其中写动作缠着 `mutate()` 临界区，
+   搬之前先把"只读计算"和"落库"切干净；拆的时候守住「写操作必须走 `mutate()`」，
+   别顺手把临界区拆散。
 2. **存储层**：仍是整份 JSON 读改写。触发条件是「列表接口日常 > 300ms」，
    那时直接换分片或 SQLite，**不要加缓存糊**（理由见「性能基线」）。
 3. E2E 空白已全部补齐（2026-10-06）：入口文件预览/写盘、备份与恢复的实际动作、
