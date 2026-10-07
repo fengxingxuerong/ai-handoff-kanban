@@ -185,7 +185,9 @@ build.bat
 项目任务看板/
 ├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 21 个模块，见 AGENTS.md）
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
-├── web/index.html          # 前端看板（单页，深色主题，含 AI 界面；事件统一走 data-act 委托）
+├── web/index.html          # 前端页面骨架（零内联脚本；深色主题，含 AI 界面）
+├── web/js-*.js             # 前端逻辑五个文件：core(ACTIONS 分发)/edit/render/data/boot（无构建、无 CDN）
+├── web/style.css           # 前端样式
 ├── tests/                  # pytest 套件：接口/并发/安全/数据/AI/前端契约/真实浏览器点击（含假 LLM 端点与系统浏览器，均不消耗配额）
 ├── scripts/desktop.py      # PyWebview 桌面壳（端口检测 + 后台自启服务）
 ├── scripts/start_desktop.bat  # 源码双击启动

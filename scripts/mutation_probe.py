@@ -264,10 +264,13 @@ MUTATIONS: list[dict] = [
         "tests": ["tests/test_security.py", "tests/test_api.py", "tests/test_agent_files.py"],
     },
     {
+        # 2026-10-07 对抗性审查：同形守卫在 main.py 有两处（save_export 的 409 与
+        # export_agent_files 的 skipped_existing），old 串必须带上各自的注释行才唯一，
+        # 否则 replace(…,1) 撞上先出现的那个就静默变异错位置。
         "id": "save_export_silent_overwrite",
         "file": "app/main.py",
-        "old": "        if target.exists() and not body.overwrite:",
-        "new": "        if False:",
+        "old": '        if target.exists() and not body.overwrite:\n            # 与 /api/export/agent-files 同一口径',
+        "new": "        if False:\n            # 与 /api/export/agent-files 同一口径",
         "why": "已存在文件也不拦：默认指向仓库 AGENTS.md 的那一次会把用户手写内容静默覆盖",
         "tests": ["tests/test_security.py", "tests/test_api.py", "tests/test_agent_files.py"],
     },
@@ -377,10 +380,12 @@ MUTATIONS: list[dict] = [
         "tests": ["tests/test_restore.py", "tests/test_api.py"],
     },
     {
+        # 2026-10-07 对抗性审查：`return min(n, hi)` 在 usage_stats.py 有两处
+        # （clamp_price / clamp_budget），靠后随的 def 行区分目标。
         "id": "usage_price_clamp_removed",
         "file": "app/usage_stats.py",
-        "old": "    return min(n, hi)",
-        "new": "    return n",
+        "old": "    return min(n, hi)\n\n\ndef clamp_budget",
+        "new": "    return n\n\n\ndef clamp_budget",
         "why": "端点单价钳制失效：配置塞 1e9 会被原样持久化，读侧按它估的成本直接爆表（写读两侧共用这一道钳）",
         "tests": ["tests/test_p0_stats.py"],
     },

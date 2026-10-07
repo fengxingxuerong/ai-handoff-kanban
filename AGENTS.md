@@ -14,7 +14,7 @@
 | 路径 | 职责 |
 | --- | --- |
 | `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程。**2026-09-26 起分轮拆出（3596 行 → 下表 21 个模块），本文件只留路由编排、数据层临界区与有全局状态的部分** |
-| `app/taskgraph.py` | 任务依赖图：`clean_deps` / `task_graph` / `has_cycle` / `topo_order` / `_break_dep_cycles` / `executable_tasks` / `_dedupe_ids` / `clean_refs`（纯函数，从 main 逐字搬来） |
+| `app/taskgraph.py` | 任务依赖图：`clean_deps` / `task_graph` / `has_cycle` / `topo_order` / `_break_dep_cycles` / `executable_tasks` / `deps_blocking`（与 /api/inbox 共用的"被前置挡住"谓词，2026-10-07 抽出）/ `_dedupe_ids` / `clean_refs`（纯函数，从 main 逐字搬来） |
 | `app/due.py` | 截止日期归一 `_clean_due_date` 与状态判定 `_due_state`（纯函数） |
 | `app/journal.py` | 过程轨迹与验收标准的清洗与上限（纯函数，2026-10-07 从 main 拆出）：`append_journal`（溢出**折叠成摘要**的写入侧）/ `compress_journal` / `clean_journal` / `clean_acceptance` 与 `MAX_JOURNAL*`、`MAX_ACCEPTANCE*`、`JOURNAL_SNIPPET`。**这些上限常量的 monkeypatch 点在这里**（main 是转发别名，patch 别名改不到函数读的全局）；时钟由 main 的 `_append_journal` 包装注入，本模块不 import main |
 | `app/redact.py` | 交接内容脱敏规则与 `redact_text`（纯函数） |
@@ -35,7 +35,7 @@
 | `app/usage_stats.py` | LLM 用量聚合（纯函数，2026-10-01）：usage.jsonl 的按日/端点/模型聚合与预算水位，`/api/usage` 的口径 |
 | `app/aireports.py` | 监管报告的落盘/裁剪/历史/趋势（2026-10-06 拆出）：`reports_dir` / `_save_report` / `_trim_reports` / `_latest_report_before` / `_attach_trends` / 提示词构造。**`MAX_REPORTS` 的 monkeypatch 点在这里**（main 是转发别名）；`_run_analyze` 编排留在 main |
 | `app/aiprompt.py` | AI 编排的只读计算层（2026-10-06 拆出，依赖注入式）：看板简报 `projects_brief`（记忆分桶/git 探测经回调注入，main 的 monkeypatch 照常有效）与会话提炼 `summarize_inner`（find_project 注入）。**不落库** —— 写动作仍走 main 的 mutate() 临界区 |
-| `web/index.html` | 全部前端（单文件，无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托） |
+| `web/index.html` + `web/js-*.js` + `web/style.css` | 前端。09-28 起 JS 拆成五个文件（`js-core` ACTIONS 分发表 / `js-edit` / `js-render` / `js-data` / `js-boot` 启动序列），index.html **零内联脚本**；无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托 |
 | `tests/` | pytest 套件（用例数见文末「验证基线」，此处不写死）+ 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测数字只写在文末基线那一处）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
 | `scripts/live_check.py` | 对着**已在跑**的实例打接口做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
@@ -179,12 +179,13 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 14. **反馈分工**：AI 指令窗里的**过程**留在聊天气泡（那是转录，有历史价值），
     但**结果**必须再走一次 `toast()` —— toast 是全站唯一的 `aria-live` 区域，
     而且弹窗会被关掉。少了这句，"确认执行"到底成没成，键盘/读屏用户无从得知。
-15. **整页只有一段内联脚本，它一崩所有 `data-act` 全部失效、界面变成一块死面板，
+15. **前端 JS 一处语法错，所有 `data-act` 全部失效、界面变成一块死面板，
     而任何 Python 测试都不会红**。2026-09-20 实测：在 JS 里写了 Python 风格的相邻字符串
     拼接（`"甲" "乙"` —— **JS 没有隐式拼接**），500 多条测试全绿，直到真开浏览器才现形为
     `ReferenceError: openDetail is not defined`。门禁：`test_inline_script_is_syntactically_valid_js`
-    抽出每段 `<script>` 交给 `node --check`。改完前端别只跑 pytest，至少开一次真浏览器
-    （`scripts/live_ui_check.py` 就是干这个的）。
+    对 `web/js-*.js` 每个文件跑 `node --check`（09-28 起 JS 从内联块拆成五个文件，index.html
+    已零内联脚本 —— 逐文件检查比当年"整段抽取"更能指出是哪个文件）。改完前端别只跑 pytest，
+    至少开一次真浏览器（`scripts/live_ui_check.py` 就是干这个的）。
 16. **编辑表单必须从单项目接口回填，不能用总览列表里那一份**：
     `GET /api/projects` 只给卡片要用的字段，**不含** `background` / `handoff_note`，
     而 `PUT /api/projects/{pid}` 是整体覆盖语义 —— 从列表回填就等于"一保存就清空这两段"
@@ -831,7 +832,9 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 门禁脚本（2026-10-06 全部复跑过：`ci_local --with-exe` 11 步全绿 × 3 次、`release_regression` 带 AI 链路 23 通过；
 2026-10-07 复跑变异探针 **45** 条全被杀 —— 随 `app/journal.py` 拆分迁移 4 条、
 修复哑火 2 条（`inbox_counts_completed` 与 `executable_unknown_dep_blocks`：当天改这些代码时没同步变异表，探针当场抓出来）、
-按纪律为「依赖没满足的不算」新增 `inbox_ignores_blocked_deps` 1 条）：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
+按纪律为「依赖没满足的不算」新增 `inbox_ignores_blocked_deps` 1 条；
+同日晚间对抗性审查又把 2 条 old 串在目标文件里**不唯一**的探针补上了上下文
+（`save_export_silent_overwrite` / `usage_price_clamp_removed` —— 同形守卫各有两处，先出现撞对才没出事））：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
 `release_regression --no-ai` 16 通过 + **2 项明确标"未验"**（`--no-ai` 下 AI 链路本就没跑，
 不许再算进"全部可用"）、`delivery_drill` 21/0、`live_check --mcp` 12/0、
 `frozen_smoke` 11/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 56 秒。
