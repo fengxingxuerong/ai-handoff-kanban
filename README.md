@@ -183,7 +183,7 @@ build.bat
 
 ```
 项目任务看板/
-├── app/main.py             # FastAPI 后端：项目/任务 CRUD + AI 监管/指令/交接/定时 API
+├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 21 个模块，见 AGENTS.md）
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
 ├── web/index.html          # 前端看板（单页，深色主题，含 AI 界面；事件统一走 data-act 委托）
 ├── tests/                  # pytest 套件：接口/并发/安全/数据/AI/前端契约/真实浏览器点击（含假 LLM 端点与系统浏览器，均不消耗配额）
@@ -199,7 +199,7 @@ build.bat
 ├── scripts/bench.py        # 读写性能基准（先量再改）
 ├── build.bat               # 一键打包 exe
 ├── pytest.ini              # pytest 配置
-├── .github/workflows/test.yml # CI：push/PR 自动跑测试 + 真打包一次并启动 exe 自查
+├── .github/workflows/ci.yml # CI：push/PR 跑同一条本地门禁（ci_local --with-exe）并上传 exe
 ├── .gitignore              # 排除运行期数据、密钥与构建产物
 └── requirements.txt / requirements-dev.txt
 ```
@@ -224,11 +224,11 @@ rem 只跑前端真实点击测试（复用系统 Edge/Chrome 打开真页面点
 rem 读写性能基准（先量再改）
 .venv\Scripts\python.exe scripts\bench.py 1000
 
-rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 33 条用例，逐条打印目标/输入/预期/实际
-rem （CI 里也有这一步：.github/workflows/test.yml 的 scenario job，改坏了会红）
+rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 32 条用例，逐条打印目标/输入/预期/实际
+rem （CI 里也有这一步：.github/workflows/ci.yml 跑的 ci_local 全门禁，改坏了会红）
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 
-rem 变异探针：往源码注入 32 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
+rem 变异探针：往源码注入 45 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
 rem （覆盖率只证明"这行跑过"，不证明"这行错了会被发现"——这一步量的是后者）
 .venv\Scripts\python.exe scripts/mutation_probe.py
 .venv\Scripts\python.exe scripts/mutation_probe.py --only due_soon_window   rem 只跑一条
