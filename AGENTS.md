@@ -13,16 +13,17 @@
 
 | 路径 | 职责 |
 | --- | --- |
-| `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程。**2026-09-26 已拆出 7 个纯模块（3596 → 3206 行），本文件只留路由编排与有全局状态的部分** |
+| `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程。**2026-09-26 起分轮拆出（3596 行 → 下表 20 个模块），本文件只留路由编排、数据层临界区与有全局状态的部分** |
 | `app/taskgraph.py` | 任务依赖图：`clean_deps` / `task_graph` / `has_cycle` / `topo_order` / `_break_dep_cycles` / `executable_tasks` / `_dedupe_ids` / `clean_refs`（纯函数，从 main 逐字搬来） |
 | `app/due.py` | 截止日期归一 `_clean_due_date` 与状态判定 `_due_state`（纯函数） |
+| `app/journal.py` | 过程轨迹与验收标准的清洗与上限（纯函数，2026-10-07 从 main 拆出）：`append_journal`（溢出**折叠成摘要**的写入侧）/ `compress_journal` / `clean_journal` / `clean_acceptance` 与 `MAX_JOURNAL*`、`MAX_ACCEPTANCE*`、`JOURNAL_SNIPPET`。**这些上限常量的 monkeypatch 点在这里**（main 是转发别名，patch 别名改不到函数读的全局）；时钟由 main 的 `_append_journal` 包装注入，本模块不 import main |
 | `app/redact.py` | 交接内容脱敏规则与 `redact_text`（纯函数） |
 | `app/idem.py` | 创建幂等键 `client_ref` 的清洗与记账（纯函数） |
 | `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note` |
 | `app/sessions.py` | 会话扫描与文本提取（目录遍历有界、只读文件尾部、源内外校验） |
 | `app/gitinfo.py` | git 集成（2026-10-06 从 main 搬出）：`git_snapshot` / `_run_git` / `_git_cache`。只读、列表传参、绝不拼 shell。**`_run_git`/`_git_cache`/`GIT_TIMEOUT` 的 monkeypatch 点在这里**（main 里是转发别名） |
 | `app/agentfiles.py` | 多智能体入口文件投影（`AGENT_ENTRY_TARGETS` 白名单 → 各工具要求的相对路径，含第 9 个 `.claude/skills` 投影） |
-| `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁） |
+| `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁）、掩码找 Key `merge_keys`（2026-10-07 从 main 迁入，与 `mask_matches` 同域） |
 | `app/filelock.py` | 跨进程文件锁（msvcrt/fcntl 一份实现，`main` 与 `llm` 共用）。两边不能互相 import，所以锁不放在任何一边里 |
 | `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
 | `app/handoff_md.py` | 交接包 Markdown **纯渲染器**（2026-10-06 拆出，依赖注入式）：`build_handoff_markdown` 只收现成数据（活跃记忆/过期计数/git 回调/端口），不 import main、不读盘、不跑子进程；原签名 `_build_handoff_markdown` 是 main 侧的注入包装 |
@@ -48,7 +49,7 @@
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复" |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 41 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 封顶、幂等键截断…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁 |
+| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 45 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
 
@@ -821,8 +822,10 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 + MCP 23 个工具（工具数没变，但 `kanban_add_task`/`kanban_update_task` 的 schema 带了 `acceptance`、
 `kanban_memory_add` 带了 `expires`），另有资源（`resources/list` / `resources/templates/list` / `resources/read`，
   4 类 uri）与提示词（`prompts/list` / `prompts/get`，3 个）。
-门禁脚本（2026-10-06 全部复跑过：`ci_local --with-exe` 11 步全绿 × 3 次、变异探针 **44** 条全被杀
-（2026-10-06 新增 4 条且 4/4 被杀）、`release_regression` 带 AI 链路 23 通过）：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
+门禁脚本（2026-10-06 全部复跑过：`ci_local --with-exe` 11 步全绿 × 3 次、`release_regression` 带 AI 链路 23 通过；
+2026-10-07 复跑变异探针 **45** 条全被杀 —— 随 `app/journal.py` 拆分迁移 4 条、
+修复哑火 2 条（`inbox_counts_completed` 与 `executable_unknown_dep_blocks`：当天改这些代码时没同步变异表，探针当场抓出来）、
+按纪律为「依赖没满足的不算」新增 `inbox_ignores_blocked_deps` 1 条）：`scenario_test` 32/32（以前那条 33 里有一条是把 A10 数了两遍）、
 `release_regression --no-ai` 16 通过 + **2 项明确标"未验"**（`--no-ai` 下 AI 链路本就没跑，
 不许再算进"全部可用"）、`delivery_drill` 21/0、`live_check --mcp` 12/0、
 `frozen_smoke` 11/0、`live_ui_check` 16/0。并行（`-n auto`）冷跑约 56 秒。
@@ -848,7 +851,9 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
    回退/取盘留在 main 包装里，原签名不变）、`app/paths.py` + `app/aireports.py`
    （数据目录根 + 报告落盘簇，编排 `_run_analyze` 留在 main）、`app/aiprompt.py`
    （AI 只读计算层：看板简报 + 会话提炼；`_memory_expired` 随日期判定迁入 `app/due.py`，
-   探针目标已同步）。`ai_command` 的提示词**有意留在 main**：前端契约测试
+   探针目标已同步）、`app/journal.py`（2026-10-07：journal/acceptance 清洗与上限，
+   常量的 monkeypatch 点随迁；`_merge_keys` 迁入 `llm.merge_keys`）。
+   `ai_command` 的提示词**有意留在 main**：前端契约测试
    `test_ai_command_prompt_keys_on_ids_not_titles` 直接 inspect 端点源码，
    搬它要连测试一起迁，收益不值。再往下只剩数据层本体（mutate / _load_data / 自愈备份）——
    **那是临界区的心脏，不拆**；守住「写操作必须走 `mutate()`」，别顺手把临界区拆散。

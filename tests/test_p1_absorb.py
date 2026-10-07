@@ -16,8 +16,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
+import app.journal as journal  # MAX_JOURNAL* 的 monkeypatch 点 2026-10-07 起在 app.journal
 import app.main as kanban
-from app.main import clean_acceptance, clean_journal, compress_journal
+from app.main import clean_acceptance, clean_journal, compress_journal  # 走 main 的转发别名
 
 
 def _d(days: int) -> str:
@@ -114,7 +115,7 @@ def test_sanitize_cleans_dirty_acceptance_on_every_read(app_client):
 
 def test_journal_overflow_folds_into_summary_not_dropped(app_client, monkeypatch):
     """超限的过程记录不再无声消失：折成一条带计数的摘要留在最前面"""
-    monkeypatch.setattr(kanban, "MAX_JOURNAL", 5)
+    monkeypatch.setattr(journal, "MAX_JOURNAL", 5)
     _, p = app_client.create_project("折叠项目", status="进行中")
     _, t = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "反复改状态"})
     for i in range(12):
@@ -123,7 +124,7 @@ def test_journal_overflow_folds_into_summary_not_dropped(app_client, monkeypatch
                                   {"title": "反复改状态", "status": status})
         assert st == 200
     j = body["journal"]
-    assert len(j) == kanban.MAX_JOURNAL, "总条数必须压回上限内"
+    assert len(j) == journal.MAX_JOURNAL, "总条数必须压回上限内"
     head, newest = j[0], j[-1]
     assert head.get("folded") == 8, f"12 条里溢出的 8 条应被折叠，实际 {head.get('folded')}"
     assert "已折叠" in head["text"], "摘要正文要说明自己是什么"
@@ -132,7 +133,7 @@ def test_journal_overflow_folds_into_summary_not_dropped(app_client, monkeypatch
 
 
 def test_compress_journal_keeps_within_cap_for_any_overflow(monkeypatch):
-    monkeypatch.setattr(kanban, "MAX_JOURNAL", 3)
+    monkeypatch.setattr(journal, "MAX_JOURNAL", 3)
     entries = [{"time": f"2026-10-0{i} 10:00", "text": f"第{i}条"} for i in range(1, 6)]
     out = compress_journal(entries)
     assert len(out) == 3
@@ -145,7 +146,7 @@ def test_compress_journal_keeps_within_cap_for_any_overflow(monkeypatch):
 
 def test_compress_journal_absorbs_previous_summary(monkeypatch):
     """再次溢出时，旧摘要按它折进来的原始条数累计（folded 永远指原始记录数）"""
-    monkeypatch.setattr(kanban, "MAX_JOURNAL", 3)
+    monkeypatch.setattr(journal, "MAX_JOURNAL", 3)
     entries = [{"text": f"第{i}条"} for i in range(5)]
     first = compress_journal(entries)             # folded=3
     more = first + [{"text": "第5条"}, {"text": "第6条"}]

@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from . import llm
 from .llm import _extract_json  # noqa: F401  —— 2026-10-06 随容错提取职责移入 llm.py，名字保住
+from .llm import merge_keys as _merge_keys  # noqa: F401  —— 2026-10-07 随掩码找 Key 迁入 llm.py（与 mask_matches 同域）
 from .filelock import blocking_lock
 from .handoff_page import build_handoff_page, dep_graph_svg
 from .handoff_page import MAX_NODES as GRAPH_MAX_NODES
@@ -127,6 +128,20 @@ from .agentfiles import (  # noqa: F401  —— 这些名字仍可从 app.main �
     build_agent_entries,
 )
 from .readiness import readiness_items, readiness_score
+# 过程轨迹与验收标准的清洗与上限：2026-10-07 从本文件整体搬出（实现逐字未改，时钟经包装注入）。
+# ⚠️ MAX_JOURNAL* / MAX_ACCEPTANCE* 的 monkeypatch 点随迁到 app.journal ——
+# 这些函数读的是 journal 模块的全局，patch 这里的别名改不到行为（与 gitinfo 同款约定）
+from . import journal
+from .journal import (  # noqa: F401  —— 这些名字仍可从 app.main 取（tests / mcp_server 依赖）
+    JOURNAL_SNIPPET,
+    MAX_ACCEPTANCE_ITEMS,
+    MAX_ACCEPTANCE_TEXT,
+    MAX_JOURNAL,
+    MAX_JOURNAL_TEXT,
+    clean_acceptance,
+    clean_journal,
+    compress_journal,
+)
 from .version import APP_VERSION, BUILD_TIME
 
 APP_NAME = "ai-kanban"
@@ -1475,93 +1490,13 @@ def update_task(tid: str, body: TaskIn):
     return t
 
 
-MAX_JOURNAL = 50           # 每个任务最多留多少条过程记录
-MAX_JOURNAL_TEXT = 500     # 单条正文上限：这一个数同时是 HTTP/MCP 的入参上限与落盘长度
-JOURNAL_SNIPPET = 60       # 折叠摘要里每条旧记录保留的字符数（摘要整体仍受 MAX_JOURNAL_TEXT 约束）
-# 验收标准（对标 Backlog.md 的可复用 DoD 清单）：任务"怎么算完成"要明说，
-# 否则"待审查→已完成"全凭当时的人/智能体心情，接手方也没有验收清单可照。
-MAX_ACCEPTANCE_ITEMS = 10  # 每个任务最多多少条验收标准
-MAX_ACCEPTANCE_TEXT = 120  # 单条验收标准长度上限
-                           # （以前入参收 2000、落盘悄悄截到 500，两侧的"1200 字记录"
-                           # 会少掉 700 字而回执不说 —— 现在超限在边界就被挡）
-
-
+# ---------------- journal / acceptance：清洗与上限 ----------------
+# 2026-10-07 整体搬进 app/journal.py（纯函数簇 + 「上限只有一个数」的常量家）。
+# 这里留原签名包装与转发别名（见文件头 import 区）：tests / mcp_server 仍从 app.main 取这些名字；
+# MAX_JOURNAL* / MAX_ACCEPTANCE* 的 monkeypatch 点在 app.journal —— patch 别名改不到函数读的全局。
 def _append_journal(t: dict, text: str, when: str = "") -> None:
-    """追加一条过程轨迹，超出上限的旧条目**折叠成摘要**而不是直接丢掉。
-
-    journal 存在 projects.json 里 —— 那是每次读写都要整份解析的核心文件，
-    状态流转还会自动追加，不设上限就是"悄悄变胖"：读写变慢、备份变大、交接包变长。
-    但"只留最近 N 条"意味着早期记录无声消失（为什么改方向、哪天开始卡住的）——
-    对标 Beads 的旧记录衰减摘要：溢出部分折成一条摘要留在最前面，体量有上限、脉络不丢。
-    """
-    j = t.get("journal")
-    if not isinstance(j, list):
-        j = t["journal"] = []
-    j.append({"time": when or now_str(), "text": (text or "")[:MAX_JOURNAL_TEXT]})
-    if len(j) > MAX_JOURNAL:
-        t["journal"] = compress_journal(j)
-
-
-def compress_journal(entries: list[dict]) -> list[dict]:
-    """把超出 `MAX_JOURNAL` 的最旧条目折成一条摘要，总条数压回上限内。
-
-    纯函数：不修改入参。摘要条目带 `folded` 计数（累计折进去多少条原始记录，
-    再次折叠时继承），`time` 是被折区间的首尾日期，正文仍是受限的普通文本 ——
-    前端/交接包不需要任何特殊处理就能显示，只是这条以【早期…已折叠】开头。
-    """
-    entries = [e for e in entries if isinstance(e, dict)]
-    if len(entries) <= MAX_JOURNAL:
-        return entries
-    cut = len(entries) - MAX_JOURNAL          # 溢出条数；再多折 1 条进来给摘要腾位置
-    overflow, keep = entries[:cut + 1], entries[cut + 1:]
-    folded = sum(int(e.get("folded") or 0) or 1 for e in overflow)
-    digest = "；".join((e.get("text") or "")[:JOURNAL_SNIPPET] for e in overflow)
-    summary = {
-        "time": f"{(overflow[0].get('time') or '')[:10]}~{(overflow[-1].get('time') or '')[:10]}",
-        "text": (f"【早期 {folded} 条已折叠】{digest}")[:MAX_JOURNAL_TEXT],
-        "folded": folded,
-    }
-    return [summary] + keep
-
-
-def clean_journal(raw) -> list[dict]:
-    """规范化过程轨迹：只留字典条目、限长，超出 `MAX_JOURNAL` 的折叠成摘要
-    （导入的脏数据与手改的 projects.json 也走这里，读路径上自愈）"""
-    if not isinstance(raw, list):
-        return []
-    out = []
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        e = {
-            "time": str(item.get("time") or "")[:32],
-            "text": str(item.get("text") or "")[:MAX_JOURNAL_TEXT],
-        }
-        # folded 计数跟着条目走：折叠摘要再次落入溢出区时要按它折进来的原始条数累计
-        if isinstance(item.get("folded"), int) and item["folded"] > 0:
-            e["folded"] = item["folded"]
-        out.append(e)
-    return compress_journal(out)
-
-
-def clean_acceptance(raw) -> list[str]:
-    """规范化验收标准（对标 Backlog.md 的 DoD 清单）：只留字符串、去空去重、限量限长。
-
-    接受字符串或列表（列表元素逐条清洗）；非字符串条目转成字符串保留 ——
-    智能体经 MCP 传数字/布尔时，转写比整条丢弃更接近调用方本意。
-    """
-    if isinstance(raw, str):
-        raw = raw.replace("\r", "").split("\n")
-    if not isinstance(raw, (list, tuple)):
-        return []
-    out = []
-    for item in raw:
-        s = (item if isinstance(item, str) else str(item)).strip()[:MAX_ACCEPTANCE_TEXT]
-        if s and s not in out:
-            out.append(s)
-        if len(out) >= MAX_ACCEPTANCE_ITEMS:
-            break
-    return out
+    """追加一条过程轨迹（实现在 app/journal.append_journal；`when` 缺省时在这里注入时钟）"""
+    journal.append_journal(t, text, when or now_str())
 
 
 class JournalIn(BaseModel):
@@ -2831,30 +2766,7 @@ class AIConfigIn(BaseModel):
     budget_limit: float | None = None
 
 
-def _merge_keys(old_keys: list[str], new_keys: list[str], fallback_pool: list[str] | None = None) -> list[str]:
-    """合并 Key：掩码形式(含 ****)的提交项从旧配置找回真实 Key。
-
-    查找顺序：本端点的旧 Key → fallback_pool（全部端点的旧 Key）。
-    后者用于端点改名/换位置的场景 —— 否则掩码找不到匹配，会被当成真实 Key 写回配置。
-    仍然找不到就丢弃：宁可少一个 Key，也不能把 sk-abc****xyz 这种掩码写进配置。
-    """
-    pool = list(old_keys or []) + list(fallback_pool or [])
-    out = []
-    for k in new_keys or []:
-        k = (k or "").strip()
-        if not k:
-            continue
-        if "****" in k:
-            found = None
-            for ok in pool:
-                if llm.mask_matches(ok, k):
-                    found = ok
-                    break
-            if found:
-                out.append(found)
-            continue
-        out.append(k)
-    return out
+# _merge_keys 2026-10-07 迁入 app/llm.py（merge_keys，与 mask_matches 同域）；main 侧是转发别名
 
 
 @app.get("/api/ai/config")

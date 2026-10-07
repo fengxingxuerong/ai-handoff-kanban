@@ -113,12 +113,14 @@ MUTATIONS: list[dict] = [
         "tests": ["tests/test_pure_modules.py", "tests/test_task_deps.py", "tests/test_api.py"],
     },
 {
+        # 2026-10-07 executable_tasks 的就绪判定抽成共享谓词 deps_blocking（与 /api/inbox 同一口径），
+        # 变异文本同步：把「未知前置 = 已了结」退回成「未知前置 = 未完成」。
         "id": "executable_unknown_dep_blocks",
         "file": "app/taskgraph.py",
-        "old": "            and all(d in done_ids or d not in known_ids\n"
-               "                    for d in (t.get(\"depends_on\") or []))]",
-        "new": "            and all(d in done_ids\n"
-               "                    for d in (t.get(\"depends_on\") or []))]",
+        "old": "    return any(d in known_ids and d not in done_ids\n"
+               "               for d in (t.get(\"depends_on\") or []))",
+        "new": "    return any(d not in done_ids\n"
+               "               for d in (t.get(\"depends_on\") or []))",
         "why": "未知前置按『未完成』处理：今日待办少一批任务（依赖脏数据时不该永久消失）",
         "tests": ["tests/test_pure_modules.py", "tests/test_task_deps.py", "tests/test_v110_features.py"],
     },
@@ -302,35 +304,38 @@ MUTATIONS: list[dict] = [
         "tests": ["tests/test_api.py", "tests/test_mcp_server.py"],
     },
     {
+        # 2026-10-07 清洗实现搬进 app/journal.py，探针目标随迁（与 monkeypatch 点同址）
         "id": "journal_no_cap",
-        "file": "app/main.py",
+        "file": "app/journal.py",
         "old": "    if len(j) > MAX_JOURNAL:",
         "new": "    if False:",
         "why": "过程记录条数不再封顶：projects.json 悄悄变胖（读写变慢、备份变大、交接包变长）",
         "tests": ["tests/test_api.py", "tests/test_storage_limits.py"],
     },
     {
+        # 2026-10-07 随实现迁到 app/journal.py；时钟注入后该行不再含 now_str()
         "id": "journal_text_no_cut",
-        "file": "app/main.py",
-        "old": '    j.append({"time": when or now_str(), "text": (text or "")[:MAX_JOURNAL_TEXT]})',
-        "new": '    j.append({"time": when or now_str(), "text": (text or "")})',
+        "file": "app/journal.py",
+        "old": '    j.append({"time": when, "text": (text or "")[:MAX_JOURNAL_TEXT]})',
+        "new": '    j.append({"time": when, "text": (text or "")})',
         "why": "单条记录不再截到 500 字：与声明的上限分叉（智能体写 1200 字，落盘却是全量）",
         "tests": ["tests/test_storage_limits.py", "tests/test_api.py"],
     },
     {
         # 2026-10-06 起 journal 超限改为「折叠成摘要」而不是直接截断（对标 Beads 语义压缩）。
         # 原来的 clean_journal_no_cap（摘掉 raw[-MAX_JOURNAL:]）盯的旧代码已随这次改动搬家，
-        # 变异改盯新语义：把折叠退回成丢弃。
+        # 变异改盯新语义：把折叠退回成丢弃。2026-10-07 实现再迁 app/journal.py，目标同步。
         "id": "journal_fold_dropped",
-        "file": "app/main.py",
+        "file": "app/journal.py",
         "old": "    return [summary] + keep",
         "new": "    return keep",
         "why": "溢出的旧过程记录从『折叠成摘要』退化回『静默丢弃』：早期决策证据无声消失",
         "tests": ["tests/test_storage_limits.py", "tests/test_p1_absorb.py"],
     },
     {
+        # 2026-10-07 clean_acceptance 随清洗簇搬进 app/journal.py，探针目标同步
         "id": "acceptance_no_cap",
-        "file": "app/main.py",
+        "file": "app/journal.py",
         "old": "        if len(out) >= MAX_ACCEPTANCE_ITEMS:",
         "new": "        if False:",
         "why": "验收标准条数不再封顶：模型吐 500 条就长在任务里，交接包跟着膨胀",
@@ -345,11 +350,22 @@ MUTATIONS: list[dict] = [
         "tests": ["tests/test_p1_absorb.py"],
     },
     {
+        # 2026-10-07 inbox 补上「依赖没满足的不算」后循环体改写，变异文本同步到新代码
         "id": "inbox_counts_completed",
         "file": "app/main.py",
-        "old": '            if not isinstance(t, dict) or t.get("status") == "已完成":',
-        "new": "            if not isinstance(t, dict):",
+        "old": '        for t in tasks:\n            if t.get("status") == "已完成":\n                continue',
+        "new": "        for t in tasks:\n            if False:\n                continue",
         "why": "已完成的任务也进待拍板清单（逾期的已完成任务凭空出现在铃铛里）",
+        "tests": ["tests/test_p1_absorb.py"],
+    },
+    {
+        # 2026-10-07 新增：约定 27 的「依赖没满足的不算」实现漏了过滤、测试空转 ——
+        # 修复当天按纪律补探针，别让新规则回到"没有门禁"的状态。
+        "id": "inbox_ignores_blocked_deps",
+        "file": "app/main.py",
+        "old": "            if deps_blocking(t, done_ids, known_ids):\n                continue",
+        "new": "            if False:\n                continue",
+        "why": "被前置挡住的任务也进待拍板：它随前置完成自然流转，不是等人的事，铃铛被噪音淹没",
         "tests": ["tests/test_p1_absorb.py"],
     },
 {

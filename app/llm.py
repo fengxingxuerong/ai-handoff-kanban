@@ -195,6 +195,34 @@ def mask_config(cfg: dict) -> dict:
     return out
 
 
+def merge_keys(old_keys: list[str], new_keys: list[str],
+               fallback_pool: list[str] | None = None) -> list[str]:
+    """合并 Key：掩码形式(含 ****)的提交项从旧配置找回真实 Key。
+
+    查找顺序：本端点的旧 Key → fallback_pool（全部端点的旧 Key）。
+    后者用于端点改名/换位置的场景 —— 否则掩码找不到匹配，会被当成真实 Key 写回配置。
+    仍然找不到就丢弃：宁可少一个 Key，也不能把 sk-abc****xyz 这种掩码写进配置。
+    （2026-10-07 从 main 迁入：掩码找 Key 与 mask_matches 同域）
+    """
+    pool = list(old_keys or []) + list(fallback_pool or [])
+    out = []
+    for k in new_keys or []:
+        k = (k or "").strip()
+        if not k:
+            continue
+        if "****" in k:
+            found = None
+            for ok in pool:
+                if mask_matches(ok, k):
+                    found = ok
+                    break
+            if found:
+                out.append(found)
+            continue
+        out.append(k)
+    return out
+
+
 def _post(base_url: str, api_key: str, model: str, messages: list, temperature: float, timeout: float) -> tuple[str, dict | None]:
     url = base_url.rstrip("/") + "/chat/completions"
     payload = {

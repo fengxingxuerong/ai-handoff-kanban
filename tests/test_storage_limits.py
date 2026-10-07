@@ -76,9 +76,9 @@ def test_usage_writes_are_serialized(isolated_llm_dir):
 
 def test_journal_is_capped_per_task(app_client, monkeypatch):
     """journal 存在 projects.json 里，不设上限会让核心数据文件悄悄变胖"""
-    import app.main as kanban
+    import app.journal as journal  # 2026-10-07 起 MAX_JOURNAL 的 monkeypatch 点在 app.journal
 
-    monkeypatch.setattr(kanban, "MAX_JOURNAL", 5)
+    monkeypatch.setattr(journal, "MAX_JOURNAL", 5)
     _, p = app_client.create_project("轨迹上限项目", status="进行中")
     _, t = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "反复改状态的任务"})
 
@@ -92,9 +92,9 @@ def test_journal_is_capped_per_task(app_client, monkeypatch):
 
 
 def test_journal_text_is_truncated(app_client, monkeypatch):
-    import app.main as kanban
+    import app.journal as journal  # monkeypatch 点随实现迁到 app.journal
 
-    monkeypatch.setattr(kanban, "MAX_JOURNAL_TEXT", 20)
+    monkeypatch.setattr(journal, "MAX_JOURNAL_TEXT", 20)
     _, p = app_client.create_project("轨迹长度项目", status="进行中")
     _, t = app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "带长轨迹的任务"})
 
@@ -106,8 +106,8 @@ def test_journal_text_is_truncated(app_client, monkeypatch):
 
 def test_clean_journal_normalizes_dirty_data(monkeypatch):
     """导入的脏数据也要收口：非字典条目丢掉、超长截断、超量折叠成摘要（不是丢掉）"""
-    import app.main as kanban
-    from app.main import MAX_JOURNAL_TEXT, clean_journal
+    import app.journal as journal
+    from app.main import MAX_JOURNAL_TEXT, clean_journal  # 走 main 的转发别名
 
     dirty = ["不是字典", {"time": "2026-01-01 00:00", "text": "正常"},
              {"time": "x", "text": "长" * (MAX_JOURNAL_TEXT + 50)}]
@@ -120,7 +120,7 @@ def test_clean_journal_normalizes_dirty_data(monkeypatch):
     # 能把 projects.json 撑大几 MB 却没有用例红。收窄上限后总条数必须回到上限内。
     # 2026-10-06 起超出部分**折叠成摘要**而不是直接丢（对标 Beads 语义压缩）：
     # 丢掉会把"早期为什么这么做"的证据无声清空，折叠只压体量、不压脉络。
-    monkeypatch.setattr(kanban, "MAX_JOURNAL", 2)
+    monkeypatch.setattr(journal, "MAX_JOURNAL", 2)
     out2 = clean_journal([{"text": f"第{i}条"} for i in range(6)])
     assert len(out2) == 2, f"导入超量应折叠到 2 条，实际 {len(out2)}"
     folded, newest = out2
