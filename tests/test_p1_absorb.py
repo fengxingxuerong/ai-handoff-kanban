@@ -225,7 +225,11 @@ def test_inbox_lists_only_tasks_waiting_for_a_human(app_client):
     app_client.post(f"/api/projects/{pid}/tasks", {"title": "没设截止的"})
     app_client.post(f"/api/projects/{pid}/tasks",
                     {"title": "做完的不逾期", "status": "已完成", "due_date": _d(-9)})
-    _, waiter = app_client.post(f"/api/projects/{pid}/tasks", {"title": "被前置挡住的"})
+    # 这条钉子必须"非空转"：waiter 同时踩中两类（阻塞 + 逾期）。2026-10-07 交叉验收
+    # 发现原用例的 waiter 没状态、没截止——不管实现有没有依赖排除它都不会上榜，
+    # 断言恒真；而实现恰恰漏了"依赖没满足的不算"这条过滤（AGENTS.md 约定 27 写了三处）。
+    _, waiter = app_client.post(f"/api/projects/{pid}/tasks",
+                                {"title": "被前置挡住的", "status": "阻塞", "due_date": _d(-2)})
     app_client.patch(f"/api/tasks/{waiter['id']}", {"depends_on": [overdue["id"]]})
 
     _, box = app_client.get("/api/inbox")

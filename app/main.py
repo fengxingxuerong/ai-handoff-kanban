@@ -42,6 +42,7 @@ from .taskgraph import (  # noqa: F401  —— 这些名字仍可从 app.main �
     topo_order,
     _break_dep_cycles,
     executable_tasks,
+    deps_blocking,
     _dedupe_ids,
 )
 # 截止日期归一与临期/逾期判定：2026-09-26 从本文件整体搬出（实现逐字未改）
@@ -1886,8 +1887,16 @@ def inbox():
     today = datetime.now().strftime("%Y-%m-%d")
     items = []
     for p in data.get("projects", []):
-        for t in (p.get("tasks") or []):
-            if not isinstance(t, dict) or t.get("status") == "已完成":
+        tasks = [t for t in (p.get("tasks") or []) if isinstance(t, dict)]
+        done_ids = {t.get("id") for t in tasks if t.get("status") == "已完成"}
+        known_ids = {t.get("id") for t in tasks}
+        for t in tasks:
+            if t.get("status") == "已完成":
+                continue
+            # 2026-10-07 交叉验收补上：约定 27 写着"依赖没满足的不算"，
+            # 实现却漏了这道过滤（对应测试用例也没设状态/截止，断言空转恒真）。
+            # 判定复用 taskgraph.deps_blocking —— 与 executable_tasks 同一口径。
+            if deps_blocking(t, done_ids, known_ids):
                 continue
             kind = ""
             if t.get("status") == "待审查":

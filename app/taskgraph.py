@@ -127,14 +127,25 @@ def _break_dep_cycles(tasks: list[dict]) -> None:
                 accepted.append(dep)
         t["depends_on"] = accepted
 
+def deps_blocking(t: dict, done_ids: set, known_ids: set) -> bool:
+    """任务是否被前置挡住：存在"存在但未完成"的前置。
+
+    与 `executable_tasks` 的就绪判定同一谓词（前置 id 不存在 = 视为已了结，
+    数据自愈会把悬空依赖清掉）。2026-10-07 抽出成函数：`/api/inbox` 的
+    "依赖没满足的不算"（AGENTS.md 约定 27）当时只写在文档里、实现漏了过滤 ——
+    判定散在 docstring 而不落在共享函数里，就会各写各的。
+    """
+    return any(d in known_ids and d not in done_ids
+               for d in (t.get("depends_on") or []))
+
+
 def executable_tasks(tasks: list[dict]) -> list[dict]:
     """当前可以动手的任务：自己的状态未完成，且所有前置都已完成"""
     done_ids = {t.get("id") for t in tasks if t.get("status") == "已完成"}
     known_ids = {t.get("id") for t in tasks}      # 只算一次：原来这个集合是在下面按任务逐个重建的
     return [t for t in tasks
             if t.get("status") not in ("已完成", "待审查")
-            and all(d in done_ids or d not in known_ids
-                    for d in (t.get("depends_on") or []))]
+            and not deps_blocking(t, done_ids, known_ids)]
 
 def _dedupe_ids(items: list) -> None:
     """就地消除重复 id：保留第一条，后来的换成**确定性**的新 id（`t1~2`、`t1~3`…）。
