@@ -618,6 +618,10 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 （journal 折叠只在**超出上限时**发生，≤50 条的读路径原样返回，零新增成本）；冷态 `export-all` 3.3s
 = 20 仓库 × ~168ms git 探测的已知成本。
 
+**2026-10-07 复测（journal/acceptance 清洗拆出 `app/journal.py` + `_merge_keys` 迁入 llm 之后，同口径）**：
+读接口热态中位 4.3–6.8ms、`export-all` 热 8.1ms、冷态 3.2s —— 与 10-06 一致（波动内略优），
+拆分未引入读路径回归；`_append_journal` 只是多一跳函数调用，时钟注入不进读路径。
+
 **结论：先不加缓存。** 这是本机单人看板，真实规模是几十个项目（≈个位数毫秒），
 加 mtime 缓存会引入失效风险却换不来可感知收益。等到「列表接口 > 300ms」成为日常体验问题时
 再考虑分片存储或 SQLite —— 那时也应该是先改存储层，而不是加一层缓存糊住。
