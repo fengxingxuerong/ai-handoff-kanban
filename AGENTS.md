@@ -765,6 +765,11 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   都监听 push，接上远端就会双跑两份各自维护的步骤清单，正是「两处各写一遍必然漂」的形状。
   **改 workflow 一律按"它会被真执行"来写**；哪天真接上远端跑通了，把结论和用时补回这里
   （ci.yml 头部列着三条首次运行预期要调的地方）。
+  2026-10-07 做过一次**本地预演**（接远端前能做到的最接近还原）：干净 venv 只按
+  `requirements.lock.txt` 安装（pyinstaller / pytest 全家 / playwright 都在锁里，实测退出码 0），
+  用它跑 `ci_local --with-exe` 11 步全绿、约 4 分钟 —— 锁文件"换机/CI/出包用它"这句承诺
+  从此有实测背书。预演仍未覆盖的只剩 runner 本身：Edge/Chrome 缺位时的 playwright chromium
+  兜底（ci.yml 头部第 1 条）与 actions 大版本兼容，接上远端首跑时重点看这两处。
 - **"这个端点没人用"要先连 scripts/ 和 tests/ 一起看**（2026-09-19 我就是这样误判过两条）：
   `GET /api/projects/{pid}/next` 前端与 MCP 当时都不用，但 `delivery_drill` 与
   `test_task_deps` 在用；`GET /api/ai/reports` 界面上进不去（`openReport(rid)` 的"历史报告"
