@@ -756,12 +756,14 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 - **无桌面会话时不要开窗**：CI（`windows-latest`）与服务器上没有桌面，pywebview 起窗会失败并带走整个进程。
   凡是"真启动 exe"的自动化，一律带 `KANBAN_NO_WINDOW=1`（只服务不开窗），
   `frozen_smoke.py` 在 CI 里就是这么跑的（数据目录由它自己指定为 `%TEMP%\kanban_frozen_smoke`）。
-- **CI 流水线一次都没有真跑过**：仓库没有远端（`git remote -v` 为空），所以 `.github/workflows/test.yml`
-  从来没有被 Actions 执行过 —— 它"看起来对"不作数。2026-09-19 逐条静态核对查出三处必红/必空：
-  package job 只装 `requirements.txt` 而 pyinstaller 只在 `requirements-dev.txt` 里（下一步
-  `python -m PyInstaller` 直接 ModuleNotFoundError）；顶层没有 `PYTHONIOENCODING`，而 scenario 与
-  package 步骤要打印中文、还要按 UTF-8 解子进程输出，GBK runner 上是假红；打好的 exe 没有上传，
-  打包成功也拿不到产物。**改 workflow 一律按"它会被真执行"来写**；哪天真跑通了，把结论和用时补回这里。
+- **CI 流水线一次都没有真跑过**：仓库没有远端（`git remote -v` 为空），所以 `.github/workflows/ci.yml`
+  从来没有被 Actions 执行过 —— 它"看起来对"不作数。**工作流只有这一份**：单入口
+  （锁文件安装 → `ci_local --with-exe` → 上传 exe，只在 windows-latest）。旧 `test.yml` 是它的
+  复刻前身（2026-09-19 静态核对查出三处必红/必空：package job 只装 `requirements.txt` 没有
+  pyinstaller、GBK runner 上中文假红、exe 没上传），已于 2026-10-07 退役删除 —— 两个 workflow
+  都监听 push，接上远端就会双跑两份各自维护的步骤清单，正是「两处各写一遍必然漂」的形状。
+  **改 workflow 一律按"它会被真执行"来写**；哪天真接上远端跑通了，把结论和用时补回这里
+  （ci.yml 头部列着三条首次运行预期要调的地方）。
 - **"这个端点没人用"要先连 scripts/ 和 tests/ 一起看**（2026-09-19 我就是这样误判过两条）：
   `GET /api/projects/{pid}/next` 前端与 MCP 当时都不用，但 `delivery_drill` 与
   `test_task_deps` 在用；`GET /api/ai/reports` 界面上进不去（`openReport(rid)` 的"历史报告"
@@ -836,7 +838,9 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 > `release_regression` **去掉 `--no-ai` 实跑过三次：23 通过 / 0 失败**（2026-09-23 首跑、
 > 2026-10-06 随 v1.2.0 发版复跑、2026-10-07 随 v1.2.1 发版复跑，各多花约 1 次真调用）——
 > "新功能链路全部可用"这句话三次都是跑出来的，不是印出来的。
-`ci_local --with-exe` 全十步（含重打包与冻结版自查）实测约 90 秒；改过 `web/index.html` 之后
+`ci_local --with-exe` 全 11 步（含重打包与冻结版自查）实测约 **4 分钟**（2026-10-07 实测 247s：
+pytest 62s + 探针 147s + 打包 24s + 冻结冒烟 4s，其余各步个位数秒；旧记录"约 90 秒"是探针
+并入 full 模式之前的数，别再引用）。改过 `web/index.html` 之后
 必须走这一档，否则「产物内嵌的前端就是仓库这一份」那条会如实拦住你。
 ⚠️ 全量跑常常**打完覆盖率表就没有 summary 行**（见「测试约定 10」），判绿只认退出码。
 
