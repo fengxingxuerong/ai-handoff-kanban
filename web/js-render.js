@@ -595,6 +595,13 @@ async function renderStats() {
       : `<div style="color:var(--red)">⚠ ${blk.count} 个任务被前置阻塞</div>`
         + blk.tasks.map(t => `<div style="font-size:12px;margin-top:4px">· ${esc(t.title)} — 在等：${(t.blocked_by || []).map(x => esc(x.title)).join("、")}</div>`).join("")
         + (blk.tasks.length < blk.count ? `<div style="font-size:11px;color:var(--text-faint);margin-top:4px">…共 ${blk.count} 条，只列前 ${blk.tasks.length} 条</div>` : "");
+    // 停滞检测（第三轮竞品吸取，对标 agent-board）：count=0 也显式说，不留空白被读成"没在检查"
+    const stl = s.stalled || { count: 0, tasks: [] };
+    const stalledHtml = stl.count === 0
+      ? `<div style="color:var(--text-faint)">没有停滞的进行中任务</div>`
+      : `<div style="color:#f59e0b">⚠ ${stl.count} 个进行中任务超 7 天没动</div>`
+        + stl.tasks.map(t => `<div style="font-size:12px;margin-top:4px">· ${esc(t.title)} — 已搁置 ${t.idle_days} 天</div>`).join("")
+        + (stl.tasks.length < stl.count ? `<div style="font-size:11px;color:var(--text-faint);margin-top:4px">…共 ${stl.count} 条，只列前 ${stl.tasks.length} 条</div>` : "")
     body.innerHTML = `
       <div style="margin-bottom:10px">
         <div style="font-size:12px;font-weight:600;margin-bottom:6px">状态分布</div>
@@ -605,7 +612,11 @@ async function renderStats() {
         <div style="font-size:12px;font-weight:600;margin-bottom:6px">截止日期（未完成任务）</div>
         <div style="display:flex;gap:14px;flex-wrap:wrap">${heat}</div>
       </div>
-      <div>
+      <div style="margin-top:10px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">任务停滞（进行中超 7 天未动）</div>
+        ${stalledHtml}
+      </div>
+      <div style="margin-top:10px">
         <div style="font-size:12px;font-weight:600;margin-bottom:6px">依赖阻塞</div>
         ${blockedHtml}
       </div>`;

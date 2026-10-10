@@ -1,0 +1,130 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo.svg" alt="aeman" width="300">
+  </picture>
+</p>
+
+# aeman
+
+A short-term planning system for engineering teams — it keeps engineers focused, runs daily sprints, and makes unplanned work visible. **A git repository is the storage**: a board is a repository of small YAML/Markdown files and every action is a commit, so aeman has no database of its own and the board's history is a plain git log. The whole thing ships as one self-contained Go binary: an embedded React SPA (via `go:embed`), a JSON REST API, a WebSocket **watch** stream that keeps every open board updated live, and an MCP server for AI agents — all driving the same board service, with the repository as the single source of truth.
+
+## Concept
+
+Two complementary views — your own day board and a team board:
+
+- **Me** — your own day board. Your cards for the selected day, stacked into four colour zones, with an editable notes log on the right. You can also **View as** another person to see (and act on) their board, with a one-click reset back to yourself.
+  - **Gray** — regular, planned work.
+  - **Green** — start only when every other zone is clear.
+  - **Yellow** — popped up unplanned during the day.
+  - **Red** — must be resolved before the end of the day.
+- **Team** — the team board: a people × zones grid for the selected day, filtered by team. Columns are people (with their avatar and name), rows are the same colour zones. Columns can be dragged or shuffled, and a person keeps a column even on days they have no cards.
+
+Each card carries a **readiness slider** (0–100%), a **stage** (Locked / Review / Recurrent / Done) that recolours the bar, an optional **team**, an age counter, and links back to its source issue. Click a card's avatar to reassign its team or person, or the day counter to edit its dates. There is intentionally no built-in time tracker.
+
+Every open board is **live**: edits made by teammates — or by AI agents over MCP — appear on everyone's screen in about a second, without reloading.
+
+### Sprints
+
+Sprints are open-ended and advanced by hand: **Carry over** starts a team's new sprint on today and pulls its unfinished cards forward (with a *no team* group too). A card carries two dates — the sprint it belongs to (**sprint start**) and the day it actually started (**start**, kept as history) — so the Team board shows it on its sprint's day, on the day it was created, and on past sprint days it passed through. **+1 day / +1 week** defers a card counting from today, hiding it until its new day without losing that history. The current sprint is tracked per team, so an engineer on several teams sees each team's current cards at once. The full date model lives in [docs/dates.md](docs/dates.md).
+
+### Triage — the weeks ahead
+
+Beside the day boards sits **Triage**: the weeks laid out side by side, a column per person, showing who does what and in which week. Work accepted but not for now is placed in a week rather than dropped onto today, and a card whose week lies ahead is on no day board until that week begins — which is what makes the queue a regulator rather than a stack. A card still open when its week has passed is a **debt**: it stays in the week it was owed in, marked overdue, because that week is the record of what was missed.
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────┐        ┌──────────────────────┐
+│  aeman binary (Go)                           │        │  git repository      │
+│                                              │        │  (GitHub, GitLab, …) │
+│  embedded SPA ───► REST /api/v1 ──┐          │  push  │                      │
+│       ▲                           │  board   ┼───────►│  cards/…/<id>.md     │
+│       └──── WS /api/v1/views/… ◄──┤  service │  fetch │  teams/<id>.yaml     │
+│                                   │  + cache ◄────────┼  projects/…          │
+│  AI agents ───► MCP (stdio, /mcp)─┘  + clone │        │  one commit/action   │
+└──────────────────────────────────────────────┘        └──────────────────────┘
+```
+
+- **Kubernetes-style API and live sync**: cards, sprints, notes and the board order are resources (`{kind, metadata, spec, status}`); a client LISTs them from the BOARD it has open (`GET /api/v1/views/{view}/cards` — me, team, triage, project, …) and then applies a WATCH stream of `ADDED / MODIFIED / DELETED` resource events over a WebSocket — optionally scoped to one view by the same selectors LIST takes. Every write — from the UI, the REST API or an agent over MCP — goes through one board service with a shared in-memory store, is answered at once, and reaches every open board in about a second (a client's own changes are not echoed back to it).
+- **Every request is one commit.** The server keeps a shallow clone of the board's repositories under `--data`, commits each request's writes as one commit (author = the person, committer = the server, machine-readable `Aeman-*` trailers), pushes in the background and fetches other replicas' commits on a timer; a rejected push is re-applied on the new tip field by field. The card's activity feed *is* this history.
+- **Visibility by repository.** A board may span several repositories (domains): a closed project in a private repository next to the shared one. A visitor sees the union of what they can read — an unreadable domain is absent, not empty — and writes need write access to the repository they land in. Design: [docs/design/git-backend.md](docs/design/git-backend.md).
+- The browser never holds a token: the binary resolves the identity server-side (the owner of the locally stored token — `aeman login`, `gh`, `glab` — or per-user OAuth sessions in the self-hosted mode); the push credential is the server's (`AEMAN_GIT_TOKEN`).
+
+### Repository layout
+
+```
+board.yaml                        # schema, title
+teams/<id>.yaml                   # a team and its sprint pointer (teams/_.yaml = no team)
+projects/<id>/project.yaml        # a project; its epic columns and deadlines beside it
+processes/<id>/process.yaml       # recurring work; its tasks beside it
+cards/<a>/<b>/<id>.md             # a card: YAML front-matter, description, ## Notes
+```
+
+Ids are ULIDs; files keep unknown keys, so hand edits and other tools survive. `aeman init --repo <url>` bootstraps an empty repository; `aeman migrate --owner <org> --board <n> --repo <url>` moves a GitHub Projects v2 board over, once, with its history as commits.
+
+## Requirements
+
+- A git repository aeman can push to over HTTPS, on GitHub or GitLab (gitlab.com or self-hosted) — `AEMAN_GIT_TOKEN`, or `aeman login` to keep the token in the OS keychain instead — or a local path for a single-user setup.
+- Optionally the forge's CLI, signed in, as another place the local identity and token can come from — depending on where the board repositories live: [GitHub CLI (`gh`)](https://cli.github.com/) (`gh auth login`) or [GitLab CLI (`glab`)](https://gitlab.com/gitlab-org/cli) (`glab auth login`). `aeman login` covers the same ground without either.
+- Go 1.27.1+ and Node.js 20+ to build from source.
+
+## Build & run
+
+```sh
+make build          # builds the SPA, then the single binary
+./aeman init --repo https://github.com/acme/aeman-db.git          # once: an empty repository becomes a board (GitHub or GitLab URL)
+./aeman serve --repo aeman-db=https://github.com/acme/aeman-db.git  # starts the server and opens the UI
+```
+
+During development:
+
+```sh
+make frontend       # build the SPA once into web/dist
+make run            # go run ./cmd/aeman serve
+```
+
+`aeman serve` flags: `--repo name=url` (repeatable; the board's repositories, primary first — env `AEMAN_REPOS`), `--data` (where the clones live), `--history` (how far back the log is loaded in the background, default 2 weeks) and `--history-max` (how far a card's log may deepen on demand, default a year), `--sync-interval` (fetch cadence, 15 s), `--unpushed-warn` (age of an unpushed commit that turns `/api/healthz` degraded, 5 m), `--committer` and `--author-email`, `--addr`, `--open`, `--verbose`. Each flag has an `AEMAN_*` environment twin; the push credential is `AEMAN_GIT_TOKEN`, never a flag. ("Project" is aeman's own planning entity — a group of epic columns — not a repository.)
+
+The board lives on one **forge** — GitHub or GitLab (gitlab.com or self-hosted) — which signs visitors in and answers who may read which repository. `--forge github|gitlab` (`AEMAN_FORGE`) picks it; unset, it follows the primary repository's host: `github.com` → GitHub, a host containing `gitlab` → GitLab, anything else → GitHub unless `AEMAN_GITLAB_URL` is set. `--gitlab-url` (`AEMAN_GITLAB_URL`) names a self-hosted GitLab's base URL (default `https://<host of the primary repository>`). Without OAuth variables the binary runs in the local, single-user mode. The push credential is `AEMAN_GIT_TOKEN` when set, else `GITHUB_TOKEN`/`GH_TOKEN` (GitHub) or `GITLAB_TOKEN` (GitLab), else the OS keychain that `aeman login` writes, else the forge's CLI signed in on the machine (`gh auth login`, `glab auth login`). The identity is whoever that credential belongs to — the same order, so the push and the name on the commits are one account. `AEMAN_GIT_TOKEN` is the exception: it names the server's credential only, and the identity then starts at the forge's own variables.
+
+## API and MCP server
+
+The same binary drives the board three ways: the embedded UI, a JSON HTTP API under `/api/v1`, and an MCP server for AI agents (`aeman mcp` on stdio, `aeman mcp --listen` as a shared loopback daemon, or mounted at `/mcp` in the self-hosted OAuth mode). All of them call the same board service, so a change made by an agent shows up on every open board live. `GET /api/v1` names the board and points at `GET /api/v1/openapi.json`, the OpenAPI description of the whole surface; see [docs/api.md](docs/api.md) for the card model, the watch protocol, the MCP tool set and client configuration. The board logic itself is importable: the packages under `pkg/` (domain rules, board service, git storage, MCP tool set) let external tools — e.g. a local, privacy-preserving MCP server over its own clone — run the exact same board contract; see [docs/embedding.md](docs/embedding.md).
+
+```sh
+aeman mcp --repo board=https://github.com/acme/planning.git   # the MCP server on stdio, over its own clone
+```
+
+A data directory takes one process, so when several MCP clients share a board, run one daemon for all of them — `aeman service install --repo … --listen 127.0.0.1:8766`, then `claude mcp add --transport http aeman http://127.0.0.1:8766/mcp --scope user`. Nothing authenticates that endpoint and loopback is shared by every account on the host, so the daemon is for a machine whose accounts you trust; on a shared host stay with `aeman mcp` over stdio.
+
+## Self-hosted deploy (multi-user)
+
+For a shared instance where every visitor signs in with GitHub or GitLab — their token decides which of the board's repositories they may read and write — set the OAuth environment variables of **one** forge and the binary switches from the local CLI mode to an OAuth web flow with per-user sessions:
+
+- `AEMAN_GITHUB_CLIENT_ID` / `AEMAN_GITHUB_CLIENT_SECRET` — from a GitHub OAuth App; **or**
+- `AEMAN_GITLAB_CLIENT_ID` / `AEMAN_GITLAB_CLIENT_SECRET` — from a GitLab application (`AEMAN_GITLAB_URL` for a self-hosted GitLab). Exactly one pair.
+- `AEMAN_BASE_URL` — the public origin; the callback registered at the forge is `<AEMAN_BASE_URL>/auth/callback`.
+- `AEMAN_GIT_TOKEN` — the server's own credential for the board repositories; required in this mode.
+- `AEMAN_SCOPES` — OAuth scopes (default `repo` on GitHub, `read_user read_api` on GitLab; a GitHub App ignores it).
+- `AEMAN_GITHUB_APP_ID`, `AEMAN_GITHUB_APP_KEY` (PEM or its base64) / `AEMAN_GITHUB_APP_KEY_FILE` — a GitHub App as the server credential: installation tokens minted and renewed instead of a PAT ([deploy.md](docs/deploy.md)).
+
+A `docker-compose.yml` (aeman + Caddy with automatic HTTPS) and a step-by-step guide are in [docs/deploy.md](docs/deploy.md):
+
+```sh
+cp .env.example .env   # fill in the repositories, the token, one OAuth pair and the domain
+docker compose up -d --build
+```
+
+## Project website
+
+The GitHub Pages landing page lives in [`site/`](site/), independently of the
+product UI. Build it with `node site/build.mjs`, then preview with
+`python3 -m http.server 8080 --directory site/dist`. The Pages workflow validates
+pull requests and deploys relevant changes on `main` using GitHub Actions.
+The upstream URL is https://aeman.aenix.io/ (forks publish under their own github.io path).
+See [`site/README.md`](site/README.md) for theme reuse and screenshot updates.
+
+## License
+
+[Apache License 2.0](LICENSE).

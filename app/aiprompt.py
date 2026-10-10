@@ -28,7 +28,13 @@ from .llm import _extract_json
 from .redact import redact_text
 
 
-def projects_brief(projects: list[dict], *, memories_by_pid_fn, git_snapshot_fn) -> list[dict]:
+# 停滞计算回调（main 注入 project_stats._stalled 的包装）；本模块不 import main，
+# 未注入时给中性零值（简报形状稳定，调用方总能在 item["stalled"] 上取到结构）。
+project_stats_stalled = lambda tasks: {"count": 0, "tasks": []}
+
+
+def projects_brief(projects: list[dict], *, memories_by_pid_fn, git_snapshot_fn,
+                   stalled_fn=None) -> list[dict]:
     """给 LLM 的精简项目数据（含代码现状，便于发现"看板说有进展、代码其实没动"）
 
     自由文本（背景 / 下一步 / 任务标题 / 过程记录 / 记忆）过一道脱敏再送出去：这些是要离开本机
@@ -68,6 +74,9 @@ def projects_brief(projects: list[dict], *, memories_by_pid_fn, git_snapshot_fn)
         if total_tasks > 40:
             item["tasks_note"] = (f"该项目共 {total_tasks} 条任务，本简报只带前 40 条，"
                                   "其余未在本次分析范围内")
+        # 停滞信号（第三轮竞品吸取）：与 git.days_since_commit 对称的"看板侧停滞"。
+        # 口径唯一在 project_stats._stalled —— 两条路给不同答案是本项目反复出问题的形状。
+        item["stalled"] = (stalled_fn or project_stats_stalled)(p.get("tasks") or [])
         snap = git_snapshot_fn(p.get("repo_path", ""), limit=1)
         if snap.get("ok"):
             item["git"] = {

@@ -238,6 +238,29 @@ def test_llm_brief_says_when_it_drops_tasks(app_client):
     assert "tasks_note" not in by_id["p2"], "没截断就别多塞一个键"
 
 
+def test_projects_brief_carries_stalled_signal(monkeypatch):
+    """简报必须带 stalled 摘要：模型据此能看出"看板侧停滞"，与 git.days_since_commit
+    的"代码侧停滞"对称（第三轮竞品吸取，对标 agent-board stuck detection）。
+    口径唯一在 project_stats._stalled —— 进行中且 updated_at 超 7 天才算。"""
+    import app.main as k
+
+    brief = k._projects_brief([
+        {"id": "p1", "name": "停滞板", "status": "进行中", "tags": [],
+         "tasks": [{"id": "t1", "title": "停了很久", "status": "进行中",
+                    "updated_at": "2026-09-01 10:00"},
+                   {"id": "t2", "title": "刚动的", "status": "进行中",
+                    "updated_at": "2026-10-08 09:00"},
+                   {"id": "t3", "title": "停很久的待办", "status": "待办",
+                    "updated_at": "2026-08-01 08:00"}]}])
+    st = brief[0]["stalled"]
+    assert st["count"] == 1, st
+    assert st["tasks"][0]["id"] == "t1" and st["tasks"][0]["idle_days"] >= 30, st
+    # 缺 updated_at 字段的项目也要有形状（调用方无需判空）
+    brief2 = k._projects_brief([{"id": "p2", "name": "乙", "status": "进行中",
+                                 "tags": [], "tasks": []}])
+    assert brief2[0]["stalled"] == {"count": 0, "tasks": []}
+
+
 def test_projects_brief_masks_the_commit_subject(monkeypatch):
     """`_projects_brief` 里 next_action / background / journal / memories 四处都过了脱敏，
     以前独独 `git.last_commit_subject` 是原文 —— commit 正文同样是自由文本，

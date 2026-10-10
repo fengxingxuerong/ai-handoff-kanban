@@ -2760,13 +2760,20 @@ def _git_line_for_handoff(p: dict) -> str:
     return "\n".join(bits)
 
 
+def _stalled_for_brief(tasks: list[dict]) -> dict:
+    """project_stats._stalled 的注入包装（时钟在这里取，纯函数在那边测）。"""
+    from .project_stats import _stalled
+    return _stalled(tasks, datetime.now())
+
+
 def _projects_brief(projects: list[dict]) -> list[dict]:
     """给 LLM 的精简项目数据（含代码现状）：依赖注入到 app/aiprompt.py（原签名保留）。
     记忆分桶与 git 探测在**调用时**解析 main 的全局名 —— 既有 monkeypatch（如
     test_projects_brief_masks_the_commit_subject 对 _memories_by_pid / git_snapshot 的
     打点）照常有效。本体与口径说明见 aiprompt.projects_brief。"""
     return aiprompt.projects_brief(
-        projects, memories_by_pid_fn=_memories_by_pid, git_snapshot_fn=git_snapshot)
+        projects, memories_by_pid_fn=_memories_by_pid, git_snapshot_fn=git_snapshot,
+        stalled_fn=_stalled_for_brief)
 
 
 class AIConfigIn(BaseModel):

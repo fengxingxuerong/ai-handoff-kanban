@@ -97,6 +97,33 @@ def _blocked_chain(tasks: list[dict]) -> dict:
     return {"count": len(blocked), "tasks": blocked[:BLOCKED_SHOW]}
 
 
+STALLED_DAYS = 7          # 进行中任务多久没动算"停滞"（对标 agent-board stuck detection）
+
+
+def _stalled(tasks: list[dict], now: datetime, window_days: int = STALLED_DAYS) -> dict:
+    """停滞检测：`进行中` 且 updated_at 距 now 超过 window_days 天的任务。
+
+    只盯「进行中」：待办没人承诺在做、待审查/阻塞的停滞语义各不相同（一个等人验收、
+    一个等人解障，都不该按"没动"报警）；已完成天然排除。updated_at 缺失或解析失败
+    的任务不判停滞——数据不完整时宁可漏报也不武断。窗口可注入便于测试与将来做成设置。
+    """
+    out: list[dict] = []
+    for t in tasks:
+        if not isinstance(t, dict) or t.get("status") != "进行中":
+            continue
+        raw = t.get("updated_at") or ""
+        try:
+            updated = datetime.strptime(str(raw), "%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            continue
+        idle_days = (now - updated).days
+        if idle_days > window_days:
+            out.append({"id": t.get("id"), "title": t.get("title") or "(未命名任务)",
+                        "idle_days": idle_days})
+    out.sort(key=lambda x: -x["idle_days"])
+    return {"count": len(out), "tasks": out[:8]}
+
+
 def milestone_progress(milestones: list[dict], tasks: list[dict]) -> list[dict]:
     """里程碑进度（P2 轻量版）：每个里程碑下已归组任务的完成情况。
 
@@ -135,14 +162,18 @@ def milestone_progress(milestones: list[dict], tasks: list[dict]) -> list[dict]:
     return out
 
 
-def project_stats(tasks: list[dict], today: date | None = None) -> dict:
-    """聚合项目级统计（纯函数）。`today` 可注入固定日期，默认取当天。
+def project_stats(tasks: list[dict], today: date | None = None,
+                  now: datetime | None = None) -> dict:
+    """聚合项目级统计（纯函数）。`today` / `now` 可注入固定时钟，默认取当天/当前时刻。
 
-    返回：`{by_status, due, blocked}`。全部只读。
+    返回：`{by_status, due, blocked, stalled}`。全部只读。
     """
-    today = today or datetime.now().date()
+    now = now or datetime.now()
+    today = today or now.date()
     return {
         "by_status": _status_dist(tasks),
         "due": _due_heat(tasks, today),
         "blocked": _blocked_chain(tasks),
+        # 停滞检测（第三轮竞品吸取，对标 agent-board）：进行中但 updated_at 超 7 天
+        "stalled": _stalled(tasks, now),
     }

@@ -145,6 +145,45 @@ def test_project_stats_distribution_and_due_heat():
     assert got["due"] == {"overdue": 1, "within_7d": 2, "later": 1, "no_due": 3}   # e/f 没设、h 未知状态也无截止
 
 
+def test_stalled_detection_window_and_status_filter():
+    """停滞检测（第三轮竞品吸取，对标 agent-board）：只有「进行中」且 updated_at
+    超 7 天才算停滞；待办/待审查/阻塞/已完成都不算；updated_at 缺失或乱格式不武断判停滞；
+    窗口可注入；明细按搁置天数倒序、最多 8 条，count 给总数。"""
+    now = datetime(2026, 10, 8, 12, 0)
+
+    def _ts(tid, status, updated=None):
+        t = _mk(tid, status)
+        t["updated_at"] = updated          # None = 缺失 → 不判停滞
+        return t
+
+    tasks = [
+        _ts("s1", "进行中", "2026-09-14 10:00"),   # 搁置 24 天，停滞
+        _ts("s2", "进行中", "2026-10-02 12:00"),   # 搁置 6 天 → 窗口内，不算
+        _ts("todo", "待办", "2026-08-01 08:00"),   # 待办停再久也不算
+        _ts("rev", "待审查", "2026-08-01 08:00"),
+        _ts("blk", "阻塞", "2026-08-01 08:00"),
+        _ts("done", "已完成", "2026-08-01 08:00"),
+        _ts("noupdate", "进行中", None),           # 缺失 → 不判
+        _ts("bad", "进行中", "乱格式"),             # 解析失败 → 不判
+]
+
+    got = ps.project_stats(tasks, date(2026, 10, 8), now=now)
+    st = got["stalled"]
+    assert st["count"] == 1 and len(st["tasks"]) == 1, st
+    assert st["tasks"][0]["id"] == "s1" and st["tasks"][0]["idle_days"] >= 24
+
+    # 窗口注入：收紧到 3 天 → s2（6 天）也进榜；明细按搁置天数倒序
+    tight = ps._stalled(tasks, now, window_days=3)
+    assert {x["id"] for x in tight["tasks"]} == {"s1", "s2"}
+    assert tight["tasks"][0]["id"] == "s1", "搁置更久的排前面"
+
+    # 上限：11 条停滞任务 → count=11 但 tasks 只列 8 条
+    many = [{"id": f"m{i}", "title": f"任务{i}", "status": "进行中",
+             "updated_at": "2026-09-01 10:00"} for i in range(11)]
+    capped = ps._stalled(many, now)
+    assert capped["count"] == 11 and len(capped["tasks"]) == 8, (capped["count"], len(capped["tasks"]))
+
+
 def test_project_stats_blocked_chain():
     """阻塞链：已完成前置不算阻塞、指向不存在的依赖按已满足（与 executable_tasks
     同语义）、多前置只列未完成者；明细只列前 8 条，count 给总数。"""
@@ -196,7 +235,7 @@ def test_project_stats_endpoint_and_404(app_client):
 
     status, body = app_client.get(f"/api/projects/{pid}/stats")
     assert status == 200, body
-    assert set(body) == {"by_status", "due", "blocked"}
+    assert set(body) == {"by_status", "due", "blocked", "stalled"}
     assert body["by_status"]["已完成"] == 1
     assert body["due"]["within_7d"] == 1 and body["due"]["later"] == 1
     assert body["blocked"]["count"] == 1
