@@ -189,6 +189,14 @@ MUTATIONS: list[dict] = [
         "tests": ["tests/test_api.py"],
     },
     {
+        "id": "export_all_prefetch_disabled",
+        "file": "app/main.py",
+        "old": '    if "git" not in (omit or set()):\n        prefetch_snapshots([p.get("repo_path", "") for p in projects])',
+        "new": "",
+        "why": "全项目交接包回到 git 串行探测：冷态 1000 项目中位 5.8s/max 56s（bench 2026-10-08），导出接口被几十个仓库拖死",
+        "tests": ["tests/test_git.py", "tests/test_api.py"],
+    },
+    {
         "id": "redact_drops_email",
         "file": "app/redact.py",
         "old": '    (r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "****@****"),\n',

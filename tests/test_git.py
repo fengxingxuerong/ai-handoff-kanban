@@ -94,6 +94,49 @@ def test_repo_path_cannot_inject_commands(tmp_path):
     assert not marker.exists(), "命令被拼接执行了！"
 
 
+def test_prefetch_snapshots_warms_cache_concurrently(tmp_path):
+    """export-all 的 git 串行热点（冷态中位 5.8s）靠并发预取收口：预取后同仓快照
+    必须命中缓存（不再 spawn 5 个子进程），去重与不存在路径都不发起。"""
+    from app import gitinfo
+
+    repos = [str(make_repo(tmp_path, name=f"repo-{i}", commits=1)) for i in range(6)]
+    repos.append(repos[0])                      # 重复路径应去重
+    repos.append(str(tmp_path / "不存在的仓"))   # 不存在路径不发起
+    n = gitinfo.prefetch_snapshots(repos)
+    assert n == 6, f"应发起 6 个（去重后），实际 {n}"
+    hits = gitinfo._git_cache.get(repos[0])
+    assert hits and hits[1]["ok"] is True, "预取后缓存里必须有该仓库快照"
+    # 预取写入后，常规调用直接命中缓存（写个新提交也不会反映出来）
+    repo0 = tmp_path / "repo-0"
+    subprocess.run(["git", "add", "-A"], cwd=str(repo0), capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "预取后再提交"], cwd=str(repo0), capture_output=True)
+    (repo0 / "late.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=str(repo0), capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "预取后再提交2"], cwd=str(repo0), capture_output=True)
+    snap = git_snapshot(str(repo0))
+    assert snap["head"]["subject"] == "第 1 次提交：完成模块 0", "预取后应命中缓存而非重新扫"
+
+
+def test_export_all_prefetches_repo_snapshots(app_client, tmp_path, monkeypatch):
+    """钉住调用行为本身：/api/export-all 渲染前必须对全部 repo_path 并发预取。
+    只钉 prefetch_snapshots 直连调用的钉子杀不掉"预取被从 builder 里删掉"的回归。"""
+    import app.main as kanban
+
+    repo = make_repo(tmp_path, commits=1)
+    app_client.create_project("导出预取项目", repo_path=str(repo))
+    called = {}
+
+    def spy(paths, use_cache=True):
+        called["paths"] = list(paths)
+        return 1
+
+    monkeypatch.setattr(kanban, "prefetch_snapshots", spy)
+    _, md = app_client.get("/api/export-all")
+    assert "导出预取项目" in md
+    assert called.get("paths") and str(repo) in called["paths"], \
+        "export-all 渲染前必须预取全部仓库快照（串行探测冷态 5.8s 的收口）"
+
+
 def test_snapshot_is_cached_briefly(tmp_path):
     repo = make_repo(tmp_path, commits=1)
     first = git_snapshot(str(repo))

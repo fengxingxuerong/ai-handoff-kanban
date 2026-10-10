@@ -117,6 +117,7 @@ from .gitinfo import (  # noqa: F401
     _git_sliced,
     _run_git,
     git_snapshot,
+    prefetch_snapshots,
 )
 # 多智能体入口文件生成：2026-09-26 从本文件整体搬出（实现逐字未改）
 from .agentfiles import (  # noqa: F401  —— 这些名字仍可从 app.main 取，既有 import 与 monkeypatch 路径不变
@@ -1756,6 +1757,11 @@ def build_export_all(redact: bool = False, omit: set[str] | None = None) -> str:
     data = get_projects_data()
     projects = data.get("projects", [])
     mems_by_pid = _memories_by_pid()
+    # 冷缓存时下面的 git 小节会对每个带代码路径的项目串行跑 5 个 git 子进程
+    # （bench 2026-10-08：1000 项目冷态中位 5.8s）。先并发预热缓存再进渲染，
+    # 渲染路径原样走 git_snapshot —— 单仓语义、use_cache=False 的旁路都不变。
+    if "git" not in (omit or set()):
+        prefetch_snapshots([p.get("repo_path", "") for p in projects])
     head = f"# AI 交接看板 · 全项目交接包\n\n> 共 {len(projects)} 个项目 · 导出时间 {now_str()}\n"
     parts = [head]
     for p in projects:
