@@ -324,6 +324,33 @@ def test_patch_project_keeps_fields_that_were_not_sent(app_client):
     assert after["handoff_note"] == "" and after["progress"] == 42
 
 
+def test_patch_invalid_enum_returns_422_not_500(app_client):
+    """PATCH 路由吃裸 dict，`_merge_into` 的 ValidationError 曾以 500 逃逸（黑盒探索
+    2026-10-08）。约定 6：非法状态/优先级必须 422，部分更新不是例外；同时校验失败
+    绝不能写坏盘上数据。MCP 的 kanban_update_project 走同一个 patch_project，一并受益。"""
+    _, proj = app_client.create_project("补丁校验项目")
+    pid = proj["id"]
+    _, task = app_client.post(f"/api/projects/{pid}/tasks", {"title": "补丁校验任务"})
+    tid = task["id"]
+
+    for bad in ({"status": "瘫痪"}, {"progress": -1}, {"priority": "特高"},
+                {"tags": {"不是": "数组"}}):
+        code, _b = app_client.patch(f"/api/projects/{pid}", bad)
+        assert code == 422, f"{bad} 应 422，实际 {code}"
+    for bad in ({"status": "瘫痪"}, {"priority": "特高"}):
+        code, _b = app_client.patch(f"/api/tasks/{tid}", bad)
+        assert code == 422, f"{bad} 应 422，实际 {code}"
+
+    # depends_on 是宽容清洗口径（约定同 milestones）：字符串先拆、未知 id 丢弃，不 422
+    code, fixed = app_client.patch(f"/api/tasks/{tid}", {"depends_on": "不是数组"})
+    assert code == 200 and fixed["depends_on"] == [], (code, fixed.get("depends_on"))
+
+    _, after = app_client.get(f"/api/projects/{pid}")
+    # conftest.create_project 默认 status=进行中 / progress=10；断言的是"没被坏请求改掉"
+    assert after["status"] == "进行中" and after["progress"] == 10, "校验失败不许改数据"
+    assert after["tasks"][0]["status"] == "待办"
+
+
 def test_patch_task_rejects_illegal_values_and_reads_once(app_client, monkeypatch):
     """补全必须只做一次整份读：在锁外多读一份快照，就是丢更新的入口"""
     import app.main as kanban

@@ -34,6 +34,11 @@ _REDACT_PATTERNS = [
     (r"(?i)\b(api[_-]?key|apikey|access[_-]?token|auth[_-]?token|refresh[_-]?token|token"
      r"|secret|password|passwd|pwd|key|授权码|密钥)([\"']?)(\s*[:=]\s*)([\"']?)[^\s\"']{4,}",
      r"\1\2\3\4" + MASK_MARK),
+    # 中文键名 kv 形态（密码=xxx / 密钥: xxx / 授权码：xxx）。2026-10-08 黑盒探索发现
+    # 上面那条 kv 规则吃不到纯中文键：\b 在中文与符号之间不成边界，且「授权码」以"码"
+    # 结尾时词尾 \b 根本不成立 —— 英文 password= 能盖掉、密码= 却原样漏出。
+    # 中文不吃 \b，这条不走词边界：词面本身就是信号；值遇到空白/常见标点即停。
+    (r"(?i)(密码|口令|密钥|授权码)(\s*[：:=]\s*)([^\s，。；,;、]{4,})", r"\1\2" + MASK_MARK),
     # 连接串 postgres://user:pass@host —— 盖掉口令，主机名留着（排查问题要用）
     # 必须排在邮箱规则前面：否则邮箱规则先把 `pass@host.com` 吃掉，口令就漏在协议头里
     (r"(?i)\b([a-z][a-z0-9+.-]*://[^/\s:@]+:)[^@\s]+(@)", r"\1" + MASK_MARK + r"\2"),

@@ -173,6 +173,22 @@ MUTATIONS: list[dict] = [
         "tests": ["tests/test_pure_modules.py", "tests/test_api.py", "tests/test_misc.py"],
     },
     {
+        "id": "redact_skips_chinese_password",
+        "file": "app/redact.py",
+        "old": '    (r"(?i)(密码|口令|密钥|授权码)(\\s*[：:=]\\s*)([^\\s，。；,;、]{4,})", r"\\1\\2" + MASK_MARK),\n',
+        "new": "",
+        "why": "脱敏规则去掉中文密码行：密码=Sup3rSecret! 这类最常见的中文写法原样进交接包（黑盒探索 2026-10-08）",
+        "tests": ["tests/test_pure_modules.py", "tests/test_api.py"],
+    },
+    {
+        "id": "patch_merge_reports_400_not_422",
+        "file": "app/main.py",
+        "old": '        raise HTTPException(422, f"字段校验失败：{e.errors()[0].get(\'msg\', \'非法值\')}") from None',
+        "new": '        raise HTTPException(400, f"字段校验失败：{e.errors()[0].get(\'msg\', \'非法值\')}") from None',
+        "why": "PATCH 非法枚举回 400 而不是 422：约定 6 的白名单契约按 422 口径，前端与智能体按 422 提示校验错误（黑盒探索 2026-10-08）",
+        "tests": ["tests/test_api.py"],
+    },
+    {
         "id": "redact_drops_email",
         "file": "app/redact.py",
         "old": '    (r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "****@****"),\n',

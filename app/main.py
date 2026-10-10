@@ -24,7 +24,7 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ValidationError
 
 from . import llm
 from .llm import _extract_json  # noqa: F401  —— 2026-10-06 随容错提取职责移入 llm.py，名字保住
@@ -1270,7 +1270,13 @@ def _merge_into(model, current: dict, changes: dict):
     fields = set(model.model_fields)
     merged = {k: v for k, v in current.items() if k in fields and v is not None}
     merged.update({k: v for k, v in changes.items() if k in fields and v is not None})
-    return model(**merged)
+    try:
+        return model(**merged)
+    except ValidationError as e:
+        # PATCH 路由吃裸 dict（不经 Pydantic 的 422 管道），非法枚举/越界此前以 500 逃逸
+        # （黑盒探索 2026-10-08）。约定 6：状态/优先级白名单违规必须 422，与 PUT/POST 同一门面；
+        # MCP 的 kanban_update_project 走同一个 patch_project，一并受益。
+        raise HTTPException(422, f"字段校验失败：{e.errors()[0].get('msg', '非法值')}") from None
 
 
 def patch_project(pid: str, changes: dict) -> dict:

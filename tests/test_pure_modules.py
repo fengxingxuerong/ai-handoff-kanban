@@ -131,6 +131,21 @@ def test_redact_covers_credential_shapes(secret):
     assert secret != out, f"整串原样返回，等于没脱敏：{secret}"
 
 
+@pytest.mark.parametrize("secret", [
+    "密码=Sup3rSecret!",
+    "管理密码：Sup3rSecret!",
+    "我的密钥=abc12345",
+    "口令 = pa55w0rd12",
+    "授权码：zhli-2024-key",
+])
+def test_redact_covers_chinese_keyword_secrets(secret):
+    """黑盒探索 2026-10-08：kv 规则的 \b 与中文相邻不成边界，「密码=xxx」这类最常见的
+    中文写法整条漏出。中文键名必须与英文 password= 同一待遇。"""
+    out = redact_text(secret)
+    assert out != secret, f"中文键名凭据没被脱敏：{secret}"
+    assert MASK_MARK in out, f"脱敏了但没盖值：{secret} -> {out}"
+
+
 def test_redact_leaves_ordinary_text_alone():
     text = "下一步：把 app/main.py 的 _due_state 挪到 app/due.py，截止 2026-09-26"
     assert redact_text(text) == text, "正常交接文本不该被动到"
