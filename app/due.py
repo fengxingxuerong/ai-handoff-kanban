@@ -57,6 +57,27 @@ def _due_state(t: dict) -> str:
     return "ok"
 
 
+# 记忆召回的类型权重：决策/坑/约定是"换人必须知道"的高价值类，事实只是背景。
+# 对齐 claude-mem 的 Awareness —— 高价值观察（decision/bugfix/security_alert/sensitive）
+# 永远优先被注入，晚写的普通事实不挤出它们。当截断出口（AGENTS.md 12 条 / 模型简报 10 条）
+# 必须取舍时，让背景为高价值让位。非法 type 已被 `_sanitize` 归一成"事实"，兜底同口径。
+_MEMORY_RECALL_WEIGHT = {"决策": 0, "坑": 0, "约定": 0, "事实": 1}
+
+
+def recall_memories(rows: list[dict], limit: int) -> list[dict]:
+    """记忆召回排序：高价值类型（决策/坑/约定）优先，同类内时间新的在前，取前 limit 条。
+
+    两步稳定排序：先按 time 倒序（新在前），再按类型权重升序（决策/坑/约定 > 事实）——
+    稳定排序保住前一步的时间序，于是得到"类型优先，同类内新在前"。
+    2026-10-11 从 claude-mem 的 Awareness push 吸取：此前 `_project_memories` 与
+    `projects_brief` 都是纯时间序，晚写的普通「事实」会把更早记下的「坑/决策」挤出窗口——
+    交接时把踩过的坑挤掉比挤掉一条背景事实严重得多。
+    """
+    ranked = sorted(rows, key=lambda m: (m.get("time") or ""), reverse=True)
+    ranked.sort(key=lambda m: _MEMORY_RECALL_WEIGHT.get(m.get("type") or "事实", 1))
+    return ranked[:limit]
+
+
 def _memory_expired(m: dict, today: str = "") -> bool:
     """记忆是否已过期：`expires` 设了且早于今天（到期当天仍算有效）。
 

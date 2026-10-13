@@ -8,6 +8,10 @@
 - Multica Inbox 哲学 → /api/inbox 只列"等人的"（逾期/待审查/阻塞），依赖挡住的不算
 - AAIF / Agent Skills 生态 → 第 9 个入口文件投影 .claude/skills/ai-kanban/SKILL.md
   （Skill 投影的契约在 tests/test_agent_files.py，这里不重复）
+
+2026-10-11 第四轮（对标 claude-mem Awareness，研究档案 research-reports/competitor-absorb-2026-10-11/）：
+- claude-mem 渐进式上下文披露 / Awareness push → 记忆召回按类型加权：
+  决策/坑/约定优先于「事实」（recall_memories，供 AGENTS.md 与 AI 简报两个截断出口共用）
 """
 from __future__ import annotations
 
@@ -258,3 +262,72 @@ def test_inbox_overdue_check_reuses_normalized_due_dates(app_client, monkeypatch
     assert t["due_date"] == "", "清洗失败的截止日期应留空"
     _, box = app_client.get("/api/inbox")
     assert box["total"] == 0, "没有可信的截止日期就没有逾期，不能拿脏串跟今天比"
+
+
+# ---------------- 记忆加权召回（claude-mem Awareness，2026-10-11） ----------------
+
+def test_recall_memories_prioritizes_high_value_types_then_newest():
+    """`recall_memories`：决策/坑/约定永远在「事实」前面，同类内时间新的在前。
+    对标 claude-mem Awareness —— 高价值观察优先注入，晚写的普通事实不能把
+    更早的坑/决策挤出截断窗口（交接时挤掉一条坑比挤掉一条背景事实严重得多）。"""
+    from app.due import recall_memories
+    rows = [
+        {"type": "事实", "text": "新事实", "time": "2026-10-11 10:00"},
+        {"type": "坑", "text": "早坑", "time": "2026-10-01 09:00"},
+        {"type": "事实", "text": "旧事实", "time": "2026-10-02 08:00"},
+        {"type": "决策", "text": "中决策", "time": "2026-10-05 11:00"},
+    ]
+    out = recall_memories(rows, 3)
+    assert [m["text"] for m in out] == ["中决策", "早坑", "新事实"], \
+        "高价值类型（决策/坑/约定）优先，同类内时间新在前；截断窗口让位给高价值而不是背景"
+
+
+def test_recall_memories_treats_unknown_types_as_facts_and_is_stable():
+    from app.due import recall_memories
+    rows = [
+        {"type": "什么鬼类型", "text": "怪类型", "time": "2026-10-11 09:00"},
+        {"type": "坑", "text": "坑", "time": "2026-10-01 08:00"},
+    ]
+    assert [m["text"] for m in recall_memories(rows, 2)] == ["坑", "怪类型"], \
+        "未知类型按事实对待（_sanitize 归一后的兜底同口径），且不吞条目"
+
+
+def test_agents_md_recalls_high_value_memories_inside_the_window(app_client):
+    """AGENTS.md 的记忆召回：决策/坑/约定先于晚写的普通「事实」。
+
+    旧实现是纯时间倒序取前 12 条：先记下一条坑、再记 15 条背景事实，
+    坑就被挤出 12 条窗口 —— 恰恰是交接时最亏的情况（接手方看不见踩过的坑）。
+    加权后坑回到窗口内。"""
+    _, p = app_client.create_project("加权召回项目")
+    pid = p["id"]
+    app_client.post("/api/memories", {"pid": pid, "type": "坑", "text": "早记录的坑",
+                                      "source": "test"})
+    for i in range(15):
+        app_client.post("/api/memories", {"pid": pid, "type": "事实",
+                                          "text": f"后记背景{i}", "source": "test"})
+    md = kanban._build_agents_md_local(kanban.find_project(pid)[1])
+    assert "早记录的坑" in md, "高价值坑被后记背景挤出 AGENTS.md 召回窗口"
+    assert "后记背景0" in md, "窗口不为一条坑让位而清空，事实照常回填剩余名额"
+
+
+def test_projects_brief_memory_recall_is_weighted_and_masked():
+    """AI 简报的记忆段与 AGENTS.md 同套召回（recall_memories），且仍过脱敏。
+
+    顺带修掉原实现的隐性不一致：它直接取 bucket 的 `[-10:]`，而 bucket 是
+    存储序（读盘顺序）不是时间序 —— 现在先喂进 recall_memories 再截取。"""
+    import app.aiprompt as aiprompt
+    brief = aiprompt.projects_brief(
+        [{"id": "p1", "name": "甲", "status": "进行中", "progress": 10,
+          "priority": "中", "tags": [], "tasks": []}],
+        memories_by_pid_fn=lambda: {
+            "p1": [
+                {"type": "事实", "text": "后记背景", "time": "2026-10-11 09:00"},
+                {"type": "坑", "text": "早坑且密钥 sk-briefmem123456", "time": "2026-10-01 08:00"},
+            ]},
+        git_snapshot_fn=lambda *a, **kw: {"ok": False},
+    )
+    texts = [m["text"] for m in brief[0]["memories"]]
+    assert texts[0].startswith("早坑且密钥"), f"坑优先于晚写事实：{texts}"
+    assert texts[1] == "后记背景", f"事实落后于坑：{texts}"
+    assert "sk-briefmem123456" not in texts[0], "模型简报的记忆依然要脱敏（外出边界）"
+    assert "sk-********" in texts[0], "掩码保留，只盖凭据那一段"

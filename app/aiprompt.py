@@ -22,7 +22,7 @@ import uuid
 from fastapi import HTTPException
 
 from . import llm
-from .due import _memory_expired
+from .due import _memory_expired, recall_memories
 from .gitinfo import git_snapshot
 from .llm import _extract_json
 from .redact import redact_text
@@ -65,8 +65,10 @@ def projects_brief(projects: list[dict], *, memories_by_pid_fn, git_snapshot_fn,
                                               for e in (t.get("journal") or [])[-1:]]}
                           if t.get("journal") else {})}
                       for t in (p.get("tasks") or [])[:40]],
-            "memories": [{**m, "text": redact_text(m.get("text") or "")}
-                         for m in mems_by_pid.get(p["id"], []) if not _memory_expired(m)][-10:],
+"memories": [{**m, "text": redact_text(m.get("text") or "")}
+                         for m in recall_memories(
+                             [m for m in mems_by_pid.get(p["id"], [])
+                              if not _memory_expired(m)], 10)],
         }
         # 截断必须留痕：以前静默给前 40 条，模型以为"这项目的活就这些"，
         # 于是监管报告漏掉第 41 条之后的阻塞。看板自己的场景测试就造过 45 条的项目。

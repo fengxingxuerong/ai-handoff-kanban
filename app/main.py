@@ -55,6 +55,7 @@ from .due import (  # noqa: F401  —— 这些名字仍可从 app.main 取，�
 # 记忆时效判定：2026-10-06 搬到 app/due.py（同为日期类判定，一处实现）。
 # ⚠️ 变异探针 memory_expiry_ignored 的目标文件已同步改为 app/due.py
 from .due import _memory_expired  # noqa: F401
+from .due import recall_memories  # noqa: F401 —— 记忆召回排序（2026-10-11 对标 claude-mem Awareness）
 # LLM 用量聚合：2026-10-01 P0-1 从本文件的 usage_stats() 抽出（纯函数，穷举测试）
 from . import usage_stats as usage_metrics
 from . import project_stats as project_metrics
@@ -1927,16 +1928,18 @@ AGENTS_MEMORY_LINES = 12     # 进 AGENTS.md 的记忆条数上限（新的优�
 
 
 def _project_memories(pid: str) -> list[dict]:
-    """这个项目该被 AGENTS.md 召回的记忆（新的在前，取前 AGENTS_MEMORY_LINES 条）。
+    """这个项目该被 AGENTS.md 召回的记忆（取前 AGENTS_MEMORY_LINES 条）。
 
     `kanban_memory_add` 对模型承诺过"记忆会在交接包、AGENTS.md 和 AI 监管里自动召回"，
     而以前只有前两处真读了记忆 —— 声明与实现不一致时，用户按说明记了坑，
     换工具接手还是踩一遍。这里把最后一处接上，并限死条数（整份文件是给代理看的，
     无限追加会把真正重要的构建约定挤出去）。
     已过期的不召回（`expires` 就是"过了这天别再当真"的意思）。
+    排序用 `recall_memories`：决策/坑/约定优先于事实（2026-10-11 对标 claude-mem Awareness）——
+    否则晚写的"事实"会把更早的"坑/决策"挤出 12 条窗口，交接时把踩过的坑挤掉最亏。
     """
     rows = [m for m in list_memories(pid=pid)["memories"] if not m.get("expired")]
-    return rows[:AGENTS_MEMORY_LINES]
+    return recall_memories(rows, AGENTS_MEMORY_LINES)
 
 
 def _build_agents_md_local(p: dict) -> str:

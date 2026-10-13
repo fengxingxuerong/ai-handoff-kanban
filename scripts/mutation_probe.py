@@ -477,6 +477,16 @@ MUTATIONS: list[dict] = [
         "why": "任务 milestone 归属不去首尾空白：『 甲 』与『甲』归不进同一组，进度条错",
         "tests": ["tests/test_milestone.py"],
     },
+    {
+        # 2026-10-11 新增：claude-mem Awareness 对齐后记的坑被背景事实挤出窗口 = 交接丢最贵的知识。
+        # 变异抹平类型权重（退回纯时间序），新增的加权召回钉子必须变红，否则规则没有门禁。
+        "id": "memory_recall_not_weighted",
+        "file": "app/due.py",
+        "old": '_MEMORY_RECALL_WEIGHT = {"决策": 0, "坑": 0, "约定": 0, "事实": 1}\n',
+        "new": '_MEMORY_RECALL_WEIGHT = {"决策": 1, "坑": 1, "约定": 1, "事实": 1}\n',
+        "why": "记忆召回退回纯时间序：晚写的背景「事实」把更早的「坑/决策」挤出 AGENTS.md/模型简报窗口",
+        "tests": ["tests/test_p1_absorb.py"],
+    },
 ]
 
 
