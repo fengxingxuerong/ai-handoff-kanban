@@ -168,11 +168,44 @@ def test_forbidden_target_allows_temp_but_blocks_appdata_and_system(monkeypatch,
     from app import security
 
     monkeypatch.setenv("TEMP", str(tmp_path))
-    monkeypatch.setenv("TMP", str(tmp_path))
+    monkeypatch.delenv("TMP", raising=False)   # 只设 TEMP 也够（真实系统上就这么两种写法）
     assert security.is_forbidden_target(tmp_path / "ok.md") is False
     home = os.environ.get("USERPROFILE") or str(Path.home())
     assert security.is_forbidden_target(Path(home) / "AppData" / "Roaming" / "x.md") is True
     assert security.is_forbidden_target(Path("D:/work/demo/AGENTS.md")) is False
+
+
+def test_forbidden_target_skips_unresolvable_temp_and_roots(monkeypatch, tmp_path):
+    """TEMP 或某个黑名单 root 解析不出来时：跳过它继续判，**宁可拒绝也不误放行**。
+
+    这两条 continue 分支以前一次都没走到（覆盖率报告点出来的 101-102 / 108-109）：
+    "临时目录算不出来" 和 "某个系统目录算不出来" 都是真实可能（精简环境、非 Windows）。
+    顺带覆盖 forbidden_roots 里环境变量缺失的格子 —— 真实场景是 Linux/mac CI。
+    """
+    from app import security
+
+    ghost = str(tmp_path / "ghost_tmp")
+    monkeypatch.setenv("TEMP", ghost)
+    monkeypatch.setenv("TMP", ghost)
+    for key in ("SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"):
+        monkeypatch.delenv(key, raising=False)
+
+    real_resolve = Path.resolve
+    dead_root = str(security.forbidden_roots()[0])   # 顺序里第一条（AppData），目标是后面的 /etc
+
+    def flaky(self, *a, **kw):
+        if str(self).startswith(ghost) or str(self) == dead_root:
+            raise OSError("模拟：这个路径解析不出来")
+        return real_resolve(self)
+
+    monkeypatch.setattr(Path, "resolve", flaky)
+    # 前面那条 root 算不出来只跳过它、判定照常继续 —— 命中后面的 /etc 仍然拒绝。
+    # 记下既有语义（本轮只搬移，不收紧）：root 解析失败 = 跳过该条；
+    # 真正 fail-closed 的是 **target 自己**解析不出来那一条（见上一个用例）。
+    assert security.is_forbidden_target(Path("/etc/passwd")) is True, \
+        "某条 root 解析失败不该让整条判定失效"
+    assert security.is_forbidden_target(tmp_path / "ok.md") is False, \
+        "TEMP 算不出来时也不能把普通临时路径误判成系统目录"
 
 
 def test_text_size_helpers_are_shared_by_all_three_exits():
