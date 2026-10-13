@@ -230,7 +230,7 @@ rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 32 条用�
 rem （CI 里也有这一步：.github/workflows/ci.yml 跑的 ci_local 全门禁，改坏了会红）
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 
-rem 变异探针：往源码注入 45 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
+rem 变异探针：往源码注入 52 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
 rem （覆盖率只证明"这行跑过"，不证明"这行错了会被发现"——这一步量的是后者）
 .venv\Scripts\python.exe scripts/mutation_probe.py
 .venv\Scripts\python.exe scripts/mutation_probe.py --only due_soon_window   rem 只跑一条
@@ -242,7 +242,7 @@ rem 一条命令跑完所有门禁（自己起隔离实例，绝不碰 ~/.ai-kan
 
 测试规模与覆盖率以 `AGENTS.md` 的「验证基线」为唯一数字来源（README 里再写一份必然漂）；
 取数命令：`python -m pytest -o addopts="" --collect-only`。
-其中 6 项默认跳过（需 `KANBAN_LIVE=1` 才跑真实模型），覆盖率门槛 90%。
+其中 5 项默认跳过（需 `KANBAN_LIVE=1` 才跑真实模型），覆盖率门槛 90%。
 
 慢的用例都是「真东西」：真 uvicorn 子进程、真 MCP stdio、真浏览器。它们彼此独立，
 所以用 `-n auto` 并行把这些墙钟时间叠起来（实测 135s → 41s）。串行跑只是为了定位问题。

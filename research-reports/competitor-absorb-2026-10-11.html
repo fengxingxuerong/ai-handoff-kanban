@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub 同类项目对标与优化报告 · 第四轮 2026-10-11</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --line:#e3e6ea; --text:#1f2329; --muted:#6b7280;
+    --ok:#0a7d3e; --ok-bg:#e6f6ec; --warn:#b45309; --warn-bg:#fef3e2;
+    --skip:#6b7280; --skip-bg:#f1f3f5; --accent:#1e5eff; --danger:#b42318; --danger-bg:#fdecec;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--text); font:14px/1.7 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif; padding:32px 20px;}
+  .wrap{max-width:1000px; margin:0 auto;}
+  header{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:28px 32px; margin-bottom:18px;}
+  h1{font-size:22px; margin-bottom:6px;}
+  .sub{color:var(--muted); font-size:13px;}
+  .ver{display:inline-block; margin-top:10px; background:var(--accent); color:#fff; font-size:12px; padding:3px 10px; border-radius:99px;}
+  .banner{display:flex; gap:14px; flex-wrap:wrap; margin-top:16px;}
+  .banner .cell{flex:1; min-width:150px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:12px 16px;}
+  .banner .num{font-size:26px; font-weight:700;}
+  .banner .lbl{font-size:12px; color:var(--muted);}
+  .banner .num.ok{color:var(--ok);}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; margin-bottom:18px; overflow:hidden;}
+  .card > h2{font-size:16px; padding:16px 24px; border-bottom:1px solid var(--line); background:#fafbfc;}
+  .card .body{padding:18px 24px;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{background:#fafbfc; font-weight:600; white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  .tag{display:inline-block; font-size:12px; font-weight:600; padding:2px 10px; border-radius:99px; white-space:nowrap;}
+  .tag.ok{background:var(--ok-bg); color:var(--ok);}
+  .tag.warn{background:var(--warn-bg); color:var(--warn);}
+  .tag.skip{background:var(--skip-bg); color:var(--skip);}
+  .tag.new{background:var(--accent); color:#fff;}
+  .mono{font-family:Consolas,"Courier New",monospace; font-size:12px; background:#f4f5f7; padding:1px 6px; border-radius:4px; word-break:break-all;}
+  .note{font-size:13px; color:var(--muted); margin-top:10px;}
+  pre{background:#1e2430; color:#d7e0ea; font:12px/1.6 Consolas,"Courier New",monospace; padding:14px 16px; border-radius:8px; overflow-x:auto; margin-top:10px;}
+  pre .ok{color:#4ade80;}
+  pre .warn{color:#fbbf24;}
+  ul{padding-left:20px; margin:6px 0;}
+  li{margin:3px 0;}
+  h3{font-size:14px; margin:14px 0 6px;}
+  code .k{color:#7dd3fc;} code .s{color:#a5d6a7;}
+  footer{color:var(--muted); font-size:12px; text-align:center; padding:10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>GitHub 同类项目对标与优化报告 · 第四轮</h1>
+  <div class="sub">调研时间：2026-10-10/11（GitHub API 实时核实） ｜ 仓库：D:\lo\项目任务看板 ｜ 版本：v1.2.1（app/version.py）<br>
+  前三轮：2026-10-01 对标 plane ｜ 2026-10-06 GitHub 竞品全方面对标 ｜ 2026-10-08 第三轮品类横评（停滞检测）</div>
+  <div class="ver">第四轮 · 唯一新落地方向已实施</div>
+  <div class="banner">
+    <div class="cell"><div class="num ok">22</div><div class="lbl">仓库实时核实</div></div>
+    <div class="cell"><div class="num ok">99.2k★</div><div class="lbl">最大新发现 claude-mem</div></div>
+    <div class="cell"><div class="num ok">1</div><div class="lbl">新落地方向</div></div>
+    <div class="cell"><div class="num ok">707</div><div class="lbl">pytest 全量通过</div></div>
+    <div class="cell"><div class="num ok">52/52</div><div class="lbl">变异探针全被杀</div></div>
+  </div>
+</header>
+
+<div class="card">
+  <h2>一、本轮结论（摘要）</h2>
+  <div class="body">
+    <p>第四轮增量调研核实 <b>22 个同类仓库</b>（任务 / 个人知识管理 / Agent 交接类）的实时状态，最大新发现为 <b>claude-mem（★99,166，10-09 活跃）</b>——会话记忆场景的渐进式上下文披露三件套。对照本项目定位（单机个人看板、交接物 / AGENTS.md 为中心、无公网能力），本轮识别并实施<b>唯一一个值得落地的优化方向</b>：</p>
+    <ul>
+      <li><b>记忆召回按类型加权</b>（对齐 claude-mem Awareness push）：决策 / 坑 / 约定优先于「事实」——两个截断出口（AGENTS.md 12 条、AI 简报 10 条）此前都是纯时间倒序，晚写的背景事实会把更早记下的坑 / 决策挤出窗口，而交接时把踩过的坑挤掉比挤掉一条背景事实严重得多。</li>
+    </ul>
+    <p>实施结果：<b>新增纯函数 <span class="mono">recall_memories</span>（app/due.py）+ 两处出口接入 + 4 条契约测试 + 1 条变异探针</b>；全部门禁通过（pytest 707 例 / 覆盖率 94%、变异探针 52/52 全被杀、ci_local 全 7 步全绿，细节见第六节）。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>二、重点仓库实时状态（GitHub API，2026-10-10/11）</h2>
+  <div class="body">
+    <table>
+      <thead><tr><th>仓库</th><th>★</th><th>最近活跃</th><th>赛道</th><th>本轮要点</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">thedotmack/claude-mem</td><td><b>99,166</b></td><td>10-09</td><td>会话记忆</td><td><span class="tag new">本轮最大新发现</span> 渐进式上下文披露 3 层工作流 + Awareness push</td></tr>
+        <tr><td class="mono">gastownhall/beads</td><td>27,782</td><td>10-10</td><td>个人任务编排</td><td>prime/ready/close/remember + Schema Version Guard + HTTP divergence ledger + Hash IDs</td></tr>
+        <tr><td class="mono">mem0ai/mem0</td><td>66,951</td><td>-</td><td>记忆层</td><td>Agent memory 基础设施（前几轮已评估）</td></tr>
+        <tr><td class="mono">makeplane/plane</td><td>60,639</td><td>-</td><td>项目管理</td><td>前几轮已吸收（P0-1/P0-2/P1/P2/T1）</td></tr>
+        <tr><td class="mono">multica-ai/multica</td><td>52,405</td><td>10-10</td><td>任务看板</td><td>Inbox 哲学已吸收（<span class="mono">/api/inbox</span> 待拍板）</td></tr>
+        <tr><td class="mono">getzep/graphiti</td><td>31,622</td><td>-</td><td>记忆图谱</td><td>时序知识图谱（前几轮已评估不吸收）</td></tr>
+        <tr><td class="mono">smtg-ai/claude-squad</td><td>8,588</td><td>-</td><td>并行 agent</td><td>执行编排（已判不吸收）</td></tr>
+        <tr><td class="mono">MrLesk/Backlog.md</td><td>6,989</td><td>-</td><td>任务管理</td><td>DoD 已吸收（acceptance 验收标准）</td></tr>
+        <tr><td class="mono">basicmachines-co/basic-memory</td><td>4,130</td><td>-</td><td>记忆</td><td>本地 markdown 记忆（已评估）</td></tr>
+        <tr><td class="mono">iAmCorey/Wake</td><td>1,439</td><td>10-10</td><td>会话中心化</td><td>v0.9.1；MCP 只读 5 工具 + 诚实能力矩阵（前几轮已记录）</td></tr>
+        <tr><td class="mono">modiqo/waggle</td><td>647</td><td>-</td><td>交接引用</td><td>引用 token（已判不吸收，refs 已是引用雏形）</td></tr>
+        <tr><td class="mono">其余（herdr / agent-board / Moe-s-Tavern 等）</td><td>&lt;500</td><td>-</td><td>小项目</td><td>10-08 已阅，无新信号；10-08 后新建仓无重大竞品</td></tr>
+      </tbody>
+    </table>
+    <p class="note">核实方式：urllib + User-Agent 直连 GitHub API（curl 对 beads 返回 301、crabspace 返回 404，改 urllib 后成功跟随重定向）。Wake releases 批量查询 403 rate limit，跳过（前几轮已记录其核心优点）。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>三、claude-mem 深挖（★99.2k —— 本轮核心增量）</h2>
+  <div class="body">
+    <p>架构：MCP <b>3 层工作流</b> —— <span class="mono">search</span>（索引层，50-100 token/条）→ <span class="mono">timeline</span>（时间线）→ <span class="mono">get_observations</span>（详情层，500-1000 token/条，≈10x token 节省）；5 个生命周期钩子（SessionStart/UserPromptSubmit/PostToolUse/Stop/SessionEnd）写入 Worker 服务（SQLite FTS5 + Chroma 向量）；<b>Awareness push</b> 把高价值观察（decision/bugfix/security_alert/sensitive）以日期行永久注入。</p>
+    <table>
+      <thead><tr><th>优点</th><th>内容</th><th>判定</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td><b>Awareness push 类型优先</b></td><td>高价值记忆（决策 / 坑 / 安全告警）优先于普通事实被注入</td><td><span class="tag ok">本轮实施</span></td><td>项目记忆类型固定 4 类（决策/坑/约定/事实）；召回加权让「坑/决策」不因时间排后被挤出窗口</td></tr>
+        <tr><td>渐进式上下文披露</td><td>先给紧凑索引，按需取详情，≈10x token 节省</td><td><span class="tag ok">已吸收（同族）</span></td><td>项目已有 <span class="mono">_budget_note</span> 预算提示与「截断 + 另报数」纪律（tasks_note / truncated / 50 条封顶另报数）</td></tr>
+        <tr><td>生命周期钩子捕获</td><td>5 个钩子自动记上下文</td><td><span class="tag skip">不吸收</span></td><td>项目是看板不是 agent 运行时；已有会话捕获 + 提炼 + 人工确认流程</td></tr>
+        <tr><td><span class="mono">&lt;private&gt;</span> 隐私标签</td><td>敏感观察不进共享库</td><td><span class="tag skip">不吸收</span></td><td>项目是本地单机看板，方向相反；已有脱敏/掩码统一收口（<span class="mono">redact_text</span>）</td></tr>
+        <tr><td>Citations 引用 ID</td><td>新观察引用过去 observation ID</td><td><span class="tag warn">暂缓</span></td><td>任务 <span class="mono">refs</span> 已是「引用而非复制」雏形；为记忆加引用链收益低</td></tr>
+        <tr><td>SQLite+Chroma 混合检索</td><td>全文 + 向量双路</td><td><span class="tag skip">不吸收</span></td><td>个人单机规模，<span class="mono">_load_memories</span> 全量过滤毫秒级（2026-10-06 已实测 3 文件 &lt;0.1MB / 2ms），索引层是负资产</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>四、Beads 深挖（★27.8k）与旧条目重审</h2>
+  <div class="body">
+    <h3>4.1 Beads</h3>
+    <table>
+      <thead><tr><th>优点</th><th>内容</th><th>判定</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td><span class="mono">bd prime</span> 开工上下文</td><td>打印工作流上下文 + 持久记忆</td><td><span class="tag ok">已吸收（前几轮）</span></td><td>AGENTS.md 生成时注入 <span class="mono">_project_memories</span></td></tr>
+        <tr><td><span class="mono">bd ready --claim</span> / <span class="mono">close</span></td><td>原子认领，完成即解除</td><td><span class="tag ok">已吸收（同族）</span></td><td><span class="mono">executable_tasks</span> + <span class="mono">patch_task</span>：前置完成自动解锁，MCP 回执说清放行了谁</td></tr>
+        <tr><td><span class="mono">bd remember</span></td><td>一行持久项目事实</td><td><span class="tag ok">已吸收</span></td><td><span class="mono">kanban_memory_add</span>，且「自动召回」承诺已兑现（交接包 / AGENTS.md / AI 监管）</td></tr>
+        <tr><td>Schema Version Guard</td><td>报可行动错误 + escape hatch</td><td><span class="tag skip">不吸收（维持）</span></td><td>项目导入策略是「高版本只说话不拒绝」（<span class="mono">schema_note</span>）——避免把用户关门外，方向相反，已拍板</td></tr>
+        <tr><td>HTTP divergence ledger</td><td>显式记录 HTTP 与本地模式差异</td><td><span class="tag skip">不吸收（更强替代）</span></td><td>项目靠「一分实现 + 结构性钉子（测试）」消除分歧，比「记录分歧」更前一步</td></tr>
+        <tr><td>Compaction 语义衰减</td><td>旧关闭任务总结成记忆</td><td><span class="tag ok">已吸收（同族）</span></td><td>journal 折叠（<span class="mono">compress_journal</span>，2026-10-06）</td></tr>
+        <tr><td>Hash-based IDs</td><td>零冲突 id</td><td><span class="tag skip">不吸收</span></td><td>项目 id 用 uuid 截断 + 读路径自愈去重（<span class="mono">_dedupe_ids</span>），无冲突问题</td></tr>
+      </tbody>
+    </table>
+    <h3>4.2 旧条目重审（新证据下）</h3>
+    <table>
+      <thead><tr><th>旧判定</th><th>新证据</th><th>修正</th></tr></thead>
+      <tbody>
+        <tr><td>MCP 工具分档暂缓（&gt;30 再议）</td><td>claude-mem 3 层是「内容分层」而非「能力分档」；本项目 23 工具 + 只读模式已覆盖可见性</td><td><b>维持暂缓</b>：现有出口的截断 + 标注已满足</td></tr>
+        <tr><td>FTS5 全文检索不吸收</td><td>10-06 探测数据仍有效；claude-mem 靠索引是因海量历史</td><td><b>维持不吸收</b></td></tr>
+        <tr><td>handoff 引用化不吸收</td><td>claude-mem Citations 属同族</td><td><b>维持不吸收</b>（refs 已是引用雏形）</td></tr>
+        <tr><td>待拍板 <span class="mono">/api/inbox</span> 已吸收</td><td>multica 10-10 仍活跃</td><td>维持</td></tr>
+        <tr><td>验收标准 acceptance 已吸收</td><td>Backlog.md DoD</td><td>维持</td></tr>
+        <tr><td>记忆时效 expires 已吸收</td><td>OKM 知识代谢</td><td>维持</td></tr>
+        <tr><td>停滞检测 stalled 已吸收</td><td>2026-10-08 第三轮实施</td><td>维持</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>五、本轮落地方案与实施</h2>
+  <div class="body">
+    <h3>5.1 方案：记忆召回按类型加权（claude-mem Awareness 对齐）</h3>
+    <p>问题陈述：<span class="mono">_project_memories</span>（AGENTS.md 出口，12 条）与 <span class="mono">projects_brief</span>（AI 简报出口，10 条）取记忆都是「时间倒序取前 N 条」。坑 / 决策这类<b>换人必须知道</b>的高价值记忆一旦写早，会被后续累积的「事实」挤出窗口——交接与模型简报里就少了最贵的知识。顺带发现 <span class="mono">projects_brief</span> 原来直接取 bucket 的 <span class="mono">[-10:]</span>，而 bucket 是<b>存储序（读盘顺序）不是时间序</b>，存在隐性不一致。</p>
+    <p>方案：不增加条数上限、不改变接口形状，纯排序调整——<b>召回时按类型加权（决策=坑=约定 &gt; 事实），同类内仍时间倒序</b>。低风险（一处纯函数 + 两个出口改调用）。</p>
+    <pre><span class="ok"># app/due.py —— 新增纯函数（两步稳定排序：先 time 倒序，再 type 权重升序）</span>
+_MEMORY_RECALL_WEIGHT = {"决策": 0, "坑": 0, "约定": 0, "事实": 1}
+
+def recall_memories(rows, limit):
+    ranked = sorted(rows, key=lambda m: (m.get("time") or ""), reverse=True)
+    ranked.sort(key=lambda m: _MEMORY_RECALL_WEIGHT.get(m.get("type") or "事实", 1))
+    return ranked[:limit]</pre>
+    <h3>5.2 实施改动清单（5 个文件，+115 / -6）</h3>
+    <table>
+      <thead><tr><th>文件</th><th>改动</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">app/due.py</td><td>新增 <span class="mono">_MEMORY_RECALL_WEIGHT</span> + <span class="mono">recall_memories</span> 纯函数（注释注明 claude-mem Awareness 对齐）</td></tr>
+        <tr><td class="mono">app/main.py</td><td><span class="mono">_project_memories</span> 改用 <span class="mono">recall_memories(rows, AGENTS_MEMORY_LINES)</span>；import 补齐</td></tr>
+        <tr><td class="mono">app/aiprompt.py</td><td><span class="mono">projects_brief</span> 记忆段改用 <span class="mono">recall_memories(未过期列表, 10)</span> 替代 <span class="mono">[-10:]</span>——修掉 bucket 存储序的隐性不一致；脱敏保留；import 补齐</td></tr>
+        <tr><td class="mono">tests/test_p1_absorb.py</td><td>+4 条契约钉子：纯函数加权排序 / 未知类型兜底按事实 / AGENTS.md 召回窗口内保坑 / 简报加权 + 脱敏双断言</td></tr>
+        <tr><td class="mono">scripts/mutation_probe.py</td><td>+1 条探针 <span class="mono">memory_recall_not_weighted</span>（变异抹平权重 = 退回纯时间序，测试必须变红）——按项目硬性约定「新增业务规则顺手补探针，否则等于没有门禁」</td></tr>
+      </tbody>
+    </table>
+    <p class="note">排查确认：既有变异探针 <span class="mono">memory_expiry_ignored</span> 只盯 <span class="mono">_memory_expired</span> 不盯排序；<span class="mono">test_scale.py</span> 只数读盘次数；<span class="mono">test_agent_files.py</span> 只断「包含」不断顺序——<b>无任何既有测试钉住记忆召回顺序</b>，故新探针 + 新测试是必需的。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>六、方案筛选：评估并排除的方向（想清楚不做的）</h2>
+  <div class="body">
+    <table>
+      <thead><tr><th>候选</th><th>来源</th><th>结论</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td><span class="mono">&lt;private&gt;</span> 隐私标签</td><td>claude-mem</td><td><span class="tag skip">不吸收</span></td><td>本地单机看板方向相反；已有脱敏/掩码收口（代理侧默认脱敏 + <span class="mono">_agent_text</span> 出口）</td></tr>
+        <tr><td>SQLite FTS5 + Chroma 向量检索</td><td>claude-mem</td><td><span class="tag skip">不吸收</span></td><td>单机规模下索引层是负资产（10-06 实测全量过滤毫秒级），且引入新存储违背「不先加缓存」的既定结论</td></tr>
+        <tr><td>5 生命周期钩子自动捕获</td><td>claude-mem</td><td><span class="tag skip">不吸收</span></td><td>项目不托管 agent 运行时；已有会话捕获 → 预览 → 提炼 → 人工确认的流程</td></tr>
+        <tr><td>Citations 记忆引用链</td><td>claude-mem</td><td><span class="tag warn">暂缓</span></td><td>任务 <span class="mono">refs</span> 已是雏形；记忆引用链收益低、复杂度高</td></tr>
+        <tr><td>Schema Version Guard / escape hatch</td><td>beads</td><td><span class="tag skip">不吸收（维持）</span></td><td>项目「高版本只说话不拒绝」策略更优（2026-10-06 拍板）</td></tr>
+        <tr><td>HTTP divergence ledger</td><td>beads</td><td><span class="tag skip">不吸收（更强替代）</span></td><td>「一分实现 + 结构化钉子」消除分歧先于「记录分歧」（数据层约定 18）</td></tr>
+        <tr><td>Hash-based IDs</td><td>beads</td><td><span class="tag skip">不吸收</span></td><td>uuid 截断 + 自愈去重已无冲突问题</td></tr>
+        <tr><td>Wake 全文检索（FTS5 trigram）</td><td>Wake</td><td><span class="tag skip">不吸收（升级为不做）</span></td><td>10-06 用本项目前置条件实测：3 会话文件 &lt;0.1MB / 有界遍历 2ms，索引层是负资产</td></tr>
+      </tbody>
+    </table>
+    <p class="note">预算 / 淘汰原则：只吸收与「单机个人看板 + 交接物为中心 + 无公网能力」定位相容、且收益大于引入风险的优点；生活事实（会话记忆）与既有能力重叠的（引用、检索、分档）一律不叠加第二套实现。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>七、回归验证（全部门禁）</h2>
+  <div class="body">
+    <table>
+      <thead><tr><th>#</th><th>门禁</th><th>命令</th><th>实测结果</th><th>判定</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>pytest 全量</td><td class="mono">pytest -q</td><td>exit=0，收集 <b>707</b> 例（较基线 +4：本轮新增 4 条），分支覆盖率 <b>94%</b>（门槛 90%）</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>2</td><td>变异探针</td><td class="mono">scripts/mutation_probe.py</td><td>exit=0，变异 <b>52</b> 条（含新增 <span class="mono">memory_recall_not_weighted</span>）：被杀 52，存活/异常 0</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>3</td><td>发版门禁</td><td class="mono">scripts/ci_local.py</td><td>exit=0，<b>7 步通过 7 / 失败 0</b>（pytest + 变异探针 + 场景 + 发版回归 + 交付演练 + 实例自证 + live 体检）</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>4</td><td>场景测试</td><td class="mono">scripts/scenario_test.py</td><td>32/32 通过（真实服务 + 真实 MCP + 真实业务数据）</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>5</td><td>交付演练</td><td class="mono">scripts/delivery_drill.py</td><td>21 通过 / 0 失败（接手 → 执行 → 交接物 → 脱敏 → 迁移全链路）</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>6</td><td>发版回归</td><td class="mono">release_regression.py --no-ai</td><td>16 通过 / 0 失败 / 2 项明确标「未验」（AI 链路需真实配额，本轮未跑——不许把没验的算成全绿）</td><td><span class="tag ok">通过*</span></td></tr>
+        <tr><td>7</td><td>运行态只读体检</td><td class="mono">live_check --mcp + live_ui_check</td><td>live_check 12 通过 / 0 失败；live_ui_check 16 通过 / 0 失败（真浏览器渲染，无 JS 报错）</td><td><span class="tag ok">通过</span></td></tr>
+      </tbody>
+    </table>
+    <pre><span class="ok">[OK]</span> pytest 全量（含覆盖率门槛）   61.0s  TOTAL  3058 170 1074 92 94%  10 files skipped
+<span class="ok">[OK]</span> 变异探针 mutation_probe      189.1s  变异 52 条：被杀 52    存活/异常 0
+<span class="ok">[OK]</span> 场景测试 scenario_test          4.6s  用例：32    通过：32    不通过：0
+<span class="ok">[OK]</span> 发版回归 release_regression      3.7s  已验的 16 项可用；2 项本轮跳过，不能说全部可用
+<span class="ok">[OK]</span> 交付演练 delivery_drill         6.1s  演练结果：21 通过 / 0 失败
+<span class="ok">[OK]</span> 只读体检 live_check --mcp      0.9s  12 通过 / 0 失败
+<span class="ok">[OK]</span> 真实浏览器 live_ui_check        4.4s  16 通过 / 0 失败
+<span class="warn">门禁：7 步    通过 7    失败 0 —— 结论：全部通过，可以发版 ✓</span></pre>
+    <p class="note">* 与项目文档口径一致：<span class="mono">--no-ai</span> 下的发版回归 2 项 AI 链路本就没跑，不算进「全部可用」；跑一次不带 <span class="mono">--no-ai</span> 的需消耗少量真实配额。变异探针因会临时改 <span class="mono">app/</span> 源码，按 ci_local 设计不与任何「起真实实例」步骤并行执行。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>八、四轮对标累计吸收与下一步</h2>
+  <div class="body">
+    <h3>8.1 四轮累计已吸收（均已实施 + 契约钉住）</h3>
+    <table>
+      <thead><tr><th>轮次</th><th>来源</th><th>吸收项</th><th>在本项目的位置</th></tr></thead>
+      <tbody>
+        <tr><td>第一轮 10-01</td><td>plane</td><td>自动分配 / 里程碑 / 项目统计 / 保存视图 / 待审查状态</td><td>P0-1 / P0-2 / P1 / P2 / T1</td></tr>
+        <tr><td>第二轮 10-06</td><td>Backlog.md / Beads / OKM / Multica / Skill 生态</td><td>验收标准 acceptance / journal 折叠 / 记忆时效 expires / 待拍板 inbox / Skill 投影（第 9 入口）</td><td>硬性约定 24–28</td></tr>
+        <tr><td>第三轮 10-08</td><td>agent-board 等</td><td>看板侧停滞检测 stalled</td><td><span class="mono">project_stats._stalled</span> + 简报 <span class="mono">stalled</span> 字段</td></tr>
+        <tr><td>第四轮 10-11</td><td>claude-mem</td><td><b>Awareness 类型加权召回</b>（决策/坑/约定 &gt; 事实）</td><td><span class="mono">due.recall_memories</span> + AGENTS.md / AI 简报两出口</td></tr>
+      </tbody>
+    </table>
+    <h3>8.2 下一步（按价值排序）</h3>
+    <ul>
+      <li><b>暂缓项巡检</b>：claude-mem Citations（记忆引用链）——若未来任务 refs 升级成结构化引用再联动评估；MCP 工具数稳定在 23，&gt;30 的红线未触发。</li>
+      <li><b>规模再衡量</b>：记忆 / 会话的全文检索仍维持「不吸收」——触发条件是个人单机规模显著放大（多机 / 多工具重度场景），届时先量再议。</li>
+      <li>项目主线维持既定方向：稳定性与验证优先（发版唯一判据 <span class="mono">ci_local.py</span>），不加多功能。</li>
+    </ul>
+  </div>
+</div>
+
+<footer>AI 交接看板 · 第四轮 GitHub 同类项目对标与优化报告 · 2026-10-11 · 研究档案：research-reports/competitor-absorb-2026-10-11/</footer>
+</div>
+</body>
+</html>

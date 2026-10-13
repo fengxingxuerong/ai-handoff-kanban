@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 交接看板 · 全方面测试报告 2026-10-11</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --line:#e3e6ea; --text:#1f2329; --muted:#6b7280;
+    --ok:#0a7d3e; --ok-bg:#e6f6ec; --warn:#b45309; --warn-bg:#fef3e2;
+    --skip:#6b7280; --skip-bg:#f1f3f5; --accent:#1e5eff;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--text); font:14px/1.7 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif; padding:32px 20px;}
+  .wrap{max-width:980px; margin:0 auto;}
+  header{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:28px 32px; margin-bottom:18px;}
+  h1{font-size:22px; margin-bottom:6px;}
+  .sub{color:var(--muted); font-size:13px;}
+  .ver{display:inline-block; margin-top:10px; background:var(--accent); color:#fff; font-size:12px; padding:3px 10px; border-radius:99px;}
+  .ver.warn{background:var(--warn);}
+  .banner{display:flex; gap:14px; flex-wrap:wrap; margin-top:16px;}
+  .banner .cell{flex:1; min-width:150px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:12px 16px;}
+  .banner .num{font-size:26px; font-weight:700;}
+  .banner .lbl{font-size:12px; color:var(--muted);}
+  .banner .num.ok{color:var(--ok);}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; margin-bottom:18px; overflow:hidden;}
+  .card > h2{font-size:16px; padding:16px 24px; border-bottom:1px solid var(--line); background:#fafbfc;}
+  .card .body{padding:18px 24px;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{background:#fafbfc; font-weight:600; white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  .tag{display:inline-block; font-size:12px; font-weight:600; padding:2px 10px; border-radius:99px; white-space:nowrap;}
+  .tag.ok{background:var(--ok-bg); color:var(--ok);}
+  .tag.warn{background:var(--warn-bg); color:var(--warn);}
+  .tag.skip{background:var(--skip-bg); color:var(--skip);}
+  .mono{font-family:Consolas,"Courier New",monospace; font-size:12px; background:#f4f5f7; padding:1px 6px; border-radius:4px; word-break:break-all;}
+  .note{font-size:13px; color:var(--muted); margin-top:10px;}
+  pre{background:#1e2430; color:#d7e0ea; font:12px/1.6 Consolas,"Courier New",monospace; padding:14px 16px; border-radius:8px; overflow-x:auto; margin-top:10px;}
+  pre .ok{color:#4ade80;}
+  pre .warn{color:#fbbf24;}
+  ul{padding-left:20px; margin:6px 0;}
+  li{margin:3px 0;}
+  .step{display:flex; gap:10px; align-items:flex-start; padding:7px 0; border-bottom:1px dashed var(--line);}
+  .step:last-child{border-bottom:none;}
+  .step .st{flex:1;}
+  footer{color:var(--muted); font-size:12px; text-align:center; padding:10px;}
+  h3{font-size:14px; margin:14px 0 6px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>AI 交接看板 · 全方面测试报告</h1>
+  <div class="sub">测试时间：2026-10-11 02:11 – 02:23 ｜ 测试环境：Windows x64 / git-bash / Python 3.13.13<br>
+  仓库：D:\lo\项目任务看板 ｜ 版本：v1.2.1（app/version.py）｜ 本轮实测构建戳：2026-10-11 02:21</div>
+  <div class="ver">v1.2.1</div>
+  <div class="banner">
+    <div class="cell"><div class="num ok">8/8</div><div class="lbl">测试套件通过</div></div>
+    <div class="cell"><div class="num ok">703</div><div class="lbl">pytest 用例收集</div></div>
+    <div class="cell"><div class="num ok">94%</div><div class="lbl">分支覆盖率（门槛 90%）</div></div>
+    <div class="cell"><div class="num ok">51/51</div><div class="lbl">变异探针全被杀</div></div>
+    <div class="cell"><div class="num ok">11/11</div><div class="lbl">ci_local 门禁步骤</div></div>
+  </div>
+</header>
+
+<div class="card">
+  <h2>一、总览：逐套件结果与门禁判定</h2>
+  <div class="body">
+    <table>
+      <thead><tr><th>#</th><th>测试套件</th><th>命令</th><th>实测结果</th><th>立项基线</th><th>判定</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>pytest 全量</td><td class="mono">pytest -q</td><td>exit=0，收集 703 例，分支覆盖率 94%，10 个文件因完全覆盖跳过</td><td>693 例 / 覆盖 ≥90%</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>2</td><td>变异探针</td><td class="mono">scripts/mutation_probe.py</td><td>exit=0，变异 51 条：被杀 51，存活/异常 0</td><td>全被杀、存活 0</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>3</td><td>发版门禁</td><td class="mono">scripts/ci_local.py --with-exe</td><td>exit=0，11 步通过 11 / 失败 0，含重打包与冻结版冒烟，总约 4 分钟</td><td>11 步全绿</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>4</td><td>真实场景测试</td><td class="mono">scripts/scenario_test.py</td><td>exit=0，用例 32：通过 32 / 不通过 0</td><td>32/32</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>5</td><td>交付演练</td><td class="mono">scripts/delivery_drill.py</td><td>exit=0，演练结果：21 通过 / 0 失败</td><td>21/0</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>6</td><td>发版回归</td><td class="mono">scripts/release_regression.py --no-ai</td><td>exit=0，16 通过 / 0 失败 / 2 未验（AI 链路本轮未跑）</td><td>16 通过 + 2 明示未验</td><td><span class="tag warn">通过*</span></td></tr>
+        <tr><td>7</td><td>运行态只读体检</td><td class="mono">live_check.py --mcp + live_ui_check.py</td><td>live_check 11 通过 / 0 失败 / 1 未验；live_ui_check 16 通过 / 0 失败</td><td>live_check 12/0、ui 16/0</td><td><span class="tag ok">通过*</span></td></tr>
+        <tr><td>8</td><td>性能基准</td><td class="mono">scripts/bench.py</td><td>exit=0，6 项目 / 6 真实 git 仓库，读接口热态中位 1.7–3.3ms，export-all 冷态 192.6ms</td><td>与 30–80 项目基线同量级</td><td><span class="tag ok">通过</span></td></tr>
+      </tbody>
+    </table>
+    <p class="note">* 带星号的通过指：套件自身判定通过；但存在如实披露的未验项——#6 的 2 项 AI 链路与 #7 的 1 项（独立实例未配置密钥时掩码无内容可验），详见各节。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>二、pytest 全量（703 例 / 覆盖 94%）</h2>
+  <div class="body">
+    <p><b>命令</b>：<span class="mono">.venv/Scripts/python.exe -m pytest -q</span> ／ 收集数用 <span class="mono">--collect-only</span> 复核</p>
+    <ul>
+      <li><b>退出码 0</b>，无失败用例。</li>
+      <li>分支覆盖率 <b>94%</b>，高于 90% 门槛（pytest-cov 分支口径，`--cov-branch`）。</li>
+      <li>收集用例 <b>703 例</b>（按 `--collect-only` 实测，较项目文档基线 693 例新增 10 例，说明近期有加测试）。</li>
+      <li>10 个文件因完全覆盖被跳过（无新增可测分支）。</li>
+      <li><span class="tag skip">跳过</span> 5 条 <span class="mono">test_ai.py</span> 真实模型用例需 <span class="mono">KANBAN_LIVE=1</span> + 真实配额，本轮未启用（与项目文档口径一致）。</li>
+    </ul>
+    <pre><span class="ok">[OK]</span> pytest 全量（含覆盖率门槛）  59.2s  TOTAL 3052 170 1074 92 94%  10 files skipped due to complete coverage.</pre>
+  </div>
+</div>
+
+<div class="card">
+  <h2>三、变异探针（51 条全被杀）</h2>
+  <div class="body">
+    <p><b>命令</b>：<span class="mono">.venv/Scripts/python.exe scripts/mutation_probe.py</span></p>
+    <ul>
+      <li>往 <span class="mono">app/</span> 注入 51 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤等），逐条跑相关用例。</li>
+      <li>实测 <b>51 条全部被杀</b>，存活 / 异常 0，exit=0。</li>
+      <li>项目文档记录的旧基线为 45 条，当前探针数已随「待拍板过滤」「看板侧停滞检测」等新业务规则增长到 51 条，且新增规则均有对应门禁。</li>
+    </ul>
+    <pre>变异 51 条：被杀 51    存活/异常 0</pre>
+  </div>
+</div>
+
+<div class="card">
+  <h2>四、发版门禁 ci_local（11/11 步全绿）</h2>
+  <div class="body">
+    <p><b>命令</b>：<span class="mono">.venv/Scripts/python.exe scripts/ci_local.py --with-exe</span>（CI 本地等价物，发版唯一判据）</p>
+    <p>所有步骤均取真实退出码、中途失败不短路，最后打印汇总表。本轮 11 步全部通过，含 <b>重新打包</b>（PyInstaller，24.0s）与 <b>冻结版自查</b>（frozen_smoke 11/0）。</p>
+    <table>
+      <thead><tr><th>步骤</th><th>结果</th><th>关键证据</th></tr></thead>
+      <tbody>
+        <tr><td>1　pytest 全量</td><td><span class="tag ok">通过</span></td><td>59.2s，覆盖 94% ≥ 90% 门槛</td></tr>
+        <tr><td>2　变异探针</td><td><span class="tag ok">通过</span></td><td>190.0s，变异 51 条全被杀</td></tr>
+        <tr><td>3　场景测试</td><td><span class="tag ok">通过</span></td><td>32 通过 / 0 不通过</td></tr>
+        <tr><td>4　发版回归</td><td><span class="tag ok">通过</span></td><td>16 项可用；2 项本轮跳过，如实标注「不能说全部可用」</td></tr>
+        <tr><td>5　交付演练</td><td><span class="tag ok">通过</span></td><td>21 通过 / 0 失败</td></tr>
+        <tr><td>6　实例自证数据目录</td><td><span class="tag ok">通过</span></td><td>data_file 指向隔离临时目录，未碰 ~/.ai-kanban</td></tr>
+        <tr><td>7　只读体检 live_check --mcp</td><td><span class="tag ok">通过</span></td><td>12 通过 / 0 失败（含 MCP 23 工具目录可读）</td></tr>
+        <tr><td>8　真实浏览器 live_ui_check</td><td><span class="tag ok">通过</span></td><td>16 通过 / 0 失败，全程无 JS 报错 / 请求失败</td></tr>
+        <tr><td>9　生成构建戳</td><td><span class="tag ok">通过</span></td><td>app\_build_stamp.py：2026-10-11 02:21</td></tr>
+        <tr><td>10　生成 exe 版本资源</td><td><span class="tag ok">通过</span></td><td>v1.2.1 · 构建 2026-10-11 02:21</td></tr>
+        <tr><td>11　打包 + 冻结版冒烟</td><td><span class="tag ok">通过</span></td><td>PyInstaller 24.0s 完成；frozen_smoke 11 通过 / 0 失败，已自动关闭应用</td></tr>
+      </tbody>
+    </table>
+    <pre>门禁：11 步    通过 11    失败 0
+结论：全部通过，可以发版 ✓</pre>
+  </div>
+</div>
+
+<div class="card">
+  <h2>五、真实场景测试 scenario_test（32/32）</h2>
+  <div class="body">
+    <p><b>命令</b>：<span class="mono">.venv/Scripts/python.exe scripts/scenario_test.py</span>（真实服务 + 真 MCP + 真实业务数据）</p>
+    <p>32 例全通过，覆盖数据损坏自愈、快照恢复、MCP 非法枚举拒绝、远离失键脱敏、备份等关键运维场景。代表性证据：</p>
+    <ul>
+      <li>损坏 39 个项目文件后请求仍读到 39 个，恢复来源=last-good，损坏文件留档 .bak，上报提示第二次已清除。</li>
+      <li>MCP 写入非法状态被拒（isError=True），磁盘数据保持原值。</li>
+      <li>恢复前自动留 before-restore 副本，备份产物与历史备份均可列出。</li>
+      <li>密钥掩码往返一致：界面只见掩码，原样提交后磁盘真 Key 原样保留。</li>
+    </ul>
+    <pre>用例：32    通过：32    不通过：0</pre>
+  </div>
+</div>
+
+<div class="card">
+  <h2>六、交付演练 delivery_drill（21/0）</h2>
+  <div class="body">
+    <p><b>命令</b>：<span class="mono">.venv/Scripts/python.exe scripts/delivery_drill.py</span>（模拟换智能体接手，端到端 21 项；不传参数时自起隔离实例并自证数据目录）</p>
+    <pre>阶段1-6 全部 PASS（接手→执行→交接→监管→迁移→清理）
+演练结果：21 通过 / 0 失败
+结论：真实交付链路（接手→执行→交接→监管→迁移）端到端可用 ✓</pre>
+    <p>覆盖：新智能体按交接包接手、任务推进与依赖流转、就绪度评分、交接包含任务清单/背景/交接说明、脱敏导出、AGENTS.md 与多智能体入口文件生成、全局搜索、全量导出迁移、删除后完整恢复、演练现场清理。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>七、发版回归 release_regression --no-ai（16 通过 + 2 未验）</h2>
+  <div class="body">
+    <p><b>命令</b>：<span class="mono">.venv/Scripts/python.exe scripts/release_regression.py --no-ai</span>（自起独立实例，v1.2 新功能链路）</p>
+    <table>
+      <thead><tr><th>功能面</th><th>判定</th></tr></thead>
+      <tbody>
+        <tr><td>1　会话捕获 → AI 提炼 → 入库</td><td><span class="tag skip">未验</span> `--no-ai` 下未运行（消费真实配额才跑）</td></tr>
+        <tr><td>2　任务过程轨迹</td><td><span class="tag ok">通过</span> 手动追加 / 状态流转自动记 journal</td></tr>
+        <tr><td>3　项目记忆层</td><td><span class="tag ok">通过</span> 写入 / 去重 / 检索 / 交接包召回 / context 召回</td></tr>
+        <tr><td>4　LLM 用量追踪</td><td><span class="tag skip">未验</span> `--no-ai` 下未运行</td></tr>
+        <tr><td>5　逾期统计</td><td><span class="tag ok">通过</span></td></tr>
+        <tr><td>6　MCP 只读模式</td><td><span class="tag ok">通过</span> 写操作被拒 / 读操作正常</td></tr>
+        <tr><td>7　清理演练数据</td><td><span class="tag ok">通过</span></td></tr>
+      </tbody>
+    </table>
+    <pre>发版回归结果：16 通过 / 0 失败 / 2 未验（会话捕获 → AI 提炼 → 入库、LLM 用量记账）
+结论：已验的 16 项可用；2 项本轮跳过，不能说全部可用</pre>
+    <p class="note">诚实性披露：2 项未验已明确标注，未冒充「全部可用」。要拿「新功能链路全部可用」这句话，需另行跑一次不带 --no-ai 的版本（消耗真实配额）。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>八、运行态只读体检（live_check + live_ui_check）</h2>
+  <div class="body">
+    <p>起隔离实例（临时数据目录 + 端口 18322，<span class="mono">KANBAN_NO_SCHEDULER=1</span>，不碰 ~/.ai-kanban）后对已在跑实例做只读体检。</p>
+    <h3>live_check --mcp</h3>
+    <pre>  [OK] 服务存活 /api/health
+  [OK] 首页可访问
+  [OK] 前端为事件委托版本（无内联事件）
+  [OK] 项目列表可读（4 个项目）
+  [OK] 项目字段齐全
+  [OK] 统计接口可读且字段齐全
+  [SKIP] AI 配置可读且 Key 已掩码   该实例没有配置任何 Key，掩码无内容可验
+  [OK] 备份列表可读
+  [OK] 可恢复来源可读
+  [OK] 跨站 Origin 被拒（403）
+  [OK] 伪 Host 被拒（403）
+  [OK] MCP 工具目录可读（23 个工具）
+结果：11 通过 / 0 失败 / 1 未验</pre>
+    <p class="note">1 项未验的原因：独立实例未播种密钥，掩码项无内容可验（ci_local 使用带合成 Key 的播种实例时该 12 项全通过）。</p>
+    <h3>live_ui_check（真浏览器 msedge）</h3>
+    <pre>结果：16 通过 / 0 失败
+覆盖：页面真实渲染非白屏、卡片数与接口一致、详情页跳转正确、看板四列、
+      看板/代码两侧结论渲染（有分歧要说、没分歧也要说）、依赖图口径自洽、
+      仓库读不到时面板说明原因、全局搜索真实命中、全程无 JS 报错 / 请求失败</pre>
+  </div>
+</div>
+
+<div class="card">
+  <h2>九、性能基准 bench</h2>
+  <div class="body">
+    <p><b>命令</b>：<span class="mono">.venv/Scripts/python.exe scripts/bench.py --repos 6</span>（6 项目 / 每项 10 任务 / 6 个<strong>真实 git 仓库</strong>，各 3 条提交 + 1 个脏文件，git 探测全程计入）</p>
+    <table>
+      <thead><tr><th>接口</th><th>min</th><th>中位</th><th>max（ms，20 次）</th></tr></thead>
+      <tbody>
+        <tr><td>GET /api/projects（热）</td><td>1.5</td><td>1.7</td><td>4.1</td></tr>
+        <tr><td>GET /api/stats（热）</td><td>1.6</td><td>1.8</td><td>2.4</td></tr>
+        <tr><td>GET /api/projects/{pid}（热）</td><td>1.6</td><td>1.7</td><td>2.0</td></tr>
+        <tr><td>GET /api/export-all（热 / 冷）</td><td>2.9 / 184.4</td><td>3.3 / 192.6</td><td>205.9 / 203.2</td></tr>
+        <tr><td>POST 新建任务（热，写）</td><td>2.0</td><td>2.3</td><td>3.3</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>6 个真实仓库下，常规读接口热态中位 <b>1.7–3.3ms</b>，与项目文档基线（30 项目 2.7–4.0ms、80 项目 4.8–7.7ms）同量级，未回归。</li>
+      <li><span class="mono">export-all</span> 冷态 192.6ms ≈ 6 仓库 × ~32ms/仓库 的 git 探测已知成本；热态 3.3ms。</li>
+      <li>验证了「加缓存会引入失效风险却无收益」的结论：当前真实规模（几十项目）全在下亚 10ms 区间。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="card">
+  <h2>十、结论</h2>
+  <div class="body">
+    <ul>
+      <li><b>全部 8 个测试套件通过</b>，与项目文档「验证基线」一致或更优：pytest 703 例 / 94% 覆盖、变异探针 51/51、ci_local 11/11（含重打包 + 冻结版冒烟）、scenario 32/32、drill 21/0、回归 16+2 未验如实标注、live 体检 12/0 与 16/0、bench 无回归。</li>
+      <li><b>发行判据成立</b>：ci_local --with-exe 11 步全绿 = 可以发版。</li>
+      <li><b>诚实披露</b>：① AI 链路 5 条真实模型 pytest 用例、② release_regression 2 项（会话捕获→AI 提炼→入库、LLM 用量记账）需真实配额未跑；③ live_check 独立实例 1 项掩码检查因未配密钥无内容可验。三者均已明示，未伪装成通过。</li>
+    </ul>
+    <div class="banner">
+      <div class="cell"><div class="num ok">PASS</div><div class="lbl">ci_local 门禁（11/11）</div></div>
+      <div class="cell"><div class="num ok">PASS</div><div class="lbl">变异探针（51/51）</div></div>
+      <div class="cell"><div class="num ok">PASS</div><div class="lbl">真实场景（32/32）</div></div>
+      <div class="cell"><div class="num ok">PASS</div><div class="lbl">交付演练（21/0）</div></div>
+    </div>
+  </div>
+</div>
+
+<footer>AI 交接看板 · 全方面测试报告 · 生成于 2026-10-11 02:23 · 报告为单文件 HTML，可离线查看</footer>
+</div>
+</body>
+</html>
