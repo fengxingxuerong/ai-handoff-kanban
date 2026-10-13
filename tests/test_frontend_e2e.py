@@ -1214,6 +1214,16 @@ def test_expired_memory_is_marked_in_the_panel(ui):
     fresh = page.locator(".memory-item:has-text('长期有效的约定')")
     assert "expired" not in (fresh.get_attribute("class") or ""), "未设时效的记忆不该被标过期"
 
+    # 条目级尺寸徽章（2026-10-11 对标 claude-mem 渐进式披露的最小落地）：
+    # 面板上要看得到"这一条读进上下文占多少"，且数字必须与后端 text_size 同口径（按正文长度）
+    badge = expired.locator(".m-size")
+    assert badge.count() == 1, "记忆行里没有尺寸徽章"
+    assert badge.inner_text() == "≈7 字", f"「已经过期的方案」应为 7 字：{badge.inner_text()}"
+    assert "tok" in (badge.get_attribute("title") or ""), "token 估算应放在 title 里（近似值，不喧哗）"
+    _, mrows = api.get(f"/api/memories?pid={p['id']}")
+    row = next(m for m in mrows["memories"] if m["text"] == "已经过期的方案")
+    assert row["chars"] == len("已经过期的方案"), "接口给的 chars 应与正文长度一致"
+
 
 def test_journal_overflow_folds_in_task_modal(ui):
     """过程记录超上限后，任务弹窗里能看到折叠摘要行（不是无声消失）"""

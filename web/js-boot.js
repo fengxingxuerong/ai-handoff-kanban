@@ -122,14 +122,24 @@ async function renderMemories(pid) {
     const r = await api("/api/memories?pid=" + encodeURIComponent(pid));
     const items = r.memories || [];
     box.innerHTML = items.length
-      ? items.map(m => `
+      ? items.map(m => {
+          // 条目级尺寸（服务端 text_size 给的 chars / est_tokens）：这一条读进模型上下文要占多少。
+          // 界面上只显示字数（够用且不吵），token 估算放在 title 里 —— 它是近似值（CJK 1 字≈1 token），
+          // 别让它看起来像个精确读数。缺字段时退回本地长度，宁可不显示也不渲染 "≈undefined 字"。
+          const chars = typeof m.chars === "number" ? m.chars : (m.text || "").length;
+          const tok = typeof m.est_tokens === "number" ? m.est_tokens : 0;
+          const sizeTip = "读进上下文前先看这一条值不值：约 " + chars + " 字"
+            + (tok ? " / 约 " + tok + " tok（中文按 1 字≈1 token 的近似估算，不作计费口径）" : "");
+          return `
         <div class="memory-item${m.expired ? " expired" : ""}">
           <span class="m-type">${esc(m.type || "事实")}</span>
           <span class="m-text">${esc(m.text)}</span>
+          <span class="m-size" title="${esc(sizeTip)}">≈${esc(String(chars))} 字</span>
           ${m.expired ? `<span class="m-expired" title="有效期到 ${esc(m.expires || "")}，已过期：不再进交接包/AGENTS.md，删除请点 ✕">⚠️ 已过期</span>` : ""}
           <span class="m-time" title="来源：${esc(m.source || "手动")}">${esc(m.source || "手动")} · ${esc((m.time || "").slice(5, 10))}</span>
           <button class="m-del" title="删除" data-act="deleteMemory" data-mid="${esc(m.id)}">✕</button>
-        </div>`).join("")
+        </div>`;
+        }).join("")
       : '<div style="font-size:12px;color:var(--text-faint)">暂无记忆。会话提炼会自动沉淀决策/坑/约定，也可手动添加。</div>';
   } catch (e) { box.innerHTML = '<div style="font-size:12px;color:var(--red)">加载失败</div>'; }
 }

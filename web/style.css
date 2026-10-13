@@ -668,6 +668,9 @@
   .memory-item .m-type { flex-shrink: 0; font-size: 10.5px; padding: 1px 7px; border-radius: 5px;
     background: var(--accent2-soft); color: var(--accent2); font-weight: 600; }
   .memory-item .m-text { flex: 1; font-size: 12.5px; line-height: 1.55; color: var(--text); }
+  /* 条目级尺寸徽章：告诉人"这一条读进模型上下文要占多少"（token 估算在 title 里，是近似值） */
+  .memory-item .m-size { flex-shrink: 0; font-size: 10px; color: var(--text-faint); cursor: help;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
   .memory-item .m-time { flex-shrink: 0; font-size: 10px; color: var(--text-faint); }
   .memory-item .m-del { flex-shrink: 0; border: none; background: transparent; color: var(--text-faint);
     cursor: pointer; font-size: 12px; padding: 0 2px; }

@@ -19,7 +19,7 @@
 | `app/journal.py` | 过程轨迹与验收标准的清洗与上限（纯函数，2026-10-07 从 main 拆出）：`append_journal`（溢出**折叠成摘要**的写入侧）/ `compress_journal` / `clean_journal` / `clean_acceptance` 与 `MAX_JOURNAL*`、`MAX_ACCEPTANCE*`、`JOURNAL_SNIPPET`。**这些上限常量的 monkeypatch 点在这里**（main 是转发别名，patch 别名改不到函数读的全局）；时钟由 main 的 `_append_journal` 包装注入，本模块不 import main |
 | `app/redact.py` | 交接内容脱敏规则与 `redact_text`（纯函数） |
 | `app/idem.py` | 创建幂等键 `client_ref` 的清洗与记账（纯函数） |
-| `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note`，以及**条目级尺寸估算** `text_size` / `size_note` / `estimate_tokens`（2026-10-11 对标 claude-mem 的渐进式披露最小落地：给记忆检索输出报每条成本；口径与纪律见硬性约定 29） |
+| `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note`，以及**条目级尺寸估算** `text_size` / `size_note` / `estimate_tokens`（2026-10-11 对标 claude-mem 的渐进式披露最小落地：给记忆检索输出报每条成本，HTTP / MCP / 前端记忆面板三处同一口径；口径与纪律见硬性约定 29） |
 | `app/sessions.py` | 会话扫描与文本提取（目录遍历有界、只读文件尾部、源内外校验） |
 | `app/gitinfo.py` | git 集成（2026-10-06 从 main 搬出）：`git_snapshot` / `_run_git` / `_git_cache`。只读、列表传参、绝不拼 shell。**`_run_git`/`_git_cache`/`GIT_TIMEOUT` 的 monkeypatch 点在这里**（main 里是转发别名） |
 | `app/agentfiles.py` | 多智能体入口文件投影（`AGENT_ENTRY_TARGETS` 白名单 → 各工具要求的相对路径，含第 9 个 `.claude/skills` 投影） |
@@ -271,12 +271,14 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
     一份常量，别写两处。Skill 是投影不是第二份内容（正文仍是 AGENTS.md 那一份）。
 
 29. **条目级尺寸估算只用于展示决策，不参与任何排序或截断**（2026-10-11 对标 claude-mem 的
-    渐进式披露）：`handoff_meta.text_size` / `size_note` 是唯一实现，HTTP 的记忆列表行与
-    MCP `kanban_list_memories` 都取它（MCP 经 `kanban.` 前缀复用，不另写一份）。
-    两条纪律：① **按实际给出去的那份文本算** —— 脱敏会改长度，报 120 字却给出 90 字，
+    渐进式披露）：`handoff_meta.text_size` / `size_note` 是唯一实现，HTTP 的记忆列表行、
+    MCP `kanban_list_memories`、前端「项目记忆」面板三处都取它（MCP 与前端经 `kanban.` 前缀 /
+    `/api/memories` 复用，不另写一份）。
+    三条纪律：① **按实际给出去的那份文本算** —— 脱敏会改长度，报 120 字却给出 90 字，
     消费方的预算就白做了；② `est_tokens` 是**近似**（CJK 1 字 ≈ 1 token、其余 4 字符 ≈ 1 token
-    且上取整），**不要拿它做用量记账**，那一路是 `usage.jsonl` 的真实计数。
-    召回窗口仍由 `due.recall_memories` 的类型加权决定，尺寸数字不得反过来影响召回。
+    且上取整），**不要拿它做用量记账**，那一路是 `usage.jsonl` 的真实计数；界面上只显示字数，
+    token 估算只放在 `title`（近似值不该看起来像精确读数）；③ 召回窗口仍由 `due.recall_memories`
+    的类型加权决定，尺寸数字不得反过来影响召回。
 
 ## MCP 服务（让代理直接读写看板）
 
