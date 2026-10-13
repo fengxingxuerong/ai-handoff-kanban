@@ -1039,6 +1039,26 @@ def test_listed_memories_are_redacted_by_default(mcp):
     assert "zzzz9998887776666" in raw, "显式传 false 才给原文"
 
 
+def test_memory_list_reports_item_and_remainder_size(mcp):
+    """记忆列表带条目级尺寸（2026-10-11 对标 claude-mem 渐进式披露的最小落地）：
+    消费方据此决定"这条要不要读进上下文"、"要不要换个更窄的过滤再拉一次"，而不是盲目拉全量。
+    尺寸按**实际给出去的那份文本**算（脱敏会改长度），否则预算白做。"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "记忆尺寸可见"})[0])
+    mcp.tool("kanban_memory_add", {"project_id": pid, "type": "坑",
+                                   "text": "迁移前先跑 tests/migrate_check.py"})
+    out, err = mcp.tool("kanban_list_memories", {"project_id": pid})
+    assert not err and "≈" in out and "tok" in out, f"每条要有尺寸标注：{out}"
+    assert "未列出" not in out, "没到上限就不该出现「还有多少条没列出」的提示"
+
+    # 列表有上限（scripts/mcp_server.py 的 MEMORY_LIST_LIMIT）：到顶后省掉的那批也要报合计成本，
+    # 否则消费方以为"就这么几条"，而实际拿全量要吃掉一整个窗口
+    for i in range(120):
+        mcp.tool("kanban_memory_add", {"project_id": pid, "type": "事实", "text": f"背景事实{i:03d}"})
+    full, err = mcp.tool("kanban_list_memories", {"project_id": pid})
+    assert not err, full
+    assert "另有" in full and "未列出" in full and "合计 ≈" in full, f"截断要报数并报成本：{full}"
+
+
 def test_memory_list_reports_truncation(mcp):
     """一次列 50 条封顶，超了要说 —— 不然模型以为记忆层就这么点东西"""
     pid = last_id(mcp.tool("kanban_create_project", {"name": "记忆很多"})[0])

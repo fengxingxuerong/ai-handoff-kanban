@@ -331,3 +331,38 @@ def test_projects_brief_memory_recall_is_weighted_and_masked():
     assert texts[1] == "后记背景", f"事实落后于坑：{texts}"
     assert "sk-briefmem123456" not in texts[0], "模型简报的记忆依然要脱敏（外出边界）"
     assert "sk-********" in texts[0], "掩码保留，只盖凭据那一段"
+
+
+# ---------------- 条目级尺寸估算（渐进式披露的最小落地，2026-10-11） ----------------
+# claude-mem 用"索引层 50-100 token / 详情层按需 500-1000 token"换上下文节省；本项目只有
+# 一层，能落地的是**把每条的成本报出来**，让消费方自己决定要不要读进去。
+
+def test_text_size_counts_cjk_and_ascii_and_rounds_up():
+    """尺寸口径：CJK 1 字 ≈ 1 token、其余 4 字符 ≈ 1 token 且**上取整**（宁高不低）。"""
+    from app.handoff_meta import text_size, estimate_tokens
+    assert text_size("") == {"chars": 0, "kb": 0.0, "est_tokens": 0}
+    assert text_size("中文四字")["est_tokens"] == 4, "CJK 按 1 字 1 token"
+    assert estimate_tokens("abcd") == 1
+    assert estimate_tokens("abcde") == 2, "上取整：宁可略高，也别让消费方以为还装得下"
+    mixed = text_size("甲乙丙def")
+    assert mixed["chars"] == 6 and mixed["est_tokens"] == 4, f"混合文本口径：{mixed}"
+    from app.handoff_meta import size_note
+    assert size_note("中文四字") == "≈4 字/≈4 tok", "给模型看的那行标注格式要稳定"
+
+
+def test_memories_api_reports_per_item_size(app_client):
+    """列表接口给每条记忆带上尺寸 —— 以前只有"整包多少行"这一层（context_budget），
+    单条有多贵没人知道：一条 300 字的坑和一条 12 字的约定在列表里长得一样长。"""
+    _, p = app_client.create_project("记忆尺寸")
+    pid = p["id"]
+    app_client.post("/api/memories", {"pid": pid, "type": "坑", "text": "坑" * 300})
+    app_client.post("/api/memories", {"pid": pid, "type": "约定", "text": "短约定"})
+    _, body = app_client.get("/api/memories?pid=" + pid)
+    by_text = {m["text"]: m for m in body["memories"]}
+    big = by_text["坑" * 300]
+    small = by_text["短约定"]
+    assert big["chars"] == 300 and big["est_tokens"] >= 300, f"大条目的尺寸：{big}"
+    assert small["chars"] == 3 and small["est_tokens"] < big["est_tokens"], \
+        f"小条目也要如实报，且明显小于大条目：{small}"
+    assert big["kb"] > small["kb"] > 0, "KB 也按 UTF-8 字节算（中文约 3 字节/字）"
+

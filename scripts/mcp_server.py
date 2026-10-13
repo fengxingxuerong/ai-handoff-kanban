@@ -673,10 +673,18 @@ def t_list_memories(args: dict) -> str:
         text = kanban.redact_text(m.get("text") or "") if show else (m.get("text") or "")
         exp = f" · ⚠️已于 {m['expires']} 过期" if m.get("expired") else (
             f" · 有效期至 {m['expires']}" if m.get("expires") else "")
+        # 尺寸按**实际给出去的那份文本**算（脱敏会改长度）：报了 120 字却给出 90 字，
+        # 消费方的预算就白做了。参见硬性约定「条数截断要报数」的同款纪律。
         lines.append(f"- [{m.get('id')}]【{m.get('type')}】{m.get('time')} "
-                     f"· {m.get('pid') or '通用'} · {text}{exp}")
+                     f"· {m.get('pid') or '通用'} · {kanban.size_note(text)}{exp} · {text}")
     if len(rows) > MEMORY_LIST_LIMIT:
-        lines.append(f"…… 另有 {len(rows) - MEMORY_LIST_LIMIT} 条未列出："
+        # 未列出的那批也报成本：消费方据此决定"要不要换个更窄的过滤条件再拉一次"，
+        # 而不是盲目 project_id="" 拉全量
+        rest = [kanban.text_size(kanban.redact_text(m.get("text") or "") if show
+                                 else (m.get("text") or ""))
+                for m in rows[MEMORY_LIST_LIMIT:]]
+        lines.append(f"…… 另有 {len(rest)} 条未列出（合计 ≈{sum(r['chars'] for r in rest)} 字/"
+                     f"≈{sum(r['est_tokens'] for r in rest)} tok）："
                      "用 project_id / type / query 收窄，别一次全塞进上下文。")
     return "\n".join(lines)
 

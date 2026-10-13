@@ -19,7 +19,7 @@
 | `app/journal.py` | 过程轨迹与验收标准的清洗与上限（纯函数，2026-10-07 从 main 拆出）：`append_journal`（溢出**折叠成摘要**的写入侧）/ `compress_journal` / `clean_journal` / `clean_acceptance` 与 `MAX_JOURNAL*`、`MAX_ACCEPTANCE*`、`JOURNAL_SNIPPET`。**这些上限常量的 monkeypatch 点在这里**（main 是转发别名，patch 别名改不到函数读的全局）；时钟由 main 的 `_append_journal` 包装注入，本模块不 import main |
 | `app/redact.py` | 交接内容脱敏规则与 `redact_text`（纯函数） |
 | `app/idem.py` | 创建幂等键 `client_ref` 的清洗与记账（纯函数） |
-| `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note` |
+| `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note`，以及**条目级尺寸估算** `text_size` / `size_note` / `estimate_tokens`（2026-10-11 对标 claude-mem 的渐进式披露最小落地：给记忆检索输出报每条成本；口径与纪律见硬性约定 29） |
 | `app/sessions.py` | 会话扫描与文本提取（目录遍历有界、只读文件尾部、源内外校验） |
 | `app/gitinfo.py` | git 集成（2026-10-06 从 main 搬出）：`git_snapshot` / `_run_git` / `_git_cache`。只读、列表传参、绝不拼 shell。**`_run_git`/`_git_cache`/`GIT_TIMEOUT` 的 monkeypatch 点在这里**（main 里是转发别名） |
 | `app/agentfiles.py` | 多智能体入口文件投影（`AGENT_ENTRY_TARGETS` 白名单 → 各工具要求的相对路径，含第 9 个 `.claude/skills` 投影） |
@@ -49,7 +49,7 @@
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复" |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 52 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「看板侧停滞检测」「记忆加权召回」增至 52 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序，加权召回的钉子必须随之变红） |
+| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 53 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「看板侧停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"） |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
 
@@ -269,6 +269,14 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
 28. **入口文件现在是 9 个投影**：第 9 个是 `.claude/skills/ai-kanban/SKILL.md`（Agent Skills，
     2026 起的技能包格式）。frontmatter 的 `name` 必须与目录名一致 —— 都取自 `SKILL_NAME`
     一份常量，别写两处。Skill 是投影不是第二份内容（正文仍是 AGENTS.md 那一份）。
+
+29. **条目级尺寸估算只用于展示决策，不参与任何排序或截断**（2026-10-11 对标 claude-mem 的
+    渐进式披露）：`handoff_meta.text_size` / `size_note` 是唯一实现，HTTP 的记忆列表行与
+    MCP `kanban_list_memories` 都取它（MCP 经 `kanban.` 前缀复用，不另写一份）。
+    两条纪律：① **按实际给出去的那份文本算** —— 脱敏会改长度，报 120 字却给出 90 字，
+    消费方的预算就白做了；② `est_tokens` 是**近似**（CJK 1 字 ≈ 1 token、其余 4 字符 ≈ 1 token
+    且上取整），**不要拿它做用量记账**，那一路是 `usage.jsonl` 的真实计数。
+    召回窗口仍由 `due.recall_memories` 的类型加权决定，尺寸数字不得反过来影响召回。
 
 ## MCP 服务（让代理直接读写看板）
 
@@ -812,8 +820,8 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 PATCH 非法枚举统一 422 + 中文密钥脱敏补规则（ab79afa）、全项目交接包 pre-fetch git 快照
 （冷态 `export-all` 5.8s → <1s，724669a）、看板侧停滞检测（跨 7 天无动的进行中任务进 stats 与
 AI 简报，de1dfe2）；随后第四轮对标 claude-mem（99k★）深挖并落地**记忆按类型加权召回**
-`recall_memories`（矩阵见 `research-reports/competitor-absorb-2026-10-11/matrix.md`）——
-按该矩阵的口径，本轮只落地了「加权召回」这一半，「条目级尺寸估算（渐进披露的最小落地）」尚未实现。下表六轮到 1.0.0 转正为止，1.1.0 的六个面见表格下方说明；1.1.0 → 1.2.0 之间叠了两轮对标吸取（2026-10-01 对标 plane：自动分配/里程碑/项目统计/保存视图/待审查状态；2026-10-06 GitHub 竞品全方面对标：验收标准/journal 折叠/记忆时效/待拍板/Skill 投影，报告见仓库根 `竞品优点吸取-2026-10-06.html`）。演进过程（按提交顺序，细节见各 commit）：
+`recall_memories` 与**条目级尺寸估算** `text_size`/`size_note`（矩阵见
+`research-reports/competitor-absorb-2026-10-11/matrix.md`）—— 该矩阵点名的两项落地都已实现。下表六轮到 1.0.0 转正为止，1.1.0 的六个面见表格下方说明；1.1.0 → 1.2.0 之间叠了两轮对标吸取（2026-10-01 对标 plane：自动分配/里程碑/项目统计/保存视图/待审查状态；2026-10-06 GitHub 竞品全方面对标：验收标准/journal 折叠/记忆时效/待拍板/Skill 投影，报告见仓库根 `竞品优点吸取-2026-10-06.html`）。演进过程（按提交顺序，细节见各 commit）：
 
 | 轮次 | 主题 | 关键产出 |
 | --- | --- | --- |
@@ -825,11 +833,12 @@ AI 简报，de1dfe2）；随后第四轮对标 claude-mem（99k★）深挖并�
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
 **验证基线（2026-10-14 全门禁复跑，含第四轮对标落地；上一次收口 2026-10-07 随 v1.2.1）**：
-`pytest` 707 收集（702 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 94%（门槛 90%）/
-32 个测试文件、661 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
-2026-10-11 第四轮对标补：`test_p1_absorb.py` 4 条（记忆按类型加权召回 `recall_memories`——
-高价值类型优先 + 同类内时间新在前、未知类型按事实兜底、AGENTS.md 的 12 条窗口不被后写的背景事实挤空、
-AI 简报同套召回且仍过脱敏）。
+`pytest` 710 收集（705 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 94%（门槛 90%）/
+32 个测试文件、664 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+2026-10-11 第四轮对标补（`test_p1_absorb.py` + `test_mcp_server.py`）：记忆按类型加权召回
+`recall_memories`（高价值类型优先 + 同类内时间新在前、未知类型按事实兜底、AGENTS.md 的 12 条窗口
+不被后写的背景事实挤空、AI 简报同套召回且仍过脱敏）与**条目级尺寸估算**
+（口径穷举 + 列表接口逐条报尺寸 + MCP 每条带标注且截断时报未列出那批的合计成本）。
 2026-10-06 对抗性审查（Explore 代理过全部 diff）发现并修复 5 处：任务统计面板漏「待审查」状态（P1，
 10-01 加状态时的前端死角）、里程碑行按陈旧下标删错行、MCP `*_add` 增量撞上限静默、
 折叠摘要时间区间渲染成乱码、切筛选时视图下拉不同步——各有回归钉子（2 条 E2E + 3 条静态 +
@@ -857,12 +866,15 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 > `release_regression` **去掉 `--no-ai` 实跑过三次：23 通过 / 0 失败**（2026-09-23 首跑、
 > 2026-10-06 随 v1.2.0 发版复跑、2026-10-07 随 v1.2.1 发版复跑，各多花约 1 次真调用）——
 > "新功能链路全部可用"这句话三次都是跑出来的，不是印出来的。
-**2026-10-14 复跑（含第四轮对标落地，`ci_local --with-exe` 11 步全绿 exit=0）**：pytest 72.8s
-（707 例 / 分支覆盖 94%）、变异探针 181.0s（**52 条全被杀** —— 2026-10-11 随停滞检测与记忆加权
-召回从 45 涨到 52）、`scenario_test` 32/32、`release_regression --no-ai` 16 通过 + 2 明示未验、
-`delivery_drill` 21/0、`live_check --mcp` 12/0、`live_ui_check` 16/0、重打包（构建戳 2026-10-14 00:26）
-+ `frozen_smoke` 11/0，总约 4 分 50 秒。同轮给探针新条目修了一处 `{` 缩进回退（上一次会话留下的
-格式事故，`--only memory_recall_not_weighted` 单跑确认该变异被杀）。
+**2026-10-14 复跑（第四轮对标两项落地后，`ci_local --with-exe` 11 步全绿 exit=0）**：pytest 54.5s
+（710 例 / 分支覆盖 94%；新落地的 `app/handoff_meta.py` 自身 100% —— `size_note` 只有 MCP 子进程在调，
+必须再补一条进程内直测才不会留两行空白）、变异探针 182.8s（**53 条全被杀**：2026-10-11 随停滞检测、
+记忆加权召回、条目级尺寸估算从 45 → 52 → 53）、`scenario_test` 32/32、
+`release_regression --no-ai` 16 通过 + 2 明示未验、`delivery_drill` 21/0、`live_check --mcp` 12/0、
+`live_ui_check` 16/0、重打包（构建戳 2026-10-14 01:08）+ `frozen_smoke` 11/0，总约 4 分 36 秒。
+同轮修掉两处自己留下的毛病：探针新条目的 `{` 缩进回退（上一次会话的格式事故，
+`--only memory_recall_not_weighted` 单跑确认该变异被杀）、测试里嵌套双引号写坏一行字符串
+（`test_mcp_server.py` 的断言文案改成「」，py_compile 当场拦下）。
 
 `ci_local --with-exe` 全 11 步（含重打包与冻结版自查）实测约 **4 分钟**（2026-10-07 实测 247s：
 pytest 62s + 探针 147s + 打包 24s + 冻结冒烟 4s，其余各步个位数秒；旧记录"约 90 秒"是探针

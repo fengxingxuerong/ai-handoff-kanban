@@ -487,6 +487,17 @@ MUTATIONS: list[dict] = [
         "why": "记忆召回退回纯时间序：晚写的背景「事实」把更早的「坑/决策」挤出 AGENTS.md/模型简报窗口",
         "tests": ["tests/test_p1_absorb.py"],
     },
+    {
+        # 2026-10-11 新增：条目级尺寸恒 0 = 消费方按"几乎不占地方"做预算，渐进披露的
+        # 决策依据整体失效 —— 而界面上它看起来"有个数字"，不是缺字段那种一眼可见的坏。
+        "id": "memory_size_always_zero",
+        "file": "app/handoff_meta.py",
+        "old": '    return {"chars": len(text), "kb": round(len(text.encode("utf-8")) / 1024, 2),\n'
+               '            "est_tokens": estimate_tokens(text)}\n',
+        "new": '    return {"chars": 0, "kb": 0.0, "est_tokens": 0}\n',
+        "why": "记忆条目尺寸恒为 0：消费方按偏小的预算决定要不要读，渐进披露的决策依据失效",
+        "tests": ["tests/test_p1_absorb.py"],
+    },
 ]
 
 

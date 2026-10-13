@@ -83,6 +83,9 @@ from .handoff_meta import (  # noqa: F401  —— 这些名字仍可从 app.main
     context_budget,
     _budget_note,
 )
+# 条目级尺寸估算：2026-10-11 新增（对标 claude-mem 的渐进式披露）—— 记忆检索输出带上每条的成本，
+# 供消费方决定要不要读进上下文。MCP 侧经 kanban.text_size / kanban.size_note 取同一份实现。
+from .handoff_meta import text_size, size_note, estimate_tokens  # noqa: F401
 # 任务关联的代码位置：2026-09-26 从本文件整体搬出（实现逐字未改）
 from .taskgraph import (  # noqa: F401
     MAX_REFS,
@@ -2344,7 +2347,11 @@ def list_memories(pid: str = "", q: str = "", mtype: str = ""):
         ql = q.strip().lower()
         items = [m for m in items if ql in (m.get("text") or "").lower()]
     items = sorted(items, key=lambda m: m.get("time", ""), reverse=True)
-    items = [{**m, "expired": _memory_expired(m)} for m in items]
+    # 每条带上自己的尺寸（chars/kb/est_tokens）：消费方据此决定这条值不值得读进上下文。
+    # 以前只有"整包多少行"这一层（context_budget），单条有多贵没人知道 ——
+    # 一条 300 字的坑和一条 12 字的约定在列表里长得一样长。
+    items = [{**m, "expired": _memory_expired(m), **text_size(m.get("text") or "")}
+             for m in items]
     return {"memories": items,
             "expired_count": sum(1 for m in items if m["expired"])}
 
