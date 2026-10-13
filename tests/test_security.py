@@ -111,6 +111,81 @@ def test_export_save_rejects_system_dir(fresh_server):
     assert status == 400
 
 
+# ---------------- 判定本体拆到 app/security.py 后按矩阵穷举（2026-10-14） ----------------
+# 以前这些判定埋在 main.py 里只能靠 TestClient 端到端间接验证，"哪些 Host 放行、
+# Token 覆盖哪些方法、哪些路径禁写"这个矩阵没人逐格看过。
+
+def test_request_verdict_matrix_is_exhaustive():
+    """Host / Origin / Token 三关的判定矩阵（纯函数，直接打边界）。
+
+    搬出来之后能穷举的正是这些格子：Host 缺失、端口、大小写、方括号、跨站 Origin、
+    本机 Origin、Token 只挡写方法、Token 配了但头不对、没配 Token 时完全放行。
+    """
+    from app.security import request_verdict
+
+    # Host 关：空 Host 放行（非浏览器客户端），端口与大小写不影响判定
+    assert request_verdict(host="") == (0, "")
+    assert request_verdict(host="127.0.0.1:18320") == (0, "")
+    assert request_verdict(host="LOCALHOST") == (0, "")
+    assert request_verdict(host="[::1]:18320") == (0, "")
+    # 外站 Host 直接 403，且不再往下判 Origin/Token
+    code, why = request_verdict(host="evil.example.com", origin="http://127.0.0.1",
+                                method="POST", token_expected="t", token_header="wrong")
+    assert (code, why) == (403, "拒绝非本机 Host 访问")
+
+    # Origin 关：没有 Origin 不当跨站；本机 Origin 放行；外站 403
+    assert request_verdict(host="127.0.0.1") == (0, "")
+    assert request_verdict(host="127.0.0.1", origin="http://localhost:18320") == (0, "")
+    assert request_verdict(host="127.0.0.1", origin="https://evil.example.com")[0] == 403
+
+    # Token 关：只挡写方法；GET 不受影响；头不对 401；没配 Token 时一切照旧
+    assert request_verdict(method="POST", token_expected="s3cret")[0] == 401
+    assert request_verdict(method="POST", token_expected="s3cret",
+                           token_header="s3cret") == (0, "")
+    assert request_verdict(method="GET", token_expected="s3cret") == (0, "")
+    assert request_verdict(method="PATCH", token_expected="s3cret", token_header="")[0] == 401
+    assert request_verdict(method="POST", token_expected=None) == (0, "")
+
+
+def test_forbidden_target_fails_closed_when_resolve_raises(monkeypatch, tmp_path):
+    """解析失败必须**当成禁止**（fail-closed），不能因为"我没算出来"就放行。
+
+    这条分支以前是未覆盖行：写盘黑名单算不出真实路径时，最该做的是拒绝。
+    顺带覆盖 forbidden_roots 里"某个 root 解析失败跳过"的 continue 分支。
+    """
+    from app import security
+
+    def boom(self, *a, **kw):
+        raise OSError("解析失败（模拟）")
+
+    monkeypatch.setattr(Path, "resolve", boom)
+    assert security.is_forbidden_target(Path("D:/x/y.md")) is True, \
+        "路径解析失败时放行 = 黑名单形同虚设"
+
+
+def test_forbidden_target_allows_temp_but_blocks_appdata_and_system(monkeypatch, tmp_path):
+    """临时目录放行、AppData（非临时）与系统目录禁止 —— 纯函数版本，可逐格断言。"""
+    from app import security
+
+    monkeypatch.setenv("TEMP", str(tmp_path))
+    monkeypatch.setenv("TMP", str(tmp_path))
+    assert security.is_forbidden_target(tmp_path / "ok.md") is False
+    home = os.environ.get("USERPROFILE") or str(Path.home())
+    assert security.is_forbidden_target(Path(home) / "AppData" / "Roaming" / "x.md") is True
+    assert security.is_forbidden_target(Path("D:/work/demo/AGENTS.md")) is False
+
+
+def test_text_size_helpers_are_shared_by_all_three_exits():
+    """尺寸估算只有一份实现：HTTP 列表 / MCP / 前端都取 handoff_meta.text_size。
+
+    这里钉住"同一段文本在三处的读数一致"这个前提；前端那侧由 E2E 断言（≈7 字）看住。
+    """
+    from app.handoff_meta import size_note, text_size
+
+    assert text_size("已经过期的方案")["chars"] == 7
+    assert size_note("已经过期的方案") == "≈7 字/≈7 tok"
+
+
 def test_export_save_rejects_appdata_outside_temp(app_client, monkeypatch, tmp_path):
     """AppData 黑名单分支单独钉住（2026-09-29 补）。
 

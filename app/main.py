@@ -163,10 +163,19 @@ DEFAULT_PRIORITY = ["高", "中", "低"]
 # v2（2026-10-06）：任务 slim 带 `acceptance`（验收标准）、顶层带 `expired_memory_count`。
 SCHEMA_VERSION = 2
 
-# 导出落盘允许的扩展名。前端 `saveAgentsMD` 里那条正则必须与这份一字不差
-# （以前前端少一条 `.markdown`，后端明明允许却被前端挡在门外），
-# 对账由 tests/test_frontend.py 钉住。
-EXPORT_SUFFIXES = (".md", ".txt", ".markdown", ".agentsmd")
+# 导出落盘扩展名白名单 / 本地访问防护 / 落盘路径黑名单：2026-10-14 整体拆出到 app/security.py
+# （纯函数，可穷举）。这里保留同名转发，测试与 monkeypatch 路径不变：
+# ⚠️ 变异探针 guard_host_ipv6 / guard_token_methods / guard_origin_reversed /
+# forbidden_roots_drops_appdata 的目标文件已改为 app/security.py
+from .security import (  # noqa: F401
+    EXPORT_SUFFIXES,
+    ALLOWED_HOSTS,
+    host_of as _host_of,
+    origin_allowed,
+    request_verdict,
+    forbidden_roots as _forbidden_roots,
+    is_forbidden_target as _is_forbidden_target,
+)
 
 # 合法值白名单：状态/优先级会被前端拼进 class 与文本，必须收口
 _ABBR = {"规划中": "gray", "进行中": "blue", "已暂停": "orange", "已完成": "green"}
@@ -744,40 +753,22 @@ WEB_DIR = _resource_path("web")
 DATA_FILE = data_file()
 
 # ---------------- 本地访问防护 ----------------
+# 判定本体在 app/security.py（纯函数，2026-10-14 拆出）：这里只做 HTTP 层的翻译。
 # 威胁模型：单机单用户，不做用户鉴权（任何本机进程与用户同权限）。
 # 这里只挡两类真实可被触发的攻击：恶意网页跨站打洞、DNS rebinding。
-_ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
-
-
-def _host_of(raw: str) -> str:
-    """Host 头里只取主机名，端口丢掉。
-
-    原来写的是 `raw.split(":")[0]` —— 碰到 IPv6 的 `[::1]:18320` 只切出一个 `[`，
-    再 strip("[]") 就成了空串，于是 `if host` 短路，任何带方括号的 Host 都放行。
-    """
-    raw = (raw or "").strip()
-    try:
-        host = urlparse("//" + raw).hostname
-    except ValueError:
-        # 方括号里塞的不是 IPv6（`[evil.example.com]`）—— hostname 会当场抛，
-        # 但这恰恰是最该挡的形式，不能因为解析失败就当成"没有 Host"放过。
-        host = raw[1:].split("]")[0] if raw.startswith("[") else raw.split(":")[0]
-    return (host or "").strip().lower()
 
 
 @app.middleware("http")
 async def guard_local_request(request: Request, call_next):
-    host = _host_of(request.headers.get("host") or "")
-    if host and host not in _ALLOWED_HOSTS:
-        return JSONResponse({"detail": "拒绝非本机 Host 访问"}, status_code=403)
-    origin = request.headers.get("origin")
-    if origin:
-        if (urlparse(origin).hostname or "").lower() not in _ALLOWED_HOSTS:
-            return JSONResponse({"detail": "拒绝跨站请求"}, status_code=403)
-    token = os.environ.get("KANBAN_TOKEN")
-    if token and request.method in ("POST", "PUT", "DELETE", "PATCH"):
-        if request.headers.get("x-kanban-token") != token:
-            return JSONResponse({"detail": "缺少或错误的 X-Kanban-Token"}, status_code=401)
+    code, why = request_verdict(
+        host=request.headers.get("host") or "",
+        origin=request.headers.get("origin"),
+        method=request.method,
+        token_header=request.headers.get("x-kanban-token"),
+        token_expected=os.environ.get("KANBAN_TOKEN"),
+    )
+    if code:
+        return JSONResponse({"detail": why}, status_code=code)
     return await call_next(request)
 
 
@@ -1670,45 +1661,6 @@ class SaveExportBody(BaseModel):
     content: str = ""
     path: str | None = None  # 可选：显式保存路径（用户输入）
     overwrite: bool = False  # 显式路径时是否允许覆盖已有文件（默认不覆盖）
-
-
-# 允许"用户填路径保存"，但不允许落到系统目录 —— 防止被诱导覆盖系统/程序文件
-def _forbidden_roots() -> list[Path]:
-    roots = []
-    for key in ("SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"):
-        v = os.environ.get(key)
-        if v:
-            roots.append(Path(v))
-    home = os.environ.get("USERPROFILE") or os.path.expanduser("~")
-    if home:
-        roots.append(Path(home) / "AppData")
-    roots += [Path("/etc"), Path("/usr"), Path("/bin"), Path("/sbin"), Path("/System")]
-    return roots
-
-
-def _is_forbidden_target(target: Path) -> bool:
-    try:
-        resolved = target.resolve()
-    except Exception:
-        return True
-    # 临时目录放行（AppData 下唯一允许的位置）
-    for env in ("TEMP", "TMP"):
-        tmp = os.environ.get(env)
-        if tmp:
-            try:
-                t = Path(tmp).resolve()
-            except Exception:
-                continue
-            if resolved == t or t in resolved.parents:
-                return False
-    for root in _forbidden_roots():
-        try:
-            r = root.resolve()
-        except Exception:
-            continue
-        if resolved == r or r in resolved.parents:
-            return True
-    return False
 
 
 @app.post("/api/export/save")

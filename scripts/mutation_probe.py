@@ -82,7 +82,7 @@ MUTATIONS: list[dict] = [
     },
     {
         "id": "guard_host_ipv6",
-        "file": "app/main.py",
+        "file": "app/security.py",
         "old": '        host = raw[1:].split("]")[0] if raw.startswith("[") else raw.split(":")[0]',
         "new": '        host = ""',
         "why": "兜底分支把非 IP 方括号 Host 解析成空串放行：[abc] 等异常 Host 绕过白名单",
@@ -90,17 +90,17 @@ MUTATIONS: list[dict] = [
     },
     {
         "id": "guard_token_methods",
-        "file": "app/main.py",
-        "old": '    if token and request.method in ("POST", "PUT", "DELETE", "PATCH"):',
-        "new": '    if token and request.method in ("POST", "PUT", "DELETE", "PATCH", "GET"):',
+        "file": "app/security.py",
+        "old": '    if token_expected and method in ("POST", "PUT", "DELETE", "PATCH"):',
+        "new": '    if token_expected and method in ("POST", "PUT", "DELETE", "PATCH", "GET"):',
         "why": "开了 Token 后读接口也要鉴权：本该『只读不受影响』的契约被破坏",
         "tests": ["tests/test_security.py"],
     },
     {
         "id": "guard_origin_reversed",
-        "file": "app/main.py",
-        "old": '        if (urlparse(origin).hostname or "").lower() not in _ALLOWED_HOSTS:',
-        "new": '        if (urlparse(origin).hostname or "").lower() in _ALLOWED_HOSTS:',
+        "file": "app/security.py",
+        "old": "    if origin and not origin_allowed(origin):",
+        "new": "    if origin and origin_allowed(origin):",
         "why": "跨站拦截反过来：本机 Origin 被拒、外站 Origin 放行（DNS rebinding 洞）",
         "tests": ["tests/test_security.py"],
     },
@@ -332,11 +332,21 @@ MUTATIONS: list[dict] = [
     },
     {
         "id": "forbidden_roots_drops_appdata",
-        "file": "app/main.py",
+        "file": "app/security.py",
         "old": '        roots.append(Path(home) / "AppData")',
         "new": "        pass",
         "why": "系统目录黑名单去掉 AppData：除临时目录外的 AppData 都可写（诱导落盘通路）",
         "tests": ["tests/test_security.py", "tests/test_api.py", "tests/test_agent_files.py"],
+    },
+    {
+        # 2026-10-14 新增：判定本体拆到 app/security.py 时顺手把这条 fail-closed 分支纳入门禁。
+        # 解析失败的路径放行 = 黑名单形同虚设（"算不出来"恰恰是最该拒的情况）。
+        "id": "forbidden_target_fails_open",
+        "file": "app/security.py",
+        "old": "    except Exception:\n        return True\n",
+        "new": "    except Exception:\n        return False\n",
+        "why": "写盘黑名单在路径解析失败时放行（fail-open）：算不出真实路径反而更该拒绝",
+        "tests": ["tests/test_security.py"],
     },
     {
         "id": "search_truncated_flag_off",
