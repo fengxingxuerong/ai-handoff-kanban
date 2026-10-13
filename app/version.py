@@ -26,7 +26,12 @@ from pathlib import Path
 # 自动分配 / 里程碑 / 项目统计 / 保存视图。
 # 1.2.1（2026-10-07）：修复 /api/inbox 漏掉「依赖没满足的不算」过滤（硬性约定 27）；
 # 内部重构：journal/acceptance 清洗与上限拆出 app/journal.py，无行为变化。
-__version__ = "1.2.1"
+# 1.3.0（2026-10-14）：第四轮对标轮（一次功能轮，故按次版本号）——
+# 看板侧停滞检测（跨 7 天无动的进行中任务进 stats 与 AI 简报）、全项目交接包 pre-fetch
+# git 快照（export-all 冷态 5.8s → <1s）、记忆按类型加权召回（对标 claude-mem 的 Awareness）、
+# 条目级尺寸估算（记忆检索输出报每条成本）；另含两个修复：
+# PATCH 非法枚举统一 422、中文密钥脱敏补规则。
+__version__ = "1.3.0"
 
 ROOT = Path(__file__).resolve().parent.parent
 
