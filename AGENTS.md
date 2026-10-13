@@ -757,19 +757,19 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 - **无桌面会话时不要开窗**：CI（`windows-latest`）与服务器上没有桌面，pywebview 起窗会失败并带走整个进程。
   凡是"真启动 exe"的自动化，一律带 `KANBAN_NO_WINDOW=1`（只服务不开窗），
   `frozen_smoke.py` 在 CI 里就是这么跑的（数据目录由它自己指定为 `%TEMP%\kanban_frozen_smoke`）。
-- **CI 流水线一次都没有真跑过**：仓库没有远端（`git remote -v` 为空），所以 `.github/workflows/ci.yml`
-  从来没有被 Actions 执行过 —— 它"看起来对"不作数。**工作流只有这一份**：单入口
-  （锁文件安装 → `ci_local --with-exe` → 上传 exe，只在 windows-latest）。旧 `test.yml` 是它的
-  复刻前身（2026-09-19 静态核对查出三处必红/必空：package job 只装 `requirements.txt` 没有
-  pyinstaller、GBK runner 上中文假红、exe 没上传），已于 2026-10-07 退役删除 —— 两个 workflow
-  都监听 push，接上远端就会双跑两份各自维护的步骤清单，正是「两处各写一遍必然漂」的形状。
-  **改 workflow 一律按"它会被真执行"来写**；哪天真接上远端跑通了，把结论和用时补回这里
-  （ci.yml 头部列着三条首次运行预期要调的地方）。
-  2026-10-07 做过一次**本地预演**（接远端前能做到的最接近还原）：干净 venv 只按
-  `requirements.lock.txt` 安装（pyinstaller / pytest 全家 / playwright 都在锁里，实测退出码 0），
-  用它跑 `ci_local --with-exe` 11 步全绿、约 4 分钟 —— 锁文件"换机/CI/出包用它"这句承诺
-  从此有实测背书。预演仍未覆盖的只剩 runner 本身：Edge/Chrome 缺位时的 playwright chromium
-  兜底（ci.yml 头部第 1 条）与 actions 大版本兼容，接上远端首跑时重点看这两处。
+- **CI 已经在真跑**（2026-10-11 接上远端 `origin` 之后）：`.github/workflows/ci.yml` 是**唯一一份**
+  工作流（单入口：按锁文件安装 → `ci_local --with-exe` → 上传 exe，只在 `windows-latest`）。
+  实测两次全绿：run #1（de1dfe2）success 约 7 分钟、run #2（a3af088）success **7 分 35 秒**
+  （16:33:11 → 16:40:46 UTC），job 名 `gates`。首跑把本地预演唯一没覆盖的两处都验掉了 ——
+  步骤清单里有「装 Playwright 自带 chromium（界面门禁的第三级降级）」且成功（runner 上没有系统
+  Edge/Chrome，走的就是这级降级），actions 大版本兼容也一并验证。
+  **改 workflow 一律按"它会被真执行"来写** —— 这句话现在有实测背书。
+  历史：接远端之前它从未被执行过（"看起来对"不作数），当时的替代是 2026-10-07 的**本地预演**
+  （干净 venv 只按 `requirements.lock.txt` 安装，跑 `ci_local --with-exe` 11 步全绿、约 4 分钟
+  —— 锁文件"换机/CI/出包用它"这句承诺的实测背书）。
+  旧 `test.yml` 是它的复刻前身（2026-09-19 静态核对查出三处必红/必空：package job 只装
+  `requirements.txt` 没有 pyinstaller、GBK runner 上中文假红、exe 没上传），已于 2026-10-07 退役
+  删除 —— 两个 workflow 都监听 push，会双跑两份各自维护的步骤清单，正是「两处各写一遍必然漂」的形状。
 - **"这个端点没人用"要先连 scripts/ 和 tests/ 一起看**（2026-09-19 我就是这样误判过两条）：
   `GET /api/projects/{pid}/next` 前端与 MCP 当时都不用，但 `delivery_drill` 与
   `test_task_deps` 在用；`GET /api/ai/reports` 界面上进不去（`openReport(rid)` 的"历史报告"

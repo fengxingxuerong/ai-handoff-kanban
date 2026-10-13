@@ -1,12 +1,15 @@
 # 与本地**同一个入口**：`scripts/ci_local.py`。
 # 刻意不复刻一份步骤清单 —— 两处各写一遍必然漂，而这个项目已经为"两条路给不同答案"付过几次代价。
 #
-# ⚠️ 这份文件**从未真正执行过一次**（仓库目前没有远端）。第一次接上 GitHub 时预期可能要
-# 微调的地方，按可能性排序：
-#   1. Playwright 在 Windows runner 上找 Edge/Chrome：runner 镜像里两个都装了，
-#      但 `live_ui_check.py` 起不来时会退到 `playwright install chromium` 那份 —— 所以有这步安装。
-#   2. `requirements.lock.txt` 是在本机 Python 3.13 上生成的，这里钉同一个版本。
-#   3. PyInstaller 打包约 2–4 分钟，整条流水线预计 8–15 分钟。
+# ✅ 已实测跑通（2026-10-11 接上远端后）：run #1（de1dfe2）success 约 7 分钟、
+# run #2（a3af088）success **7 分 35 秒**（16:33:11 → 16:40:46 UTC），job 名 `gates`。
+# 首跑把当初"预计要微调"的三条逐条验证掉：
+#   1. Windows runner 上没有系统 Edge/Chrome，界面门禁走的正是 `playwright install chromium`
+#      这级降级 —— 那一步真的被执行且成功（这就是它存在的理由）。
+#   2. `requirements.lock.txt` 在本机 Python 3.13 上生成，这里钉同一个版本，安装无解析偏差。
+#   3. 实测整条流水线 7 分 35 秒（当初估 8–15 分钟；本地 ci_local --with-exe 约 4 分 50 秒，
+#      差额是 runner 上的装依赖与 checkout）。
+# 历史：接远端之前它从未被执行过（"看起来对"不作数）—— 这也是当初只保留这一份工作流的原因。
 name: ci
 
 on:
