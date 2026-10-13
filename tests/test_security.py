@@ -175,12 +175,15 @@ def test_forbidden_target_allows_temp_but_blocks_appdata_and_system(monkeypatch,
     assert security.is_forbidden_target(Path("D:/work/demo/AGENTS.md")) is False
 
 
-def test_forbidden_target_skips_unresolvable_temp_and_roots(monkeypatch, tmp_path):
-    """TEMP 或某个黑名单 root 解析不出来时：跳过它继续判，**宁可拒绝也不误放行**。
+def test_forbidden_target_fails_closed_on_unresolvable_root_too(monkeypatch, tmp_path):
+    """**两条边界都 fail-closed**（2026-10-14 按用户拍板收紧）。
 
-    这两条 continue 分支以前一次都没走到（覆盖率报告点出来的 101-102 / 108-109）：
-    "临时目录算不出来" 和 "某个系统目录算不出来" 都是真实可能（精简环境、非 Windows）。
-    顺带覆盖 forbidden_roots 里环境变量缺失的格子 —— 真实场景是 Linux/mac CI。
+    以前只有"target 自己解析不出来"是拒绝；黑名单里某条 root 解析不出来时是 `continue`
+    —— 那等于"那条 root 不存在"，是个 fail-open 窗口（目标可能正落在它下面）。
+    收紧后：**无法证明目标不在某条 root 下面，就拒绝**。
+
+    同时钉住与放行名单（TEMP/TMP）的**不对称**，那是有意的：
+    放行名单算不出来只是少给一个许可（更严），所以仍然 skip。
     """
     from app import security
 
@@ -191,7 +194,7 @@ def test_forbidden_target_skips_unresolvable_temp_and_roots(monkeypatch, tmp_pat
         monkeypatch.delenv(key, raising=False)
 
     real_resolve = Path.resolve
-    dead_root = str(security.forbidden_roots()[0])   # 顺序里第一条（AppData），目标是后面的 /etc
+    dead_root = str(security.forbidden_roots()[0])   # 顺序里第一条（AppData）
 
     def flaky(self, *a, **kw):
         if str(self).startswith(ghost) or str(self) == dead_root:
@@ -199,13 +202,18 @@ def test_forbidden_target_skips_unresolvable_temp_and_roots(monkeypatch, tmp_pat
         return real_resolve(self)
 
     monkeypatch.setattr(Path, "resolve", flaky)
-    # 前面那条 root 算不出来只跳过它、判定照常继续 —— 命中后面的 /etc 仍然拒绝。
-    # 记下既有语义（本轮只搬移，不收紧）：root 解析失败 = 跳过该条；
-    # 真正 fail-closed 的是 **target 自己**解析不出来那一条（见上一个用例）。
+    # 黑名单边界不可知 → 拒绝（哪怕目标看起来落在后面的 /etc，也是先撞上"不可知"就拒）
     assert security.is_forbidden_target(Path("/etc/passwd")) is True, \
-        "某条 root 解析失败不该让整条判定失效"
+        "黑名单 root 解析不出来时必须拒绝，不能当它不存在"
+    # AppData 那条边界不可知时，连"本来在临时目录里"的路径也拒 —— 因为无法证明它不在 AppData 下。
+    # 代价是极端环境下会拒掉正常保存，但那比"黑名单形同虚设"更可接受：错误信息会让人换个路径。
+    assert security.is_forbidden_target(tmp_path / "ok.md") is True, \
+        "边界不可知时宁可拒绝（fail-closed），不要默认放行"
+
+    # 放行名单那条仍然 skip：TEMP 算不出来只等于"少给一个许可"，不构成 fail-open
+    monkeypatch.setattr(Path, "resolve", real_resolve)
     assert security.is_forbidden_target(tmp_path / "ok.md") is False, \
-        "TEMP 算不出来时也不能把普通临时路径误判成系统目录"
+        "正常环境下临时目录照旧放行（收紧只影响'算不出来'那条路）"
 
 
 def test_text_size_helpers_are_shared_by_all_three_exits():

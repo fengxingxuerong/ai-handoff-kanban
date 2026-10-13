@@ -343,9 +343,19 @@ MUTATIONS: list[dict] = [
         # 解析失败的路径放行 = 黑名单形同虚设（"算不出来"恰恰是最该拒的情况）。
         "id": "forbidden_target_fails_open",
         "file": "app/security.py",
-        "old": "    except Exception:\n        return True\n",
-        "new": "    except Exception:\n        return False\n",
+        "old": "    try:\n        resolved = target.resolve()\n    except Exception:\n        return True\n",
+        "new": "    try:\n        resolved = target.resolve()\n    except Exception:\n        return False\n",
         "why": "写盘黑名单在路径解析失败时放行（fail-open）：算不出真实路径反而更该拒绝",
+        "tests": ["tests/test_security.py"],
+    },
+    {
+        # 2026-10-14 新增（用户拍板收紧后）：黑名单边界算不出来时也必须拒绝。
+        # 放开成 continue 就是"那条 root 等于不存在"的 fail-open 窗口。
+        "id": "forbidden_root_unresolvable_allowed",
+        "file": "app/security.py",
+        "old": "        try:\n            r = root.resolve()\n        except Exception:\n            return True\n",
+        "new": "        try:\n            r = root.resolve()\n        except Exception:\n            continue\n",
+        "why": "黑名单某条 root 解析失败时跳过它 = 少拦一条（fail-open），目标可能正在那条 root 下面",
         "tests": ["tests/test_security.py"],
     },
     {

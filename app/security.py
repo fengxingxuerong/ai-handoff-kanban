@@ -88,6 +88,18 @@ def forbidden_roots() -> list[Path]:
 
 
 def is_forbidden_target(target: Path) -> bool:
+    """这个路径能不能写（黑名单口径）。
+
+    **两条边界都必须 fail-closed**（2026-10-14 收紧）：
+    - `target` 自己解析不出来 → 拒绝（算不出真实路径，就更没理由放行）；
+    - 某条黑名单 root 解析不出来 → 也拒绝 —— 无法证明目标不在它下面。
+
+    注意与**放行名单**（TEMP/TMP）的不对称，这是有意的：
+    - 放行名单里某条算不出来 → 跳过它 = 少给一个许可（更严），安全方向；
+    - 黑名单里某条算不出来 → 跳过它 = 少拦一条黑名单（更松），**不安全**方向，
+      所以这里从 `continue` 改成 `return True`。以前那是个 fail-open 窗口：
+      黑名单边界一旦算不出来，那条 root 就等于不存在。
+    """
     try:
         resolved = target.resolve()
     except Exception:
@@ -106,7 +118,7 @@ def is_forbidden_target(target: Path) -> bool:
         try:
             r = root.resolve()
         except Exception:
-            continue
+            return True
         if resolved == r or r in resolved.parents:
             return True
     return False

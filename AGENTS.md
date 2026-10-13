@@ -19,7 +19,7 @@
 | `app/journal.py` | 过程轨迹与验收标准的清洗与上限（纯函数，2026-10-07 从 main 拆出）：`append_journal`（溢出**折叠成摘要**的写入侧）/ `compress_journal` / `clean_journal` / `clean_acceptance` 与 `MAX_JOURNAL*`、`MAX_ACCEPTANCE*`、`JOURNAL_SNIPPET`。**这些上限常量的 monkeypatch 点在这里**（main 是转发别名，patch 别名改不到函数读的全局）；时钟由 main 的 `_append_journal` 包装注入，本模块不 import main |
 | `app/redact.py` | 交接内容脱敏规则与 `redact_text`（纯函数） |
 | `app/idem.py` | 创建幂等键 `client_ref` 的清洗与记账（纯函数） |
-| `app/security.py` | 本地访问防护与落盘白名单（纯函数，2026-10-14 从 main 拆出）：`EXPORT_SUFFIXES` / `ALLOWED_HOSTS` / `host_of` / `origin_allowed` / `request_verdict`（Host→Origin→Token 三关判定，返回 `(状态码, 原因)`、0 = 放行）/ `forbidden_roots` / `is_forbidden_target`（解析失败 **fail-closed**）。main 里是 `_host_of` / `_forbidden_roots` / `_is_forbidden_target` 同名转发，测试与 monkeypatch 路径不变。**四条探针（`guard_host_ipv6` / `guard_token_methods` / `guard_origin_reversed` / `forbidden_roots_drops_appdata` + `forbidden_target_fails_open`）的目标文件在这里** |
+| `app/security.py` | 本地访问防护与落盘白名单（纯函数，2026-10-14 从 main 拆出）：`EXPORT_SUFFIXES` / `ALLOWED_HOSTS` / `host_of` / `origin_allowed` / `request_verdict`（Host→Origin→Token 三关判定，返回 `(状态码, 原因)`、0 = 放行）/ `forbidden_roots` / `is_forbidden_target`（**两条边界都 fail-closed**：target 解析失败拒绝；某条黑名单 root 解析失败**也拒绝** —— 2026-10-14 用户拍板收紧，原先 `continue` 等于"那条 root 不存在"的 fail-open 窗口。与放行名单 TEMP/TMP 的不对称是有意的：放行名单算不出来只是少给一个许可，安全方向）。main 里是 `_host_of` / `_forbidden_roots` / `_is_forbidden_target` 同名转发，测试与 monkeypatch 路径不变。**五条探针（`guard_host_ipv6` / `guard_token_methods` / `guard_origin_reversed` / `forbidden_roots_drops_appdata` / `forbidden_target_fails_open` / `forbidden_root_unresolvable_allowed`）的目标文件在这里** |
 | `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note`，以及**条目级尺寸估算** `text_size` / `size_note` / `estimate_tokens`（2026-10-11 对标 claude-mem 的渐进式披露最小落地：给记忆检索输出报每条成本，HTTP / MCP / 前端记忆面板三处同一口径；口径与纪律见硬性约定 29） |
 | `app/sessions.py` | 会话扫描与文本提取（目录遍历有界、只读文件尾部、源内外校验） |
 | `app/gitinfo.py` | git 集成（2026-10-06 从 main 搬出）：`git_snapshot` / `_run_git` / `_git_cache`。只读、列表传参、绝不拼 shell。**`_run_git`/`_git_cache`/`GIT_TIMEOUT` 的 monkeypatch 点在这里**（main 里是转发别名） |
@@ -50,7 +50,7 @@
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复" |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 54 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"）；2026-10-14 拆出 `app/security.py` 时把四条安全探针的 `file` 串同步改到新家（不改就是哑火），并新增 `forbidden_target_fails_open`（解析失败时放行 = 黑名单形同虚设）增至 54 条 |
+| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 55 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"）；2026-10-14 拆出 `app/security.py` 时把四条安全探针的 `file` 串同步改到新家（不改就是哑火），并按用户拍板收紧 fail-closed 边界，新增 `forbidden_target_fails_open` 与 `forbidden_root_unresolvable_allowed` 增至 55 条 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
 
@@ -876,12 +876,12 @@ MCP 契约 2 条 + Skill 投影 + `test_frontend.py` 两张对账钉子（验收
 > 2026-10-06 随 v1.2.0 发版复跑、2026-10-07 随 v1.2.1 发版复跑，各多花约 1 次真调用）——
 > "新功能链路全部可用"这句话三次都是跑出来的，不是印出来的。
 **2026-10-14 复跑（第四轮对标两项落地 + `app/security.py` 拆分后，`ci_local --with-exe` 11 步全绿 exit=0）**：
-pytest 55.8s（719 例 / 分支覆盖 94%；新落地的 `app/handoff_meta.py` 自身 100%、`app/security.py` 99% ——
-`size_note` 只有 MCP 子进程在调，必须再补一条进程内直测才不会留两行空白）、变异探针 177.5s（**54 条全被杀**：45 → 52 → 53 → 54，
+pytest 68.4s（719 例 / 分支覆盖 94%；新落地的 `app/handoff_meta.py` 自身 100%、`app/security.py` 99% ——
+`size_note` 只有 MCP 子进程在调，必须再补一条进程内直测才不会留两行空白）、变异探针 192.2s（**55 条全被杀**：45 → 52 → 53 → 54 → 55，
 2026-10-14 拆 `security.py` 时四条安全探针改指新家并新增 `forbidden_target_fails_open`）、
 `scenario_test` 32/32、`release_regression --no-ai` 16 通过 + 2 明示未验、`delivery_drill` 21/0、
-`live_check --mcp` 12/0、`live_ui_check` 16/0、重打包（构建戳 2026-10-14 03:15）+ `frozen_smoke` 11/0，
-总约 4 分 30 秒。同轮修掉两处自己留下的毛病：探针新条目的 `{` 缩进回退（上一次会话的格式事故，
+`live_check --mcp` 12/0、`live_ui_check` 16/0、重打包（构建戳 2026-10-14 03:47）+ `frozen_smoke` 11/0，
+总约 5 分 8 秒。同轮修掉两处自己留下的毛病：探针新条目的 `{` 缩进回退（上一次会话的格式事故，
 `--only memory_recall_not_weighted` 单跑确认该变异被杀）、测试里嵌套双引号写坏一行字符串
 （`test_mcp_server.py` 的断言文案改成「」，py_compile 当场拦下）。
 
