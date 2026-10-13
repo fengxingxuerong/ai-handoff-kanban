@@ -686,6 +686,13 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    而 `page.route(...abort())` 或打一个不存在的 id 必然记一条 "Failed to load resource"。
    这类"验证失败态"的用例用 `ui_lenient` —— 它只放过资源加载错误，
    `pageerror`（真正的 JS 异常）照旧一律判红。**别为了绕开红点把 `ui` 改掉。**
+7b. **涉及 `AppData` / `TEMP` 的用例必须自己把 TEMP 钉到 `tmp_path`，别依赖 `tmp_path` 落在哪**。
+   本机这套环境的 `USERPROFILE` 与 `TEMP` **不属于同一个用户**（会话里 USERPROFILE 是沙箱家目录，
+   而 TEMP 在另一个用户下），于是"目标在不在 AppData 黑名单里"的答案与 CI（两者同属 `runneradmin`）
+   相反 —— 2026-10-14 实测：一条断言在本地绿、在 CI run #10 红，根因就是这个布局差异，
+   而不是代码或数据的问题。**判据要写成与位置无关的形式**（例：`monkeypatch.setenv("TEMP", str(tmp_path))`
+   再断言它放行），否则等于"看在哪台机器上跑"。复现 CI 布局的办法：
+   `USERPROFILE=C:/Users/<真实用户> pytest ... --basetemp <该用户>/AppData/Local/Temp/pt_ci_like`。
 8. **用例不许写真实数据目录**（`%USERPROFILE%\.ai-kanban`）。
    `conftest.py` 有 autouse 夹具在**环境变量层**把 `KANBAN_DATA_DIR` 指到临时目录 ——
    因为 `app/llm.py` 是**自己**按这个变量解析数据目录的，不认 `main.data_dir()` 的 monkeypatch。

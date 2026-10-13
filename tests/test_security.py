@@ -210,8 +210,13 @@ def test_forbidden_target_fails_closed_on_unresolvable_root_too(monkeypatch, tmp
     assert security.is_forbidden_target(tmp_path / "ok.md") is True, \
         "边界不可知时宁可拒绝（fail-closed），不要默认放行"
 
-    # 放行名单那条仍然 skip：TEMP 算不出来只等于"少给一个许可"，不构成 fail-open
+    # 放行名单那条仍然 skip：TEMP 算不出来只等于"少给一个许可"，不构成 fail-open。
+    # ⚠️ 这里必须把 TEMP **指回真实存在、且包含目标**的目录再断言，不能沿用那个 ghost：
+    # `tmp_path` 落在哪里是环境决定的（CI 与本地不同），拿 ghost 断言就变成"看在哪台机器上跑"——
+    # 实测过这个坑：本地 USERPROFILE 是沙箱家目录、TEMP 在另一个用户下，于是"AppData 黑名单"
+    # 恰好不覆盖 tmp_path，本地绿；CI 上两者同属一个用户，同一条断言就红（2026-10-14 run #10）。
     monkeypatch.setattr(Path, "resolve", real_resolve)
+    monkeypatch.setenv("TEMP", str(tmp_path))
     assert security.is_forbidden_target(tmp_path / "ok.md") is False, \
         "正常环境下临时目录照旧放行（收紧只影响'算不出来'那条路）"
 
