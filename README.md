@@ -111,7 +111,7 @@ Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读�
 }
 ```
 
-提供的工具（17 个）：
+提供的工具（23 个）：
 
 | 工具 | 用途 |
 | --- | --- |
@@ -129,6 +129,12 @@ Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读�
 | `kanban_log_progress` | 给任务追加一条过程记录（做了什么 / 改了什么决策 / 踩了什么坑） |
 | `kanban_memory_add` | 往项目记忆层记一条决策 / 坑 / 约定，交接包与 AI 监管会自动召回 |
 | `kanban_context` | **机器可读接手包**：背景/交接说明/代码现实/现在就能动手的任务/项目记忆/就绪度缺口，换取会话时先调这个 |
+| `kanban_list_memories` | 查记忆层（按项目/类型/关键词过滤，每条带尺寸，默认脱敏） |
+| `kanban_delete_memory` | 删掉一条记错/过时的记忆 |
+| `kanban_export_all` | 导出全项目交接包（跨机迁移或整板存档） |
+| `kanban_backup` | 拍一份数据快照（改动前的退路） |
+| `kanban_list_backups` | 看有哪些快照可用 |
+| `kanban_delete_project` | 删整个项目（**唯一**要 `confirm=true` 的工具：没有软删除，误删只能整份回滚） |
 
 每个工具都带 `annotations`（`readOnlyHint` / `destructiveHint` / `idempotentHint`），客户端据此
 对读操作免确认、对删除弹警告。打开 **MCP 只读模式**后，写工具与生成类工具会直接从
@@ -187,7 +193,7 @@ build.bat
 
 ```
 项目任务看板/
-├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 21 个模块，见 AGENTS.md）
+├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 22 个模块，见 AGENTS.md）
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
 ├── web/index.html          # 前端页面骨架（零内联脚本；深色主题，含 AI 界面）
 ├── web/js-*.js             # 前端逻辑五个文件：core(ACTIONS 分发)/edit/render/data/boot（无构建、无 CDN）
@@ -234,7 +240,7 @@ rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 32 条用�
 rem （CI 里也有这一步：.github/workflows/ci.yml 跑的 ci_local 全门禁，改坏了会红）
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 
-rem 变异探针：往源码注入 52 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
+rem 变异探针：往源码注入 54 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
 rem （覆盖率只证明"这行跑过"，不证明"这行错了会被发现"——这一步量的是后者）
 .venv\Scripts\python.exe scripts/mutation_probe.py
 .venv\Scripts\python.exe scripts/mutation_probe.py --only due_soon_window   rem 只跑一条
