@@ -29,7 +29,7 @@
 | `app/handoff_page.py` | 自包含「接手页」单文件 HTML（含分层依赖图 SVG）；**不 import main**（main 会 import 它，反过来成环） |
 | `app/handoff_md.py` | 交接包 Markdown **纯渲染器**（2026-10-06 拆出，依赖注入式）：`build_handoff_markdown` 只收现成数据（活跃记忆/过期计数/git 回调/端口），不 import main、不读盘、不跑子进程；原签名 `_build_handoff_markdown` 是 main 侧的注入包装 |
 | `app/agentsmd.py` | AGENTS.md 文档生成（2026-10-06 拆出，同法注入）：本地兜底版收 `memory_rows`+`now`，AI 版的记忆与兜底经回调注入；`_build_agents_md_local` / `_generate_agents_md` 是 main 的原签名包装 |
-| `app/paths.py` | 数据目录定位（2026-10-06 拆出）：`data_dir` / `data_file`，所有存储模块的共同根 —— 后续拆出的模块从这里取，不必反向 import main。环境变量每次调用时读 |
+| `app/paths.py` | 数据目录定位与三个"救命路径"（2026-10-06 起步，2026-10-14 补齐）：`data_dir` / `data_file` / `last_good_file` / `before_restore_file` / `LAST_GOOD_SUFFIX`，所有存储模块的共同根 —— 后续拆出的模块从这里取，不必反向 import main（备份/恢复白名单与读写照用同一份定义，不会各写一份）。环境变量每次调用时读 |
 | `app/readiness.py` | 交接就绪度评分（纯函数，从 main 拆出）：`readiness_items` / `readiness_score`，「待审查」算推进的口径在这里 |
 | `app/assign.py` | 任务自动分配（纯函数，2026-10-01）：`allocatable` / `plan_assign`，就绪判定复用 `executable_tasks`；路由只负责锁内写入 |
 | `app/project_stats.py` | 项目统计聚合（纯函数，2026-10-01）：截止热力/任务计数，`/api/projects/{pid}/stats` 的口径 |
@@ -887,8 +887,8 @@ pytest 68.4s（719 例 / 分支覆盖 94%；新落地的 `app/handoff_meta.py` �
 `size_note` 只有 MCP 子进程在调，必须再补一条进程内直测才不会留两行空白）、变异探针 192.2s（**55 条全被杀**：45 → 52 → 53 → 54 → 55，
 2026-10-14 拆 `security.py` 时四条安全探针改指新家并新增 `forbidden_target_fails_open`）、
 `scenario_test` 32/32、`release_regression --no-ai` 16 通过 + 2 明示未验、`delivery_drill` 21/0、
-`live_check --mcp` 12/0、`live_ui_check` 16/0、重打包（构建戳 2026-10-14 03:47）+ `frozen_smoke` 11/0，
-总约 5 分 8 秒。同轮修掉两处自己留下的毛病：探针新条目的 `{` 缩进回退（上一次会话的格式事故，
+`live_check --mcp` 12/0、`live_ui_check` 16/0、重打包（构建戳 2026-10-14 04:43）+ `frozen_smoke` 11/0，
+总约 4 分 57 秒。同轮修掉两处自己留下的毛病：探针新条目的 `{` 缩进回退（上一次会话的格式事故，
 `--only memory_recall_not_weighted` 单跑确认该变异被杀）、测试里嵌套双引号写坏一行字符串
 （`test_mcp_server.py` 的断言文案改成「」，py_compile 当场拦下）。
 

@@ -190,9 +190,11 @@ def _resource_path(rel: str) -> Path:
     return Path(__file__).resolve().parent.parent / rel
 
 # ---------------- 数据层 ----------------
-# 数据目录定位：2026-10-06 搬到 app/paths.py（所有存储模块的共同根，不依赖业务模块；
+# 数据目录定位与三个"救命路径"（last-good / before-restore / 后缀常量）：
+# 2026-10-06 起逐步搬到 app/paths.py（所有存储模块的共同根，不依赖业务模块；
 # 后续拆出的模块从 paths 取，不必反向 import main）。名字在这里保住。
-from .paths import data_dir, data_file  # noqa: E402
+from .paths import (  # noqa: E402,F401
+    data_dir, data_file, LAST_GOOD_SUFFIX, last_good_file, before_restore_file)
 
 
 _LOCK = threading.Lock()
@@ -376,26 +378,8 @@ def _sanitize(data: dict) -> dict:
 
 _DATA_RECOVERED = False          # 数据文件损坏并重建过；上报一次后清掉
 _DATA_RECOVERED_FROM = ""        # 空的表示重置为空看板，否则是恢复来源
-LAST_GOOD_SUFFIX = ".json.last-good"
-
-
-def last_good_file() -> Path:
-    """最近一次正常保存的数据副本。
-
-    损坏时把当前文件复制成 .bak 是没用的 —— 那时的文件**本身就是坏的**。
-    真正能救命的是一份"上次写成功时的样子"。
-    """
-    return data_file().with_suffix(LAST_GOOD_SUFFIX)
-
-
-def before_restore_file() -> Path:
-    """每次恢复**之前**把当时的数据另存到这里 —— 恢复错了的那条退路。
-
-    单独一个函数是因为这个路径以前只在写入处硬编码过一次，于是"可恢复来源"的白名单
-    根本不认识它：界面向用户承诺"覆盖前会自动另存"，实际没有任何入口能把它拿回来。
-    只有一份（下一次恢复会覆盖），所以对外要说清是"最近一次恢复前"。
-    """
-    return data_dir() / "projects.json.before-restore.bak"
+# （last_good_file / before_restore_file / LAST_GOOD_SUFFIX 见文件顶部从 app/paths 的导入；
+#  它们属于存储布局，与 data_dir/data_file 同一处定义，备份/恢复白名单才不会各写一份。）
 
 
 def _load_data() -> dict:
