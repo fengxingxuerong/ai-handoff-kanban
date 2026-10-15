@@ -106,10 +106,10 @@ function renderMilestoneRows(list) {
 function milestoneRowHTML(m, i) {
   const name = (m && m.name ? m.name : "").trim();
   const done = !!(m && m.done);
-  return `<div class="ms-row" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-    <input class="ms-name" value="${esc(name)}" placeholder="里程碑名称（≤40 字）" maxlength="40" style="flex:1"
+  return `<div class="ms-row">
+    <input class="ms-name" value="${esc(name)}" placeholder="里程碑名称（≤40 字）" maxlength="40"
       aria-label="里程碑名称">
-    <label class="switch" style="flex-shrink:0;margin:0" title="手工标记该节点已经过去">
+    <label class="switch ms-switch" title="手工标记该节点已经过去">
       <input type="checkbox" class="ms-done"${done ? " checked" : ""} aria-label="里程碑 ${i + 1} 已完成标记">
       <span class="slider"></span>
     </label>
@@ -431,7 +431,7 @@ function renderEndpoints(eps) {
   wrap.innerHTML = eps.map((ep, i) => `
     <div class="ep-card">
       <div class="ep-top">
-        <input data-i="${i}" data-f="name" class="ep-name-input" value="${esc(ep.name)}" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;font-weight:600">
+        <input data-i="${i}" data-f="name" class="ep-name-input" value="${esc(ep.name)}">
         <label class="switch"><input type="checkbox" data-i="${i}" data-f="enabled" ${ep.enabled ? "checked" : ""}><span class="slider"></span></label>
       </div>
       <div class="field"><label>Base URL</label>

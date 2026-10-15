@@ -111,8 +111,8 @@ async function showRecoverable() {
       const btn = usable
         ? `<button class="btn" data-act="restoreData" data-arg="${esc(it.source)}">恢复</button>`
         : "";
-      return `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--line)">`
-        + `<div><div>${esc(it.label)}</div><div style="color:var(--text-faint);font-size:11px">${desc}</div></div>`
+      return `<div class="recover-item">`
+        + `<div><div>${esc(it.label)}</div><div class="recover-desc">${desc}</div></div>`
         + `<div>${btn}</div></div>`;
     }).join("");
     box.innerHTML = head + rows
@@ -176,10 +176,9 @@ function renderPalette(q) {
     ? list.map(c => {
         const on = paletteEnabled(c);
         return `<button type="button" class="palette-item${on ? "" : " off"}" data-act="paletteRun" data-arg="${esc(c.id)}"
-          tabindex="0" ${on ? "" : 'disabled title="先打开一个项目详情页"'}
-          style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--bg-soft);border:1px solid var(--border);border-radius:8px;padding:8px 11px;cursor:pointer;opacity:${on ? "1" : ".5"}">
-          <span style="flex:1"><b>${esc(c.label)}</b><span style="display:block;font-size:11.5px;color:var(--text-faint)">${esc(c.hint)}</span></span>
-          <span class="badge" style="flex-shrink:0;font-size:10px">↵ 执行</span></button>`;
+          tabindex="0" ${on ? "" : 'disabled title="先打开一个项目详情页"'}>
+          <span class="p-main"><b>${esc(c.label)}</b><span class="p-hint">${esc(c.hint)}</span></span>
+          <span class="badge p-key">↵ 执行</span></button>`;
       }).join("")
     : '<div style="color:var(--text-faint);font-size:12px;padding:8px">没有匹配的命令</div>';
 }
@@ -217,18 +216,18 @@ async function runGlobalSearch(q) {
     // "给我 30 条"不等于"只有 30 条"：不说的话，第 31 条在用户眼里就是不存在。
     // 用 .gs-note 而不是 .gs-item —— 下面给结果行绑点击，提示行不该跟着可点。
     const note = r.truncated
-      ? `<div class="gs-note" style="opacity:.75;font-size:11.5px;padding:6px 8px">`
+      ? `<div class="gs-note">`
         + `只列出前 ${esc(String(r.limit || list.length))} 条，后面还有 —— 换个更具体的关键词</div>`
       : "";
     if (!list.length) { box.innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:8px">没有匹配的任务</div>'; return; }
     box.innerHTML = note + list.map(t => `
-      <div class="gs-item" tabindex="0" role="button" data-keyact="1" data-pid="${esc(t.project_id)}" style="cursor:pointer;background:var(--bg-soft);border:1px solid var(--border);border-radius:9px;padding:9px 12px;display:flex;align-items:center;gap:8px">
+      <div class="gs-item" tabindex="0" role="button" data-keyact="1" data-pid="${esc(t.project_id)}">
         <span class="badge st-${taskStCls(t.status)}">${esc(taskStCls(t.status))}</span>
-        <span style="flex:1">${esc(t.title)}</span>
+        <span class="g-title">${esc(t.title)}</span>
         <span class="tag2 pri-${priCls(t.priority)}">${esc(priCls(t.priority))}</span>
         ${t.due_date ? `<span class="due-badge due-ok">📅 ${esc(t.due_date.slice(5))}</span>` : ""}
         ${t.agent ? `<span class="agent" title="这条由哪个智能体负责">🤖 ${esc(t.agent)}</span>` : ""}
-        <span style="font-size:11px;color:var(--text-faint);flex-shrink:0">${esc(t.project_name)}</span>
+        <span class="g-proj">${esc(t.project_name)}</span>
       </div>`).join("");
     box.querySelectorAll(".gs-item").forEach(el => {
       el.addEventListener("click", () => {
