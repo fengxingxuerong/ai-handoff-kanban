@@ -779,11 +779,18 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   `frozen_smoke.py` 在 CI 里就是这么跑的（数据目录由它自己指定为 `%TEMP%\kanban_frozen_smoke`）。
 - **CI 已经在真跑**（2026-10-11 接上远端 `origin` 之后）：`.github/workflows/ci.yml` 是**唯一一份**
   工作流（单入口：按锁文件安装 → `ci_local --with-exe` → 上传 exe，只在 `windows-latest`）。
-  实测两次全绿：run #1（de1dfe2）success 约 7 分钟、run #2（a3af088）success **7 分 35 秒**
-  （16:33:11 → 16:40:46 UTC），job 名 `gates`。首跑把本地预演唯一没覆盖的两处都验掉了 ——
+  实测三次全绿：run #1（de1dfe2）success 约 7 分钟、run #2（a3af088）success **7 分 35 秒**
+  （16:33:11 → 16:40:46 UTC）、run #3（a3ff8b3，v1.4.0 桌面端视觉轮）success，job `gates`
+  实测 **467 秒**（run 创建于 2026-10-15 16:22:34 UTC；run 与逐 job 明细都是带 GCM 已有凭据
+  走 API 查的，token 不回显、不落临时脚本）。首跑把本地预演唯一没覆盖的两处都验掉了 ——
   步骤清单里有「装 Playwright 自带 chromium（界面门禁的第三级降级）」且成功（runner 上没有系统
   Edge/Chrome，走的就是这级降级），actions 大版本兼容也一并验证。
   **改 workflow 一律按"它会被真执行"来写** —— 这句话现在有实测背书。
+  推送这一跳本身也会抖：2026-10-15 一次 `git push` 报
+  `Failed to connect to github.com:443 after 21070 ms`，而**同一时刻 `api.github.com` 返回 200** ——
+  分端点探测（含一个无关对照站点）定性为"主站线路被干扰、不是断网"。处置：本地提交一个都不动、
+  每轮先探主站、通了才推，最多 5 轮（轮间 22 秒）；实测前 4 轮主站不通，第 5 轮恢复后一次推过。
+  推成功后照旧轮询该提交的 CI 到终态，`conclusion=success` 且 job 明细全绿才收官。
   历史：接远端之前它从未被执行过（"看起来对"不作数），当时的替代是 2026-10-07 的**本地预演**
   （干净 venv 只按 `requirements.lock.txt` 安装，跑 `ci_local --with-exe` 11 步全绿、约 4 分钟
   —— 锁文件"换机/CI/出包用它"这句承诺的实测背书）。
