@@ -788,11 +788,15 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   步骤清单里有「装 Playwright 自带 chromium（界面门禁的第三级降级）」且成功（runner 上没有系统
   Edge/Chrome，走的就是这级降级），actions 大版本兼容也一并验证。
   **改 workflow 一律按"它会被真执行"来写** —— 这句话现在有实测背书。
-  推送这一跳本身也会抖：2026-10-15 一次 `git push` 报
+  推送这一跳本身也会抖（2026-10-15 首遇，**2026-10-16 更正了探法**）：一次 `git push` 报
   `Failed to connect to github.com:443 after 21070 ms`，而**同一时刻 `api.github.com` 返回 200** ——
   分端点探测（含一个无关对照站点）定性为"主站线路被干扰、不是断网"。处置：本地提交一个都不动、
-  每轮先探主站、通了才推，最多 5 轮（轮间 22 秒）；实测前 4 轮主站不通，第 5 轮恢复后一次推过。
-  推成功后照旧轮询该提交的 CI 到终态，`conclusion=success` 且 job 明细全绿才收官。
+  有界重试（最多 6 轮、轮间约 25 秒）。**探针必须打同一个 git 端点** ——
+  用 `git ls-remote --heads origin main`，**不要用 `curl https://github.com`**：
+  2026-10-16 实测 HTML 站点连续两次返回 200，而 git push 那两次都在 21 秒后连接超时
+  —— HTML 页面与 git 服务不是同一条路，拿前者探活会白等好几轮；换 git 端点探针后，
+  第 3 轮探通即一次推过。推成功后照旧轮询该提交的 CI 到终态（`?head_sha=` 用 40 位全长），
+  `conclusion=success` 且 job 明细全绿才收官。
   历史：接远端之前它从未被执行过（"看起来对"不作数），当时的替代是 2026-10-07 的**本地预演**
   （干净 venv 只按 `requirements.lock.txt` 安装，跑 `ci_local --with-exe` 11 步全绿、约 4 分钟
   —— 锁文件"换机/CI/出包用它"这句承诺的实测背书）。
