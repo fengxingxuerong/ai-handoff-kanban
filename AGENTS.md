@@ -782,7 +782,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   实测三次全绿：run #1（de1dfe2）success 约 7 分钟、run #2（a3af088）success **7 分 35 秒**
   （16:33:11 → 16:40:46 UTC）、run #3（a3ff8b3，v1.4.0 桌面端视觉轮）success，job `gates`
   实测 **467 秒**（run 创建于 2026-10-15 16:22:34 UTC；run 与逐 job 明细都是带 GCM 已有凭据
-  走 API 查的，token 不回显、不落临时脚本）。首跑把本地预演唯一没覆盖的两处都验掉了 ——
+  走 API 查的，token 不回显、不落临时脚本）。**查 run 时 `?head_sha=` 只认 40 位完整 SHA** ——
+  给短号**不报错、只静默返回空的 `workflow_runs`**，极易被误读成"run 还没创建"（实测连查 5 次皆空，
+  换 `git rev-parse HEAD` 的全长后一次命中）；别为此去改提交或怀疑推送失败。首跑把本地预演唯一没覆盖的两处都验掉了 ——
   步骤清单里有「装 Playwright 自带 chromium（界面门禁的第三级降级）」且成功（runner 上没有系统
   Edge/Chrome，走的就是这级降级），actions 大版本兼容也一并验证。
   **改 workflow 一律按"它会被真执行"来写** —— 这句话现在有实测背书。
