@@ -1431,3 +1431,12 @@ header { padding: 10px 20px; gap: 12px; }
   .repo-watch { align-items: flex-start; flex-wrap: wrap; }
   .repo-watch .rw-actions { width: 100%; }
 }
+
+/* 总览：代码有变化的项目标记 */
+.pcard.has-repo-change { border-color: var(--accent-line); }
+.repo-flag {
+  display: inline-block; margin-left: 2px; padding: 1px 5px;
+  border: 1px solid var(--accent-line); border-radius: 5px;
+  font: 9px var(--mono); letter-spacing: .02em; color: var(--accent);
+  white-space: nowrap;
+}

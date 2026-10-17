@@ -17,7 +17,11 @@ async function loadOverview() {
     // 总览是隐藏的时候（人在详情页里保存任务、拖卡片、改状态都会调到这里）
     // 数据要拉新，但把 N 张项目卡全删全建是白干 —— 切回总览时 showOverview 会再调一次，
     // 那时才真正渲染。真实规模下这是一次点击里最贵的一段 DOM 工作。
-    if (document.getElementById("view-overview").style.display !== "none") renderOverview();
+    if (document.getElementById("view-overview").style.display !== "none") {
+      renderOverview();
+      loadRepoWatchOverview();
+      ensureRepoWatchOverviewPolling();
+    }
   } catch (e) {
     toast("加载失败：" + e.message);
     const grid = document.getElementById("grid");
@@ -347,3 +351,51 @@ async function deleteView() {
   if (sel) sel.addEventListener("change", () => applyView(sel.value));
 })();
 
+
+
+// ============ 总览仓库变化标记 ============
+let _repoOverviewTimer = null;
+let _repoOverviewLoading = false;
+
+function renderRepoFlags(changes) {
+  const changed = (changes || []).filter(e => e && e.changed);
+  document.querySelectorAll("#grid .pcard").forEach(card => card.classList.remove("has-repo-change"));
+  document.querySelectorAll("#grid .repo-flag").forEach(x => x.remove());
+  changed.forEach(e => {
+    const card = document.querySelector('#grid .pcard[data-pid="' + String(e.project_id).replace(/"/g, '\\"') + '"]');
+    if (!card) return;
+    card.classList.add("has-repo-change");
+    const sub = card.querySelector(".card-sub");
+    if (sub) {
+      const flag = document.createElement("span");
+      flag.className = "repo-flag";
+      flag.textContent = "代码变化";
+      flag.title = e.reason || "仓库有新的提交或未提交文件";
+      sub.appendChild(flag);
+    }
+  });
+  const note = document.getElementById("repo-change-note");
+  if (note) note.textContent = changed.length
+    ? `按最近更新排序 · ${changed.length} 个代码有变化`
+    : "按最近更新排序";
+}
+
+async function loadRepoWatchOverview() {
+  if (_repoOverviewLoading) return;
+  _repoOverviewLoading = true;
+  try {
+    const r = await api("/api/repo-watch");
+    renderRepoFlags(r.changes || []);
+  } catch (e) {
+    // 雷达失败不影响总览；下一次轮询/刷新再试。
+  } finally {
+    _repoOverviewLoading = false;
+  }
+}
+
+function ensureRepoWatchOverviewPolling() {
+  if (_repoOverviewTimer) return;
+  _repoOverviewTimer = setInterval(() => {
+    if (document.getElementById("view-overview").style.display !== "none") loadRepoWatchOverview();
+  }, 30000);
+}
