@@ -890,6 +890,20 @@ def test_detail_view_skips_rebuilding_the_hidden_overview(ui):
 
     page.click("[data-act='showOverview']")
     page.wait_for_selector("#view-detail", state="hidden", timeout=10000)
+    # 补渲染是**异步**的：showOverview 里 loadOverview() 要等一次 /api/projects 回来才重建卡片。
+    # 以前这里点完立刻读文本，等于赌"本机 fetch 比断言快" —— 2026-10-18 的 CI run
+    # （push fa9bfac）就是这么红的：本地全绿、runner 上慢一拍读到旧数据。
+    # 判据改成"等到它真的补渲染了"，与机器快慢无关；没等到就让下面那条断言给出人话的错误。
+    try:
+        page.wait_for_function(
+            """(before) => {
+                 const el = [...document.querySelectorAll('.pcard')]
+                   .find(c => c.textContent.includes('延迟渲染项目'));
+                 return !!el && el.textContent !== before;
+               }""",
+            arg=before, timeout=15000)
+    except Exception:                                          # noqa: BLE001
+        pass
     after = page.locator(".pcard:has-text('延迟渲染项目')").text_content()
     assert after != before, "切回总览时没有补渲染，看到的是旧数据"
     assert "在详情里加的任务" not in (after or "")   # 卡片只显示统计不显示标题，顺手确认没渲染串
@@ -1529,3 +1543,4 @@ def test_token_mode_desktop_ui_can_write(token_server, browser):
         assert any(p["name"] == "Token 模式项目" for p in data["projects"])
     finally:
         ctx.close()
+
