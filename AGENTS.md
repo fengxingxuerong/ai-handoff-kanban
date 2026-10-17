@@ -800,6 +800,10 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   **跟随重定向时必须去掉 `Authorization` 头**（`curl -sL` 自动去掉；自己用 urllib 跟跳会撞 401）；
   ② 仓库路径写错一个字母，API 回的是 `404 Not Found` 而**不是**空列表 —— 把它读成 "run 还没创建"
   会白等好几轮（本次就这样绕了一圈，正确路径是 `fengxingxuerong/look`）。
+  **2026-10-18 后续两次**：`e547c2c`（CI 记录本身）与 `5350842`（前端分层 5→10 个文件）
+  两个 run（`39054573678` / `39056032979`）都是 `gates` **success**，后者 **454 秒**、10 个步骤全绿 ——
+  前端拆成 10 个文件后的首跑把"10 个 script 标签在干净 runner 上都能加载"也一并验掉了
+  （本地是 `live_ui_check` 16/0 零 JS 报错，两者同口径但环境不同）。
   推送这一跳本身也会抖（2026-10-15 首遇，**2026-10-16 更正了探法**）：一次 `git push` 报
   `Failed to connect to github.com:443 after 21070 ms`，而**同一时刻 `api.github.com` 返回 200** ——
   分端点探测（含一个无关对照站点）定性为"主站线路被干扰、不是断网"。处置：本地提交一个都不动、
