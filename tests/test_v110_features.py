@@ -412,3 +412,17 @@ def test_deleting_project_drops_its_memories(app_client):
     assert app_client.delete(f"/api/projects/{gone['id']}")[0] == 200
     kept = {m["text"] for m in main._load_memories()}
     assert kept == {"该留下的记忆"}, f"删项目没带走它的记忆：{kept}"
+
+
+def test_memories_file_recovers_from_last_good(app_client):
+    """记忆文件坏了，先从 last-good 救回来，并把损坏原文留 .bak。"""
+    from app.main import _save_memories, memories_file, memories_last_good_file
+
+    _save_memories([{"id": "m1", "pid": "p1", "type": "事实", "text": "救命记忆"}])
+    assert memories_last_good_file().exists()
+    memories_file().write_text("{ 不是合法 JSON", encoding="utf-8")
+
+    status, body = app_client.get("/api/memories")
+    assert status == 200
+    assert [m["text"] for m in body["memories"]] == ["救命记忆"]
+    assert memories_file().with_suffix(".json.bak").exists(), "损坏原文没有留证"

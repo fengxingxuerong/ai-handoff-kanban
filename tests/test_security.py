@@ -351,3 +351,13 @@ def test_agentsmd_save_sends_the_overwrite_flag():
     i = html.index("async function saveAgentsMD")
     assert "overwrite:" in html[i:i + 1200], "保存按钮没带 overwrite"
     assert 'id="agentsmd-overwrite"' in html
+
+
+def test_index_injects_token_meta_for_desktop_ui(app_client, monkeypatch):
+    """开了 Token 后首页必须把 token 注入 meta —— 桌面 UI 靠它才能带写请求头。
+    没有这一条，开启安全加固会让整个界面变只读。"""
+    monkeypatch.setenv("KANBAN_TOKEN", "pytest-token")
+    status, html = app_client.get("/")
+    assert status == 200
+    assert 'name="kanban-token"' in html
+    assert 'content="pytest-token"' in html

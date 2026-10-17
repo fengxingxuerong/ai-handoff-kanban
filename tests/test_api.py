@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -972,3 +973,33 @@ def test_journal_limit_is_one_number_everywhere(app_client):
     _, detail = app_client.get("/api/tasks/" + t["id"])
     assert len(detail["task"]["journal"]) == 1, "被拒的那次不该留下半条记录"
     assert len(detail["task"]["journal"][0]["text"]) == kanban.MAX_JOURNAL_TEXT
+
+
+def test_bulk_delete_projects_is_atomic_and_backs_up(app_client):
+    _, p1 = app_client.create_project("批量删除甲")
+    _, p2 = app_client.create_project("批量删除乙")
+    assert app_client.post("/api/memories", {"pid": p1["id"], "text": "会被一起清掉的记忆"})[0] == 201
+
+    status, body = app_client.post(
+        "/api/projects/bulk-delete",
+        {"ids": [p1["id"], p2["id"]], "confirm": True},
+    )
+    assert status == 200, body
+    assert set(body["deleted"]) == {p1["id"], p2["id"]}
+    assert body["backup"] and Path(body["backup"]).exists(), "删除前没有留下快照"
+
+    _, data = app_client.get("/api/projects")
+    assert not any(p["id"] in {p1["id"], p2["id"]} for p in data["projects"])
+    _, memories = app_client.get("/api/memories")
+    assert not any(m["pid"] == p1["id"] for m in memories["memories"]), "孤儿记忆没清掉"
+
+
+def test_bulk_delete_refuses_missing_id_without_deleting(app_client):
+    _, p = app_client.create_project("批量删除保留项")
+    status, body = app_client.post(
+        "/api/projects/bulk-delete",
+        {"ids": [p["id"], "missing-id"], "confirm": True},
+    )
+    assert status == 404, body
+    _, data = app_client.get("/api/projects")
+    assert any(x["id"] == p["id"] for x in data["projects"]), "部分 id 不存在时仍然删了项目"

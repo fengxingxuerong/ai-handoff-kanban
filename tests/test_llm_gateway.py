@@ -180,3 +180,16 @@ def test_update_config_serializes_read_modify_write(tmp_path, monkeypatch):
     llm.update_config(bump)
     got = llm.load_config()
     assert got["ai"]["schedule"]["enabled"] is True and got["ai"]["active_model"] == "m2"
+
+
+def test_load_config_recovers_from_last_good(tmp_path, monkeypatch):
+    """config.json 坏了，不能静默把 Key 清空：先留 .bak，再从 last-good 恢复。"""
+    monkeypatch.setenv("KANBAN_DATA_DIR", str(tmp_path))
+    llm.save_config({"ai": {"endpoints": [], "active_model": "m", "schedule": {"enabled": False}}})
+    assert llm.config_last_good_file().exists()
+    (tmp_path / "config.json").write_text("{ 不是 JSON", encoding="utf-8")
+
+    got = llm.load_config()
+    assert got["ai"]["active_model"] == "m"
+    assert (tmp_path / "config.json.bak").exists(), "损坏原文没有留证"
+    assert json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))["ai"]["active_model"] == "m"

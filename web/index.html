@@ -153,11 +153,11 @@
             <button class="btn small" data-act="toggleMemoryForm">＋ 记一条</button>
           </h3>
           <div id="memory-form" style="display:none;gap:8px;margin-bottom:8px">
-            <select id="memory-type" style="width:84px;flex-shrink:0">
+            <select id="memory-type" style="width:84px;flex-shrink:0" aria-label="记忆类型">
               <option>事实</option><option>决策</option><option>坑</option><option>约定</option>
             </select>
             <input id="memory-text" placeholder="例：导出必须流式写入，整份读会 OOM" style="flex:1" data-enter="saveMemory">
-            <input type="date" id="memory-expires" title="有效期到（可选）：过期后不再进交接包/AGENTS.md，界面上标灰" style="width:135px;flex-shrink:0">
+            <input type="date" id="memory-expires" title="有效期到（可选）：过期后不再进交接包/AGENTS.md，界面上标灰" style="width:135px;flex-shrink:0" aria-label="记忆有效期">
             <button class="btn small primary" data-act="saveMemory">存</button>
           </div>
           <div id="memory-body" style="max-height:260px;overflow-y:auto"></div>
@@ -266,18 +266,18 @@
 <!-- 项目弹窗 -->
 <div class="modal-mask" id="proj-modal">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="proj-modal-title">
-    <div class="mhead"><h2 id="proj-modal-title">新建项目</h2><button class="btn icon" data-act="closeModal" data-arg="proj-modal">✕</button></div>
+    <div class="mhead"><h2 id="proj-modal-title">新建项目</h2><button class="btn icon" data-act="closeModal" data-arg="proj-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div class="form-section"><span>基本信息</span></div>
-      <div class="field"><label>项目名称 <span class="req">*</span></label><input id="f-name" placeholder="例如：EduSmart 学生管理系统" data-enter="saveProject"></div>
+      <div class="field"><label for="f-name">项目名称 <span class="req">*</span></label><input id="f-name" placeholder="例如：EduSmart 学生管理系统" data-enter="saveProject"></div>
       <div class="row3">
-        <div class="field"><label>状态</label><select id="f-status">
+        <div class="field"><label for="f-status">状态</label><select id="f-status">
           <option>规划中</option><option>进行中</option><option>已暂停</option><option>已完成</option>
         </select></div>
-        <div class="field"><label>优先级</label><select id="f-priority">
+        <div class="field"><label for="f-priority">优先级</label><select id="f-priority">
           <option>高</option><option>中</option><option>低</option>
         </select></div>
-        <div class="field"><label>进度 %</label><input id="f-progress" type="number" min="0" max="100" value="0"></div>
+        <div class="field"><label for="f-progress">进度 %</label><input id="f-progress" type="number" min="0" max="100" value="0"></div>
       </div>
       <div class="field">
         <label>标签（点击切换，可输入自定义后按回车添加）</label>
@@ -290,7 +290,7 @@
           <span class="chip-tag" data-t="安全">安全</span>
           <span class="chip-tag" data-t="学习">学习</span>
         </div>
-<input id="f-tag-input" placeholder="输入新标签后按回车添加" style="margin-top:8px">
+<input id="f-tag-input" placeholder="输入新标签后按回车添加" style="margin-top:8px" aria-label="新标签">
       </div>
       <div class="form-section"><span>交接信息（新智能体接手时会优先读这里）</span></div>
       <div class="field">
@@ -298,14 +298,13 @@
         <div id="f-milestones" aria-label="里程碑列表"></div>
         <button class="btn small" data-act="addMilestoneRow" type="button">＋ 添加里程碑</button>
       </div>
-      <div class="field"><label>代码路径（可选）</label><input id="f-repo" placeholder="例如：D:\longmao\edu-smart"></div>
-      <div class="field"><label>项目背景</label><textarea id="f-bg" placeholder="这个项目是做什么的？技术栈、架构、核心模块……"></textarea></div>
+      <div class="field"><label for="f-repo">代码路径（可选）</label><input id="f-repo" placeholder="例如：D:\longmao\edu-smart"></div>
+      <div class="field"><label for="f-bg">项目背景</label><textarea id="f-bg" placeholder="这个项目是做什么的？技术栈、架构、核心模块……"></textarea></div>
       <div class="field">
-        <label>交接说明（写给未来接手的 AI 智能体）</label>
-        <textarea class="tall" id="f-handoff" placeholder="写清楚：技术栈与目录结构、已定的关键决策、已知的坑、测试/运行命令、约定与注意事项……交接越具体，接手越顺利"></textarea>
+        <label for="f-handoff">交接说明（写给未来接手的 AI 智能体）</label><textarea class="tall" id="f-handoff" placeholder="写清楚：技术栈与目录结构、已定的关键决策、已知的坑、测试/运行命令、约定与注意事项……交接越具体，接手越顺利"></textarea>
         <div class="hint">新智能体接手时会优先看这里，写清楚能省掉一大半重复沟通</div>
       </div>
-      <div class="field"><label>下一步行动</label><textarea id="f-next" placeholder="最近要推进的一件事是什么？"></textarea></div>
+      <div class="field"><label for="f-next">下一步行动</label><textarea id="f-next" placeholder="最近要推进的一件事是什么？"></textarea></div>
     </div>
     <div class="mfoot">
       <button class="btn" data-act="closeModal" data-arg="proj-modal">取消</button>
@@ -317,34 +316,33 @@
 <!-- 任务弹窗 -->
 <div class="modal-mask" id="task-modal">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
-    <div class="mhead"><h2 id="task-modal-title">新建任务</h2><button class="btn icon" data-act="closeModal" data-arg="task-modal">✕</button></div>
+    <div class="mhead"><h2 id="task-modal-title">新建任务</h2><button class="btn icon" data-act="closeModal" data-arg="task-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div class="form-section"><span>基本信息</span></div>
-      <div class="field"><label>任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调" data-enter="saveTask"></div>
-      <div class="field"><label>任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、背景……"></textarea></div>
+      <div class="field"><label for="t-title">任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调" data-enter="saveTask"></div>
+      <div class="field"><label for="t-desc">任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、背景……"></textarea></div>
       <div class="form-section"><span>验收与关联（会给接手的人看）</span></div>
-      <div class="field"><label>验收标准（可选，一行一条——「怎么算完成」写清楚，验收和交接都有据可依）</label>
-        <textarea id="t-acceptance" rows="3" placeholder="例如：&#10;全部用例通过&#10;README 补上用法一节"></textarea>
+      <div class="field"><label for="t-acceptance">验收标准（可选，一行一条——「怎么算完成」写清楚，验收和交接都有据可依）</label><textarea id="t-acceptance" rows="3" placeholder="例如：&#10;全部用例通过&#10;README 补上用法一节"></textarea>
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">最多 10 条、单条 120 字；会带进交接包与接手页，接手的人照着验收</div>
       </div>
-      <div class="field"><label>相关代码位置（可选，逗号分隔）</label><input id="t-refs" placeholder="如 app/main.py:120, tests/test_api.py —— 接手的人不用再翻一遍找在哪改" data-enter="saveTask"></div>
-      <div class="field"><label>前置任务（可选，按住 Ctrl 多选）</label><select id="t-deps" multiple size="4"></select>
+      <div class="field"><label for="t-refs">相关代码位置（可选，逗号分隔）</label><input id="t-refs" placeholder="如 app/main.py:120, tests/test_api.py —— 接手的人不用再翻一遍找在哪改" data-enter="saveTask"></div>
+      <div class="field"><label for="t-deps">前置任务（可选，按住 Ctrl 多选）</label><select id="t-deps" multiple size="4"></select>
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了前置，交接包与 AGENTS.md 会按依赖排好顺序，AI 也能直接问「现在该做哪个」</div>
       </div>
       <div class="form-section"><span>排期与指派</span></div>
       <div class="row3">
-        <div class="field"><label>状态</label><select id="t-status">
+        <div class="field"><label for="t-status">状态</label><select id="t-status">
           <option>待办</option><option>进行中</option><option>待审查</option><option>已完成</option><option>阻塞</option>
         </select></div>
-        <div class="field"><label>优先级</label><select id="t-priority">
+        <div class="field"><label for="t-priority">优先级</label><select id="t-priority">
           <option>高</option><option>中</option><option>低</option>
         </select></div>
-        <div class="field"><label>负责 AI（可选）</label><input id="t-agent" placeholder="如 cline / 豆包" data-enter="saveTask"></div>
+        <div class="field"><label for="t-agent">负责 AI（可选）</label><input id="t-agent" placeholder="如 cline / 豆包" data-enter="saveTask"></div>
       </div>
-<div class="field"><label>截止日期（可选）</label><input type="date" id="t-due">
+<div class="field"><label for="t-due">截止日期（可选）</label><input type="date" id="t-due">
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了截止日期，仪表盘会统计临期/逾期，任务卡上也会标出来</div>
       </div>
-      <div class="field"><label>里程碑（可选）</label><select id="t-milestone"></select>
+      <div class="field"><label for="t-milestone">里程碑（可选）</label><select id="t-milestone"></select>
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">把任务归进某个发布节点，详情页会按里程碑分组显示进度</div>
       </div>
       <div class="field" id="t-journal-field" style="display:none">
@@ -367,17 +365,17 @@
 <!-- 自动分配弹窗：把『指定优先级 + 未完成 + 依赖已就绪』的任务批量指派给某个智能体 -->
 <div class="modal-mask" id="assign-modal">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="assign-modal-title">
-    <div class="mhead"><h2 id="assign-modal-title">🤖 自动分配</h2><button class="btn icon" data-act="closeModal" data-arg="assign-modal">✕</button></div>
+    <div class="mhead"><h2 id="assign-modal-title">🤖 自动分配</h2><button class="btn icon" data-act="closeModal" data-arg="assign-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div class="hint" style="margin:0 0 12px">把项目内<b>『指定优先级 + 未完成 + 依赖已就绪』</b>的任务批量指派给某个智能体（写入任务的「负责 AI」）。
         已有负责人的任务默认<b>跳过</b>，避免覆盖手工指派；勾选「覆盖已有负责人」才会重新指派。</div>
       <div class="row3">
-        <div class="field"><label>负责 AI <span class="req">*</span></label><input id="assign-agent" placeholder="如 cline / 豆包" data-enter="runAutoAssign"></div>
-        <div class="field"><label>优先级</label><select id="assign-priority">
+        <div class="field"><label for="assign-agent">负责 AI <span class="req">*</span></label><input id="assign-agent" placeholder="如 cline / 豆包" data-enter="runAutoAssign"></div>
+        <div class="field"><label for="assign-priority">优先级</label><select id="assign-priority">
           <option>高</option><option>中</option><option>低</option>
         </select></div>
         <div class="field" style="justify-content:flex-end">
-          <label class="switch" style="flex-shrink:0"><input type="checkbox" id="assign-overwrite"><span class="slider"></span></label>
+          <label class="switch" style="flex-shrink:0"><input type="checkbox" id="assign-overwrite" aria-label="覆盖已有负责人"><span class="slider"></span></label>
           <span style="font-size:12.5px;color:var(--text-dim);margin-left:8px">覆盖已有负责人</span>
         </div>
       </div>
@@ -416,7 +414,7 @@
 <!-- AI 设置弹窗 -->
 <div class="modal-mask" id="ai-settings-modal">
   <div class="modal" style="width:min(760px,100%)" role="dialog" aria-modal="true" aria-label="AI 设置">
-    <div class="mhead"><h2>⚙️ AI 设置</h2><button class="btn icon" data-act="closeModal" data-arg="ai-settings-modal">✕</button></div>
+    <div class="mhead"><h2>⚙️ AI 设置</h2><button class="btn icon" data-act="closeModal" data-arg="ai-settings-modal" aria-label="关闭">✕</button></div>
 <div class="mbody">
       <div class="ai-tabs" role="tablist" aria-label="AI 设置分区">
         <button type="button" class="ai-tab active" id="ai-tab-btn-settings" role="tab" aria-selected="true" data-act="switchAITab" data-arg="settings">⚙️ 设置</button>
@@ -424,28 +422,26 @@
       </div>
       <div id="ai-pane-settings" role="tabpanel" aria-labelledby="ai-tab-btn-settings">
       <div class="hint" id="app-version">版本加载中…</div>
-      <div class="field"><label>默认模型</label>
-        <select id="ai-active-model"></select>
+      <div class="field"><label for="ai-active-model">默认模型</label><select id="ai-active-model"></select>
         <div class="hint">监管分析、指令解析、交接生成默认使用的模型；调用失败会自动切换其他端点</div>
       </div>
       <div class="field"><label>AI 端点（Key 已脱敏显示，直接粘贴新 Key 可替换）</label>
         <div id="ai-endpoints" style="display:flex;flex-direction:column;gap:10px"></div>
       </div>
-      <div class="field"><label>月度用量预算（美元，0 = 不启用预算告警）</label>
-        <input type="number" id="ai-budget-limit" min="0" step="0.1" placeholder="0">
+      <div class="field"><label for="ai-budget-limit">月度用量预算（美元，0 = 不启用预算告警）</label><input type="number" id="ai-budget-limit" min="0" step="0.1" placeholder="0">
         <div class="hint">按自然月统计估算成本，用量 Tab 中 ≥80% 黄、≥100% 红告警；成本来自端点单价（下方可配）</div>
       </div>
       <div class="field" style="flex-direction:row;align-items:center;gap:10px">
-        <label class="switch" style="flex-shrink:0"><input type="checkbox" id="mcp-readonly"><span class="slider"></span></label>
+        <label class="switch" style="flex-shrink:0"><input type="checkbox" id="mcp-readonly" aria-label="MCP 只读模式"><span class="slider"></span></label>
         <span style="font-size:12.5px;color:var(--text-dim)">MCP 只读模式（开启后外部智能体经 MCP 只能读不能写；<b>只管 MCP</b>，你手动操作和本机 HTTP 接口不受影响）</span>
       </div>
       <div class="field"><label>定时自动监管</label>
         <div class="row3">
           <div class="field"><label>启用</label>
-            <label class="switch"><input type="checkbox" id="ai-sched-enabled"><span class="slider"></span></label>
+            <label class="switch"><input type="checkbox" id="ai-sched-enabled" aria-label="启用定时监管"><span class="slider"></span></label>
           </div>
-          <div class="field"><label>频率</label><select id="ai-sched-freq"><option value="daily">每天</option><option value="weekly">每周</option></select></div>
-          <div class="field"><label>时间</label><input type="time" id="ai-sched-time" value="09:00"></div>
+          <div class="field"><label for="ai-sched-freq">频率</label><select id="ai-sched-freq"><option value="daily">每天</option><option value="weekly">每周</option></select></div>
+          <div class="field"><label for="ai-sched-time">时间</label><input type="time" id="ai-sched-time" value="09:00"></div>
         </div>
         <div class="hint">到点后自动生成监管报告并存入「历史报告」，不修改项目数据；最近运行：<span id="ai-sched-last">—</span></div>
       </div>
@@ -455,7 +451,7 @@
           <button class="btn" data-act="showRecoverable">↩ 数据恢复</button>
           <button class="btn" data-act="exportData">📤 导出全部数据</button>
           <button class="btn" data-act="importData">📥 导入数据</button>
-          <input type="file" id="import-file" accept=".json" style="display:none">
+          <input type="file" id="import-file" accept=".json" style="display:none" aria-label="选择导入文件">
           <span style="font-size:11px;color:var(--text-faint)" id="backup-tip"></span>
         </div>
         <div class="backup-list" id="backup-list"></div>
@@ -478,8 +474,8 @@
 
 <!-- AI 指令弹窗 -->
 <div class="modal-mask" id="ai-cmd-modal">
-  <div class="modal" style="width:min(620px,100%)" role="dialog" aria-modal="true" aria-labelledby="package-title">
-    <div class="mhead"><h2>🤖 AI 指令</h2><button class="btn icon" data-act="closeModal" data-arg="ai-cmd-modal">✕</button></div>
+  <div class="modal" style="width:min(620px,100%)" role="dialog" aria-modal="true" aria-labelledby="ai-cmd-title">
+    <div class="mhead"><h2 id="ai-cmd-title">🤖 AI 指令</h2><button class="btn icon" data-act="closeModal" data-arg="ai-cmd-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div class="cmd-chat" id="cmd-chat">
         <div class="cmd-msg ai">你好！用大白话告诉我想做什么，例如：<br>·「给 EduSmart 加一个任务：完成部署文档，优先级高」<br>·「把墨匠的进度改成 85%」<br>·「把正在进行的项目标记为已完成」<br>我会解析成具体操作，你确认后执行。</div>
@@ -497,19 +493,17 @@
 
 <!-- AI 交接生成弹窗 -->
 <div class="modal-mask" id="ai-handoff-modal">
-  <div class="modal" style="width:min(680px,100%)" role="dialog" aria-modal="true" aria-labelledby="package-title">
-    <div class="mhead"><h2>✨ AI 生成交接说明</h2><button class="btn icon" data-act="closeModal" data-arg="ai-handoff-modal">✕</button></div>
+  <div class="modal" style="width:min(680px,100%)" role="dialog" aria-modal="true" aria-labelledby="ai-handoff-title">
+    <div class="mhead"><h2 id="ai-handoff-title">✨ AI 生成交接说明</h2><button class="btn icon" data-act="closeModal" data-arg="ai-handoff-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div class="row2">
-        <div class="field"><label>模式</label>
-          <select id="ai-handoff-mode"><option value="generate">全新生成</option><option value="polish">润色现有说明</option></select>
+        <div class="field"><label for="ai-handoff-mode">模式</label><select id="ai-handoff-mode"><option value="generate">全新生成</option><option value="polish">润色现有说明</option></select>
         </div>
         <div class="field" style="justify-content:flex-end">
           <button class="btn primary" id="ai-handoff-gen-btn" data-act="generateHandoff">✨ 生成</button>
         </div>
       </div>
-      <div class="field"><label>生成结果（可直接编辑后应用）</label>
-        <textarea class="tall" id="ai-handoff-result" style="min-height:260px" placeholder="点击生成后，AI 撰写的交接说明会显示在这里…"></textarea>
+      <div class="field"><label for="ai-handoff-result">生成结果（可直接编辑后应用）</label><textarea class="tall" id="ai-handoff-result" style="min-height:260px" placeholder="点击生成后，AI 撰写的交接说明会显示在这里…"></textarea>
       </div>
     </div>
     <div class="mfoot">
@@ -521,8 +515,8 @@
 
 <!-- 健康趋势图弹窗 -->
 <div class="modal-mask" id="trend-modal">
-  <div class="modal" style="width:min(760px,100%)" role="dialog" aria-modal="true" aria-labelledby="package-title">
-    <div class="mhead"><h2>📈 项目健康分趋势</h2><button class="btn icon" data-act="closeModal" data-arg="trend-modal">✕</button></div>
+  <div class="modal" style="width:min(760px,100%)" role="dialog" aria-modal="true" aria-labelledby="trend-title">
+    <div class="mhead"><h2 id="trend-title">📈 项目健康分趋势</h2><button class="btn icon" data-act="closeModal" data-arg="trend-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div id="trend-body"><div class="r-loading"><div class="spinner"></div><div>加载趋势数据…</div></div></div>
     </div>
@@ -532,7 +526,7 @@
 <!-- 今日待办弹窗（跨项目「现在能动手的」） -->
 <div class="modal-mask" id="today-modal">
   <div class="modal" style="width:min(720px,100%)" role="dialog" aria-modal="true" aria-labelledby="today-modal-title">
-    <div class="mhead"><h2 id="today-modal-title">☀️ 今日待办（依赖已满足）</h2><button class="btn icon" data-act="closeModal" data-arg="today-modal">✕</button></div>
+    <div class="mhead"><h2 id="today-modal-title">☀️ 今日待办（依赖已满足）</h2><button class="btn icon" data-act="closeModal" data-arg="today-modal" aria-label="关闭">✕</button></div>
     <div class="mbody" id="today-body" style="max-height:60vh;overflow-y:auto">加载中…</div>
     <div class="mfoot">
       <span class="hint">点一条直接跳到它的项目</span>
@@ -544,7 +538,7 @@
 <!-- 待拍板弹窗（Inbox：只列等人的——逾期 / 待审查 / 阻塞） -->
 <div class="modal-mask" id="inbox-modal">
   <div class="modal" style="width:min(720px,100%)" role="dialog" aria-modal="true" aria-labelledby="inbox-modal-title">
-    <div class="mhead"><h2 id="inbox-modal-title">🔔 需要拍板（等人处理的才进这里）</h2><button class="btn icon" data-act="closeModal" data-arg="inbox-modal">✕</button></div>
+    <div class="mhead"><h2 id="inbox-modal-title">🔔 需要拍板（等人处理的才进这里）</h2><button class="btn icon" data-act="closeModal" data-arg="inbox-modal" aria-label="关闭">✕</button></div>
     <div class="mbody" id="inbox-body" style="max-height:60vh;overflow-y:auto">加载中…</div>
     <div class="mfoot">
       <span class="hint">依赖没满足的任务不在这里——它们会随前置完成自然流转（看「今日」）</span>
@@ -555,14 +549,13 @@
 
 <div class="modal-mask" id="package-modal">
   <div class="modal" style="width:min(760px,100%)" role="dialog" aria-modal="true" aria-labelledby="package-title">
-    <div class="mhead"><h2 id="package-title">📦 完整交接包</h2><button class="btn icon" data-act="closeModal" data-arg="package-modal">✕</button></div>
+    <div class="mhead"><h2 id="package-title">📦 完整交接包</h2><button class="btn icon" data-act="closeModal" data-arg="package-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div class="field" style="flex-direction:row;align-items:center;gap:10px">
-        <label class="switch" style="flex-shrink:0"><input type="checkbox" id="package-redact"><span class="slider"></span></label>
+        <label class="switch" style="flex-shrink:0"><input type="checkbox" id="package-redact" aria-label="导出时脱敏"><span class="slider"></span></label>
         <span style="font-size:12.5px;color:var(--text-dim)">🔒 脱敏导出（自动隐藏 API Key / 令牌 / 密码 / 邮箱后再生成）</span>
       </div>
-      <div class="field"><label>交接包内容（Markdown，可直接编辑后再导出）</label>
-        <textarea class="tall" id="package-content" style="min-height:320px;font-family:Consolas,monospace;font-size:12px"></textarea>
+      <div class="field"><label for="package-content">交接包内容（Markdown，可直接编辑后再导出）</label><textarea class="tall" id="package-content" style="min-height:320px;font-family:Consolas,monospace;font-size:12px" aria-label="交接包内容"></textarea>
         <div id="package-budget" style="font-size:11.5px;color:var(--text-faint);margin-top:5px"></div>
       </div>
     </div>
@@ -578,7 +571,7 @@
 <!-- 全局任务搜索弹窗（Ctrl+K：命令面板 + 搜索二合一） -->
 <div class="modal-mask" id="global-search-modal">
   <div class="modal" style="width:min(640px,100%)" role="dialog" aria-modal="true" aria-label="命令面板 Ctrl+K 快速唤起">
-    <div class="mhead"><h2>⌨️ 命令面板 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">Ctrl+K 快速唤起 · 输入关键词搜任务，或输入 <b>&gt;</b> 过滤命令</span></h2><button class="btn icon" data-act="closeModal" data-arg="global-search-modal">✕</button></div>
+    <div class="mhead"><h2>⌨️ 命令面板 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">Ctrl+K 快速唤起 · 输入关键词搜任务，或输入 <b>&gt;</b> 过滤命令</span></h2><button class="btn icon" data-act="closeModal" data-arg="global-search-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div class="field"><input id="gs-input" placeholder="搜索任务 / 输入 &gt; 过滤命令（如 &gt;新建、&gt;导出）…" autocomplete="off"></div>
       <div id="palette-commands" style="display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto;margin-bottom:8px"></div>
@@ -590,7 +583,7 @@
 <!-- 会话捕获弹窗 -->
 <div class="modal-mask" id="session-modal">
   <div class="modal" style="width:min(720px,100%)" role="dialog" aria-modal="true" aria-label="会话捕获 自动发现本机 AI 工具的最近会话，提炼入库">
-    <div class="mhead"><h2>📥 会话捕获 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">自动发现本机 AI 工具的最近会话，提炼入库</span></h2><button class="btn icon" data-act="closeModal" data-arg="session-modal">✕</button></div>
+    <div class="mhead"><h2>📥 会话捕获 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">自动发现本机 AI 工具的最近会话，提炼入库</span></h2><button class="btn icon" data-act="closeModal" data-arg="session-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn" id="scan-btn" data-act="scanSessions">🔄 扫描本机会话</button>
@@ -598,12 +591,10 @@
       </div>
       <div id="session-list" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto"></div>
       <div class="field" id="session-ingest-row" style="display:none">
-        <label>入库项目 <span class="req">*</span></label>
-        <select id="session-pid" style="width:100%"></select>
+        <label for="session-pid">入库项目 <span class="req">*</span></label><select id="session-pid" style="width:100%" aria-label="会话所属项目"></select>
       </div>
       <div class="field" id="session-preview-row" style="display:none">
-        <label>会话内容预览</label>
-        <textarea id="session-preview" readonly style="min-height:130px;font-family:Consolas,monospace;font-size:11.5px"></textarea>
+        <label for="session-preview">会话内容预览</label><textarea id="session-preview" readonly style="min-height:130px;font-family:Consolas,monospace;font-size:11.5px" aria-label="会话预览"></textarea>
       </div>
       <div id="session-result" style="display:none"></div>
     </div>
@@ -617,12 +608,10 @@
 <!-- AGENTS.md 生成弹窗 -->
 <div class="modal-mask" id="agentsmd-modal">
   <div class="modal" style="width:min(760px,100%)" role="dialog" aria-modal="true" aria-label="生成 AGENTS.md Linux Foundation 标准 · 给 AI 编码代理的项目上下文">
-    <div class="mhead"><h2>🤖 生成 AGENTS.md <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">Linux Foundation 标准 · 给 AI 编码代理的项目上下文</span></h2><button class="btn icon" data-act="closeModal" data-arg="agentsmd-modal">✕</button></div>
+    <div class="mhead"><h2>🤖 生成 AGENTS.md <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">Linux Foundation 标准 · 给 AI 编码代理的项目上下文</span></h2><button class="btn icon" data-act="closeModal" data-arg="agentsmd-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
-      <div class="field"><label>保存路径（默认写入项目代码仓库根目录）</label>
-        <input id="agentsmd-path" placeholder="D:\longmao\edu-smart\AGENTS.md"></div>
-      <div class="field"><label>AGENTS.md 内容（可直接编辑）</label>
-        <textarea class="tall" id="agentsmd-content" style="min-height:300px;font-family:Consolas,monospace;font-size:12px" placeholder="点击「✨ 生成」让 AI 按标准撰写…（AI 不可用时自动使用本地模板）"></textarea>
+      <div class="field"><label for="agentsmd-path">保存路径（默认写入项目代码仓库根目录）</label><input id="agentsmd-path" placeholder="D:\longmao\edu-smart\AGENTS.md"></div>
+      <div class="field"><label for="agentsmd-content">AGENTS.md 内容（可直接编辑）</label><textarea class="tall" id="agentsmd-content" style="min-height:300px;font-family:Consolas,monospace;font-size:12px" placeholder="点击「✨ 生成」让 AI 按标准撰写…（AI 不可用时自动使用本地模板）"></textarea>
       </div>
       <div class="field">
         <label>一键写出各工具入口（AGENTS.md 是唯一事实来源，其余 8 个都是它的投影）</label>
@@ -633,7 +622,7 @@
           <button class="btn primary" id="agentsmd-write-btn" data-act="writeAgentFiles">写入项目目录</button>
         </div>
         <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--text-dim)">
-          <input type="checkbox" id="agentsmd-overwrite" style="width:auto">
+          <input type="checkbox" id="agentsmd-overwrite" style="width:auto" aria-label="覆盖已有入口文件">
           覆盖已有文件（默认跳过，避免把你手写的 AGENTS.md / CLAUDE.md 冲掉；两个保存按钮共用这一项）
         </label>
         <div style="font-size:11px;color:var(--text-faint);margin-top:6px;line-height:1.7">
@@ -657,10 +646,9 @@
 <!-- 会话提炼弹窗 -->
 <div class="modal-mask" id="summarize-modal">
   <div class="modal" style="width:min(720px,100%)" role="dialog" aria-modal="true" aria-label="会话提炼 把与其他 AI 的对话粘进来，自动提炼成任务与交接更新">
-    <div class="mhead"><h2>📥 会话提炼 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">把与其他 AI 的对话粘进来，自动提炼成任务与交接更新</span></h2><button class="btn icon" data-act="closeModal" data-arg="summarize-modal">✕</button></div>
+    <div class="mhead"><h2>📥 会话提炼 <span style="font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px">把与其他 AI 的对话粘进来，自动提炼成任务与交接更新</span></h2><button class="btn icon" data-act="closeModal" data-arg="summarize-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
-      <div class="field"><label>粘贴对话记录（从某个 AI 工具的聊天里复制过来）</label>
-        <textarea class="tall" id="summarize-text" style="min-height:180px" placeholder="例如：从 cline / 豆包 / box-agent 的对话里复制这一段：&#10;&#10;我们决定用 pnpm workspace 管理 monorepo，课消逻辑要加事务保护……&#10;下周一要交付 CRM 接口联调……"></textarea>
+      <div class="field"><label for="summarize-text">粘贴对话记录（从某个 AI 工具的聊天里复制过来）</label><textarea class="tall" id="summarize-text" style="min-height:180px" placeholder="例如：从 cline / 豆包 / box-agent 的对话里复制这一段：&#10;&#10;我们决定用 pnpm workspace 管理 monorepo，课消逻辑要加事务保护……&#10;下周一要交付 CRM 接口联调……"></textarea>
       </div>
       <div style="display:flex;justify-content:flex-end">
         <button class="btn primary" id="summarize-btn" data-act="runSummarize">✨ AI 提炼</button>

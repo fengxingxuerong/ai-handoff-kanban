@@ -27,10 +27,12 @@ function taskStCls(v) { return TASK_STATUS_SET.has(v) ? v : "待办"; }
 
 // ============ 工具 ============
 async function api(path, opts) {
-  const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
+  const options = opts || {};
+  const headers = { ...(options.headers || {}), "Content-Type": "application/json" };
+  // 服务端只在设置 KANBAN_TOKEN 时注入这个 meta；没设置时保持空头，不影响现有调用。
+  const tokenMeta = document.querySelector('meta[name="kanban-token"]');
+  if (tokenMeta && tokenMeta.content) headers["X-Kanban-Token"] = tokenMeta.content;
+  const res = await fetch(path, { ...options, headers });
   if (!res.ok) {
     let msg = "请求失败 (" + res.status + ")";
     try { const j = await res.json(); if (j.detail) msg = j.detail; } catch (e) {}
@@ -250,12 +252,14 @@ function cardHTML(p) {
       <button class="btn small pin${pinned ? " on" : ""}" data-act="pin" aria-pressed="${pinned}"
               title="${pinned ? "取消置顶" : "置顶（排在总览最前面）"}">${pinned ? "★" : "☆"}</button>
       <span class="name" title="${esc(p.name)}">${esc(p.name)}</span>
-      ${rdBadge}
-      <span class="badge st-${st}">${esc(st)}</span>
       <span class="actions">
         <button class="btn small" data-act="edit" title="编辑项目">✎</button>
         <button class="btn small danger" data-act="del" title="删除项目">🗑</button>
       </span>
+    </div>
+    <div class="card-sub">
+      ${rdBadge}
+      <span class="badge st-${st}">${esc(st)}</span>
     </div>
     <div class="progress-row">
       <div class="bar"><i style="width:${prog}%"></i></div>
@@ -581,15 +585,16 @@ async function bulkDelete() {
   if (!ids.length) return;
   const names = (projects || []).filter(p => ids.includes(p.id)).map(p => p.name);
   const preview = names.slice(0, 5).join("\n") + (names.length > 5 ? `\n…另 ${names.length - 5} 个` : "");
-  if (!confirm(`确定删除这 ${ids.length} 个项目吗？\n\n${preview}\n\n删除后界面上无法撤销（数据快照里还能恢复）。`)) return;
-  let ok = 0, fail = 0;
-  for (const pid of ids) {
-    try {
-      await api("/api/projects/" + pid, { method: "DELETE" });
-      ok++;
-    } catch (e) { fail++; }
+  if (!confirm(`确定删除这 ${ids.length} 个项目吗？\n\n${preview}\n\n删除前会自动拍一份快照，可在「数据恢复」里回滚。`)) return;
+  try {
+    const res = await api("/api/projects/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ ids, confirm: true }),
+    });
+    toast(`已删除 ${res.deleted.length} 个项目；快照：${res.backup}`);
+  } catch (e) {
+    toast("批量删除失败：" + e.message);
   }
-  toast(`已删除 ${ok} 个项目` + (fail ? `，${fail} 个失败` : ""));
   selectedPids.clear();
   await loadOverview();
   updateBulkBar();

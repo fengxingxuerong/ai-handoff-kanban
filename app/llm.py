@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import threading
 import time
 import urllib.error
@@ -118,6 +119,35 @@ def usable_endpoints(config_path: Path | None = None) -> list[dict]:
     return [ep for ep in eps if isinstance(ep, dict) and ep.get("api_keys")]
 
 
+def _normalize_config(cfg: dict) -> dict:
+    """兼容旧配置：补齐缺失字段。读旧文件与从 last-good 恢复共用这一处。"""
+    d = default_config()
+    ai = cfg.get("ai", {})
+    d["ai"].update({k: v for k, v in ai.items() if k in d["ai"]})
+    if "endpoints" in ai and ai["endpoints"]:
+        d["ai"]["endpoints"] = ai["endpoints"]
+    if "active_model" in ai and ai["active_model"]:
+        d["ai"]["active_model"] = ai["active_model"]
+    return d
+
+
+def config_last_good_file() -> Path:
+    """最近一次成功写入的配置副本；与 projects.json 的 last-good 同一口径。"""
+    return config_file().with_suffix(".json.last-good")
+
+
+def _write_config(cfg: dict) -> None:
+    f = config_file()
+    tmp = f.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as fp:
+        json.dump(cfg, fp, ensure_ascii=False, indent=2)
+    os.replace(tmp, f)
+    try:
+        shutil.copy2(f, config_last_good_file())
+    except Exception:
+        pass
+
+
 def load_config() -> dict:
     with _CFG_LOCK:
         f = config_file()
@@ -125,27 +155,28 @@ def load_config() -> dict:
             return default_config()
         try:
             with open(f, "r", encoding="utf-8") as fp:
-                cfg = json.load(fp)
-            # 兼容旧配置：补齐缺失字段
-            d = default_config()
-            ai = cfg.get("ai", {})
-            d["ai"].update({k: v for k, v in ai.items() if k in d["ai"]})
-            if "endpoints" in ai and ai["endpoints"]:
-                d["ai"]["endpoints"] = ai["endpoints"]
-            if "active_model" in ai and ai["active_model"]:
-                d["ai"]["active_model"] = ai["active_model"]
-            return d
+                return _normalize_config(json.load(fp))
         except Exception:
+            # 与 projects.json 的自愈对齐：先留证，再试 last-good；都没有才回默认值。
+            # 这样“设置文件坏了一次”不会静默把 Key 清空。
+            try:
+                shutil.copy2(f, f.with_suffix(".json.bak"))
+            except Exception:
+                pass
+            lf = config_last_good_file()
+            if lf.exists():
+                try:
+                    cfg = _normalize_config(json.loads(lf.read_text(encoding="utf-8")))
+                    _write_config(cfg)
+                    return cfg
+                except Exception:
+                    pass
             return default_config()
 
 
 def save_config(cfg: dict) -> None:
     with _CFG_LOCK:
-        f = config_file()
-        tmp = f.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as fp:
-            json.dump(cfg, fp, ensure_ascii=False, indent=2)
-        os.replace(tmp, f)
+        _write_config(cfg)
 
 
 def update_config(mutator) -> dict:
@@ -153,11 +184,7 @@ def update_config(mutator) -> dict:
     with _CFG_LOCK:
         cfg = load_config()
         mutator(cfg)
-        f = config_file()
-        tmp = f.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as fp:
-            json.dump(cfg, fp, ensure_ascii=False, indent=2)
-        os.replace(tmp, f)
+        _write_config(cfg)
         return cfg
 
 

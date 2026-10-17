@@ -24,6 +24,7 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from html import escape as html_escape
 from pydantic import BaseModel, Field, field_validator, ValidationError
 
 from . import llm
@@ -730,6 +731,12 @@ class ViewIn(BaseModel):
         return v if v in ("全部", *DEFAULT_STATUS) else "全部"
 
 
+class BulkDeleteIn(BaseModel):
+    """批量删除：一次请求完成预快照 + 全有或全无，避免逐条 DELETE 的半删状态。"""
+    ids: list[str] = Field(..., min_length=1, max_length=100)
+    confirm: bool = False
+
+
 # ---------------- 应用 ----------------
 
 app = FastAPI(title="AI 交接看板", docs_url=None, redoc_url=None)
@@ -760,9 +767,16 @@ async def guard_local_request(request: Request, call_next):
 @app.get("/")
 def index():
     f = Path(WEB_DIR) / "index.html"
-    if f.exists():
-        return FileResponse(f)
-    return PlainTextResponse("前端资源缺失，请检查安装包完整性", status_code=500)
+    if not f.exists():
+        return PlainTextResponse("前端资源缺失，请检查安装包完整性", status_code=500)
+    page = f.read_bytes().decode("utf-8")  # 保留 CRLF：frozen_smoke 会逐字节对账首页
+    token = os.environ.get("KANBAN_TOKEN", "")
+    if token:
+        # 桌面 UI 与脚本共用同一套写接口：不注入这一行，开启 Token 后 UI 会全部 401。
+        # 只在本地同源页面里放 token；威胁模型仍假定本机进程同权限。
+        meta = f'<meta name="kanban-token" content="{html_escape(token, quote=True)}">'
+        page = page.replace("</head>", f"  {meta}\n</head>", 1)
+    return HTMLResponse(page)
 
 
 # 前端静态资源：2026-09-28 之前的 index.html 是"CSS+JS 全内联"的单文件，
@@ -1328,6 +1342,45 @@ def delete_project(pid: str):
 
     _mutate_memories(drop_orphans)
     return {"ok": True}
+
+
+# ---- 批量删除（服务端一次完成预快照 + 全有或全无） ----
+
+@app.post("/api/projects/bulk-delete")
+def bulk_delete_projects(body: BulkDeleteIn):
+    """删除多个项目。逐条 DELETE 会在中途失败时留下半删状态；
+    这里先拍快照，再在同一个临界区内校验全部存在并一次性过滤。"""
+    if not body.confirm:
+        raise HTTPException(400, "批量删除需要 confirm=true")
+    ids = list(dict.fromkeys(body.ids))
+    if not ids:
+        raise HTTPException(400, "没有要删除的项目")
+
+    backup = create_backup()
+
+    def worker(data: dict):
+        projects = data.get("projects", [])
+        existing = {p.get("id") for p in projects if isinstance(p, dict)}
+        missing = [pid for pid in ids if pid not in existing]
+        if missing:
+            # 全部存在才落盘：部分 id 找不到时不删任何项目。
+            raise HTTPException(404, f"项目不存在：{', '.join(missing[:5])}")
+        keep = [p for p in projects if p.get("id") not in set(ids)]
+        data["projects"] = keep
+        return True, len(keep)
+
+    mutate(worker)
+
+    # 记忆与项目分开存：一次过滤掉被删项目的记忆，避免孤儿记忆占上限。
+    def drop_orphans(items: list[dict]):
+        keep = [m for m in items if m.get("pid") not in set(ids)]
+        changed = len(keep) != len(items)
+        if changed:
+            items[:] = keep
+        return changed, len(keep)
+
+    _mutate_memories(drop_orphans)
+    return {"ok": True, "deleted": ids, "backup": backup.get("folder", "")}
 
 
 # ---- 任务 CRUD ----
@@ -2218,14 +2271,40 @@ def memories_file() -> Path:
     return data_dir() / "memories.json"
 
 
+def memories_last_good_file() -> Path:
+    """最近一次成功写入的记忆副本；与 projects.json 的 last-good 同一口径。"""
+    return memories_file().with_suffix(".json.last-good")
+
+
+def _read_memories_file(f: Path) -> list[dict]:
+    data = json.loads(f.read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        raise ValueError("memories.json 顶层必须是列表")
+    return data
+
+
 def _load_memories() -> list[dict]:
     f = memories_file()
     if not f.exists():
         return []
     try:
-        data = json.loads(f.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
+        return _read_memories_file(f)
     except Exception:
+        # 与 projects.json 的自愈对齐：先留证，再从 last-good 救；都没有才返回空。
+        # 返回空不是“没有记忆”，而是“读不出来”——调用方（_mutate_memories）会在
+        # 下一次写入前先经过这里，至少 corrupt 原文不会被无声覆盖掉。
+        try:
+            shutil.copy2(f, f.with_suffix(".json.bak"))
+        except Exception:
+            pass
+        lf = memories_last_good_file()
+        if lf.exists():
+            try:
+                data = _read_memories_file(lf)
+                _save_memories(data)
+                return data
+            except Exception:
+                pass
         return []
 
 
@@ -2250,6 +2329,10 @@ def _save_memories(items: list[dict]) -> None:
     with open(tmp, "w", encoding="utf-8") as fp:
         json.dump(items, fp, ensure_ascii=False, indent=2)
     os.replace(tmp, f)
+    try:
+        shutil.copy2(f, memories_last_good_file())
+    except Exception:
+        pass
 
 
 MAX_MEMORIES = 500             # 记忆是"追加型"存储，按硬性约定 11 必须有上限

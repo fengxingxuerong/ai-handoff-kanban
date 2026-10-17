@@ -1483,3 +1483,49 @@ def test_milestone_row_delete_works_after_earlier_deletion(ui):
     rows.nth(0).locator("[data-act='removeMilestoneRow']").click()      # 乙的 data-arg 仍是 1
     assert page.locator("#f-milestones .ms-row").count() == 0, \
         "第二个 ✕ 没删掉自己的行（按下标删的错位又回来了）"
+
+
+def test_project_names_are_not_visually_truncated(fresh_server, browser):
+    """文字在 DOM 里不等于用户看得见：CSS ellipsis 不改 innerText。"""
+    names = [
+        "示例项目 A · 后台系统",
+        "示例项目 B · 内容流水线",
+        "示例项目 C · 文本润色工具",
+        "示例项目 D · 扫描器",
+    ]
+    for name in names:
+        make_project(fresh_server, name)
+
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+    page = ctx.new_page()
+    try:
+        page.goto(fresh_server.base + "/", wait_until="domcontentloaded")
+        page.wait_for_selector(".pcard", timeout=15000)
+        for width in (1280, 1440, 1920):
+            page.set_viewport_size({"width": width, "height": 900})
+            page.wait_for_timeout(150)
+            bad = page.eval_on_selector_all(
+                ".pcard .name",
+                "els => els.filter(e => e.scrollWidth > e.clientWidth + 1).length",
+            )
+            assert bad == 0, f"{width}px 下有 {bad} 个项目名被视觉截断"
+    finally:
+        ctx.close()
+
+
+def test_token_mode_desktop_ui_can_write(token_server, browser):
+    """开 KANBAN_TOKEN 后，桌面 UI 也必须能写；否则安全加固等于把界面变只读。"""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 820})
+    page = ctx.new_page()
+    try:
+        page.goto(token_server.base + "/", wait_until="domcontentloaded")
+        page.wait_for_selector("[data-act='openProjectModal']", timeout=15000)
+        page.click("[data-act='openProjectModal']")
+        page.fill("#f-name", "Token 模式项目")
+        page.click("[data-act='saveProject']")
+        page.wait_for_selector(".pcard:has-text('Token 模式项目')", timeout=15000)
+        status, data = token_server.get("/api/projects")
+        assert status == 200
+        assert any(p["name"] == "Token 模式项目" for p in data["projects"])
+    finally:
+        ctx.close()

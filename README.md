@@ -99,7 +99,9 @@ Windows 桌面应用（PyWebView 原生窗口，单文件 exe），内置深浅�
 
 ### 方式一：打包好的 exe（推荐日常使用）
 
-双击 `dist\AI交接看板.exe` 即可，无需安装 Python。首次启动自带示例项目，AI 端点已在本机配置好，开箱即用。
+双击 `dist\AI交接看板.exe` 即可，无需安装 Python。首次启动自带示例项目，看板开箱即用；AI 功能需要你在 AI 设置里填自己的 Key（发行包不会内置任何 Key）。
+
+> 运行环境：Windows 10/11 + Microsoft Edge WebView2 Runtime。Windows 11 通常自带；Windows 10 若启动空白，先安装 WebView2 Runtime。
 
 > 如果双击后窗口空白或没反应，看 `%USERPROFILE%\.ai-kanban\startup.log`，里面记录了后端启动全过程；
 > 打包后没有控制台，这个日志是唯一的排查入口。
@@ -167,7 +169,7 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
 ### 方式二：源码运行
 
 ```bat
-start_desktop.bat
+scripts\start_desktop.bat
 ```
 
 （首次需先 `pip install -r requirements.txt`）
@@ -322,9 +324,12 @@ AI 用例默认打本地假端点（`tests/llm_stub.py`，OpenAI 兼容），**�
 - **写接口字段白名单**：状态/优先级只接受固定取值，越界返回 422（避免异常值污染前端渲染）
 - **导出保存路径限制**：只允许 `.md` / `.txt` / `.markdown`，且拒绝写入系统目录（Windows/Program Files/AppData 等）
 - **可选访问令牌**：设置环境变量 `KANBAN_TOKEN=xxx` 后，所有写请求必须带 `X-Kanban-Token: xxx`。
-  桌面应用自身不受影响；用脚本/curl 操作时需要自行带上该头
+  服务端会把 token 注入首页 meta，桌面 UI 自动带上；用脚本/curl 操作时需要自行带上该头。
 - **不做用户鉴权**：单机单用户场景下任何本机进程都与当前用户同权限，因此本服务不防御本机进程，
   只防御来自浏览器/网络的跨站访问
+- **AI 数据边界**：只有你主动触发 AI 监管 / AI 指令 / 交接说明生成时，项目摘要才会发往你在设置里配置的 LLM 端点；
+  凭据会脱敏，但项目正文会离开本机。不配置 Key 时看板完全本地可用。
+- **备份包含配置**：手动备份与导入前备份会复制 `config.json`（含明文 API Key），换机或共享备份目录时请自行加密/清理。
 
 ### 密钥管理
 
