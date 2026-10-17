@@ -878,6 +878,7 @@ AI 简报，de1dfe2）；随后第四轮对标 claude-mem（99k★）深挖并�
 `pytest` 733 收集（728 通过 / 5 跳过 / 1 重跑，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
 33 个测试文件、687 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
 2026-10-17 新增 7 条回归：首页 token meta 注入、memories/config last-good 恢复、批量删除原子性与预快照、项目名视觉截断几何、token 模式下桌面 UI 可写；`frozen_smoke` 11/11。
+2026-10-17 真实模型验证：`KANBAN_LIVE=1 tests/test_ai.py` 5/5；`scripts/real_ai_test.py` 7/0（含 kimi-k3→AMD、NVIDIA→SenseNova 的失败回退）。
 **文档对账在 `tests/test_docs.py`**（2026-10-14 新增）：README/AGENTS.md 里写死的
 工具数、模块数、探针数、测试文件数与代码事实对账 —— 这类"只出现在散文里的数字"
 漂过好几次（探针 45→54、MCP 工具 17→23、模块 21→22），从此机械可查。

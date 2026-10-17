@@ -79,7 +79,7 @@ class Api:
 
         req = urllib.request.Request(self.base + path, data=data, method=method, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=120) as resp:  # 真实模型/交接生成可能超过 20s
                 raw = resp.read().decode("utf-8")
                 ct = resp.headers.get("content-type", "")
                 return resp.status, (json.loads(raw) if "json" in ct else raw)
