@@ -163,7 +163,9 @@ async function loadOverview() {
   } catch (e) {
     toast("加载失败：" + e.message);
     const grid = document.getElementById("grid");
-    if (grid && !grid.childElementCount) {          // 首屏就失败时不该留一个空白网格
+    // 判据是"还没渲染过真实卡片"，不是"网格里没有子元素" —— 首屏那三张骨架卡也是
+    // 子元素，用旧判据的话加载失败会永久停在骨架上（看着像一直在加载，实则是挂了）
+    if (grid && !grid.dataset.rendered) {
       grid.innerHTML = '<div style="grid-column:1/-1;padding:40px 10px;text-align:center;color:var(--text-dim)">'
         + "项目列表加载失败：" + esc(e.message)
         + ' <button class="btn" data-act="loadOverview">重试</button></div>';
@@ -183,7 +185,10 @@ function setFilter(el, f) {
 function renderOverview() {
   const q = (document.getElementById("search").value || "").trim().toLowerCase();
   let list = projects.filter(p => {
-    if (filter !== "全部" && p.status !== filter) return false;
+    // 「最近」按浏览记录筛，别混进状态判断里 —— 它不是一种项目状态
+    if (filter === "最近") {
+      if (!recentIds().includes(p.id)) return false;
+    } else if (filter !== "全部" && p.status !== filter) return false;
     if (!q) return true;
     // 这个 haystack 必须和输入框 placeholder 说的那几项一致（有一条测试逐字对账）。
     // 总览列表接口本来就不含 background / handoff_note，所以这里搜不到它们 ——
@@ -194,6 +199,9 @@ function renderOverview() {
                  + " " + (p.repo_path || "")).toLowerCase();
     return hay.includes(q);
   });
+  // 置顶的排最前：每天打开的那两三个项目不用每次翻找
+  const pins = pinnedIds();
+  if (pins.length) list.sort((a, b) => (pins.indexOf(b.id) >= 0) - (pins.indexOf(a.id) >= 0));
   document.getElementById("proj-count").textContent = "共 " + list.length + " 个项目";
   const grid = document.getElementById("grid");
   const empty = document.getElementById("empty");
@@ -212,42 +220,55 @@ function renderOverview() {
     msg.textContent = `「${filter}」状态下没有项目（共 ${projects.length} 个）—— 点「全部」看所有项目`;
   }
   grid.innerHTML = list.map(p => cardHTML(p)).join("");
+  grid.dataset.rendered = "1";   // 骨架屏让位给真实卡片；也是给失败分支的信号"已经有内容了"
   bindCardEvents();
 }
 
 function cardHTML(p) {
   const c = p.task_counts || {};
+  const pinned = isPinned(p.id);
   const st = STATUS_SET.has(p.status) ? p.status : "规划中";
   const pri = PRIORITY_SET.has(p.priority) ? p.priority : "中";
   const rd = (stats && stats.readiness || []).find(x => x.id === p.id);
   const prog = Math.max(0, Math.min(100, Number(p.progress) || 0));
   const rdBadge = rd ? `<span class="rd-badge rd-${rd.score >= 80 ? "hi" : rd.score >= 50 ? "mid" : "lo"}" title="交接就绪度 ${rd.score}/100">就绪 ${rd.score}</span>` : "";
+  // 五个计数原来各占一枚小药丸横着铺开（「待办 2 进行中 1 待审查 0 已完成 0 阻塞 0」），
+  // 五段文字等权重，而真正看得懂的信息只有"几个在动、几个卡住"。改成一条堆叠条 + 总数：
+  // 形状本身就是信息（哪一段粗），零值段自动不占宽度，还把卡片省下两行。
+  const SEG = [["待办", "todo"], ["进行中", "doing"], ["待审查", "review"],
+               ["已完成", "done"], ["阻塞", "blocked"]];
+  const total = SEG.reduce((a, [k]) => a + (Number(c[k]) || 0), 0) || p.total_tasks || 0;
+  const stack = `<div class="stack" role="img" aria-label="任务构成：`
+    + SEG.map(([k]) => `${k} ${c[k] || 0}`).join("、") + `">`
+    + SEG.map(([k, cls]) => Number(c[k] || 0) ? `<i class="s-${cls}" style="flex:${c[k]}"></i>` : "").join("")
+    + `</div>`;
   return `<div class="pcard" data-pid="${esc(p.id)}" tabindex="0" role="button" data-keyact="1">
-    <div class="top">
-      <div>
-        <div class="name">${esc(p.name)}${rdBadge}</div>
-        <div style="margin-top:6px"><span class="badge st-${st}">${esc(st)}</span>
-        <span class="badge pr-${pri}" style="background:transparent;padding-left:2px">优先级 ${esc(pri)}</span></div>
-      </div>
-      <div class="actions">
-        <button class="btn small" data-act="edit">编辑</button>
-        <button class="btn small danger" data-act="del">删除</button>
-      </div>
+    <div class="head">
+      <button class="btn small pin${pinned ? " on" : ""}" data-act="pin" aria-pressed="${pinned}"
+              title="${pinned ? "取消置顶" : "置顶（排在总览最前面）"}">${pinned ? "★" : "☆"}</button>
+      <span class="name" title="${esc(p.name)}">${esc(p.name)}</span>
+      ${rdBadge}
+      <span class="badge st-${st}">${esc(st)}</span>
+      <span class="actions">
+        <button class="btn small" data-act="edit" title="编辑项目">✎</button>
+        <button class="btn small danger" data-act="del" title="删除项目">🗑</button>
+      </span>
     </div>
     <div class="progress-row">
       <div class="bar"><i style="width:${prog}%"></i></div>
       <span class="num">${prog}%</span>
     </div>
-    <div class="stats">
-      <span class="stat s-todo">待办 <b>${c["待办"] || 0}</b></span>
-      <span class="stat s-doing">进行中 <b>${c["进行中"] || 0}</b></span>
-      <span class="stat s-review">待审查 <b>${c["待审查"] || 0}</b></span>
-      <span class="stat s-done">已完成 <b>${c["已完成"] || 0}</b></span>
-      <span class="stat s-blocked">阻塞 <b>${c["阻塞"] || 0}</b></span>
+    <div class="stack-row">
+      ${stack}
+      <span class="cnt">${total} 个任务</span>
     </div>
     ${p.next_action ? `<div class="next-action"><span class="lab">下一步</span>${esc(p.next_action)}</div>` : ""}
-    ${(p.tags && p.tags.length) ? `<div class="tags">${p.tags.map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
-    <div class="meta"><span>更新于 ${esc(p.updated_at)}</span><span>${p.total_tasks} 个任务</span></div>
+    <div class="card-foot">
+      <span class="pri-lab pr-${pri}">优先级 ${esc(pri)}</span>
+      ${(p.tags && p.tags.length) ? p.tags.map(t => `<span class="tag">${esc(t)}</span>`).join("") : ""}
+      <span class="spacer"></span>
+      <span>更新于 ${esc(p.updated_at)}</span>
+    </div>
   </div>`;
 }
 
@@ -261,14 +282,19 @@ function bindCardEvents() {
     const card = e.target.closest(".pcard");
     if (!card) return;
     const pid = card.dataset.pid;
-    if (e.target.closest(".actions")) {
-      const actBtn = e.target.closest("[data-act]");
-      if (!actBtn) return;            // 点在按钮外的空白处，不打开详情
-      const p = (projects || []).find(x => x.id === pid);
-      if (actBtn.dataset.act === "edit") openProjectModal(pid);
-      else confirmDeleteProject(pid, p ? p.name : "");
+    const actBtn = e.target.closest("[data-act]");
+    if (actBtn) {
+      const act = actBtn.dataset.act;
+      if (act === "pin") { togglePin(pid); return; }        // 卡片上的按钮不该顺带打开详情
+      if (act === "edit") { openProjectModal(pid); return; }
+      if (act === "del") {
+        const p = (projects || []).find(x => x.id === pid);
+        confirmDeleteProject(pid, p ? p.name : "");
+        return;
+      }
       return;
     }
+    if (e.target.closest(".actions")) return;              // 点在按钮外的空白处
     openDetail(pid);
   });
 }
@@ -287,7 +313,10 @@ const ACTIONS = {
   switchAITab: (arg) => switchAITab(arg),
   setFilter: (arg, ev, el) => setFilter(el, arg),
   showOverview: () => showOverview(),
-  openTrends: () => openTrends(),
+  openTrends: (arg) => openTrends(arg),
+  // 卡片上的置顶星标：实际分发在 bindCardEvents（卡片内的点击不走全局委托），
+  // 这里登记一份是为了契约（每个 data-act 都要在表里）兼兜底。
+  pin: (arg, ev, el) => togglePin(el.closest(".pcard") && el.closest(".pcard").dataset.pid),
   openAllPackage: () => openAllPackage(),
   openToday: () => openToday(),
   openInbox: () => openInbox(),
@@ -354,6 +383,8 @@ const ACTIONS = {
   writeAgentFiles: (arg, ev, el) => writeAgentFiles({ currentTarget: el }),
   copyPackage: () => copyPackage(),
   runSummarize: () => runSummarize(),
+  toggleHeaderMenu: (arg, ev, el) => toggleHeaderMenu(el),
+  togglePanel: (arg, ev, el) => togglePanel(el),
 };
 
 function runAction(name, ev, el) {
@@ -373,12 +404,121 @@ function runAction(name, ev, el) {
   }
 }
 
+// ============ 顶栏下拉菜单 ============
+// 之前 9 个按钮一字排开，窄窗口还会折行；现在只留高频的（今日 / 拍板）+ 三个图标按钮，
+// AI 指令 / AI 监管 / 会话捕获收进「✨ AI」下拉里，顶栏一眼看得出主次。
+// 键盘可达：菜单项是真 <button role="menuitem">，Tab 进得去，Esc 收得起。
+function closeHeaderMenus() {
+  document.querySelectorAll(".hmenu").forEach(m => { m.hidden = true; });
+  document.querySelectorAll('[data-act="toggleHeaderMenu"]')
+    .forEach(b => b.setAttribute("aria-expanded", "false"));
+}
+
+function toggleHeaderMenu(el) {
+  const menu = document.getElementById("hmenu-" + (el.dataset.arg || ""));
+  if (!menu) return;
+  const willOpen = menu.hidden;
+  closeHeaderMenus();                       // 同时只开一个
+  if (willOpen) {
+    menu.hidden = false;
+    el.setAttribute("aria-expanded", "true");
+    const first = menu.querySelector(".hmenu-item");
+    if (first) first.focus();               // 打开就把焦点送进去，键盘用户不用再 Tab
+  }
+}
+
 document.addEventListener("click", e => {
+  // 点到菜单外面就收起
+  if (!e.target.closest(".hmenu-wrap")) closeHeaderMenus();
   const el = e.target.closest("[data-act]");
   if (!el) return;
-  if (el.closest("#grid .pcard")) return;   // 项目卡片由 bindCardEvents 单独处理（需要 pid）
+  // 卡片内的点击一律交给 bindCardEvents（它要拿 pid）。这里必须写 closest(".pcard")，
+  // 不能写 closest("#grid .pcard") —— 后代组合选择器在 closest() 里不会按预期命中，
+  // 于是同一个按钮会被处理两次（2026-10-17 实测：★ 一次点击里"置顶"又"取消"，存了个空数组）。
+  // 这个坑一直是潜伏的：以前卡片里只有未注册进 ACTIONS 的 edit/del，第二次调用只留了条
+  // console.warn 看不见。
+  if (el.closest(".pcard")) return;
   runAction(el.dataset.act, e, el);
+  if (e.target.closest(".hmenu-item")) closeHeaderMenus();   // 菜单项在 wrap 内，选完要显式收
 });
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeHeaderMenus();
+});
+
+// ============ 详情页面板折叠 ============
+// 详情页左列十来块面板全展开要滚很久，而「项目背景 / 看板说的 vs 代码 / 项目记忆」是
+// 接手时才细看的参考信息，日常更关心任务与时间轴。这里让每块面板的**标题本身**成为开关
+// （h3 加 role=button + data-keyact，点击与 Enter/空格走同一条路），低频的默认收起,
+// 折叠态记在 localStorage，下次打开保持一致。
+// 默认收起只挑"接手时才细看"的两块。项目记忆**不折**：记决策/坑/约定是持续动作，
+// 而且它的列表本来就有 260px 自己的滚动区，展开也不会失控。
+const PANEL_DEFAULT_COLLAPSED = ["项目背景", "看板说的"];
+
+function _panelKey(panel, h3) {
+  return "kanban-panel-" + (panel.id || (h3.textContent || "").trim().slice(0, 14));
+}
+
+function _applyPanelCollapse(panel, collapsed) {
+  panel.classList.toggle("collapsed", collapsed);
+  const h3 = panel.querySelector(":scope > h3");
+  if (h3) h3.setAttribute("aria-expanded", String(!collapsed));
+}
+
+function initPanelCollapse() {
+  document.querySelectorAll(".panel").forEach(panel => {
+    const h3 = panel.querySelector(":scope > h3");
+    if (!h3 || h3.dataset.collapsible) return;
+    h3.dataset.collapsible = "1";
+    h3.dataset.act = "togglePanel";     // 复用全局 click 委托
+    h3.dataset.keyact = "1";            // 复用全局 keydown（Enter/空格 → click）
+    h3.tabIndex = 0;
+    h3.setAttribute("role", "button");
+    h3.classList.add("panel-head-toggle");
+    const text = (h3.textContent || "").trim();
+    let collapsed = false;
+    try { collapsed = localStorage.getItem(_panelKey(panel, h3)) === "1"; } catch (e) { collapsed = false; }
+    if (!collapsed && PANEL_DEFAULT_COLLAPSED.some(k => text.includes(k))) collapsed = true;
+    _applyPanelCollapse(panel, collapsed);
+  });
+}
+
+function togglePanel(el) {
+  const panel = el.closest(".panel");
+  if (!panel) return;
+  const collapsed = !panel.classList.contains("collapsed");
+  _applyPanelCollapse(panel, collapsed);
+  try { localStorage.setItem(_panelKey(panel, el), collapsed ? "1" : "0"); } catch (e) {}
+}
+
+// ============ 个人工作台偏好（置顶 / 最近访问） ============
+// 存 localStorage 而不是看板数据：这是**这台机器上这个人的浏览偏好**，不是项目事实。
+// 落进 projects.json 的话，它会跟着交接包 / 全项目导出跑到别人机器上，
+// 也会让 MCP 看到的项目对象平白多两个与项目本身无关的字段。
+function _lsList(key) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch (e) { return []; }
+}
+function pinnedIds() { return _lsList("kanban-pinned"); }
+function isPinned(pid) { return pinnedIds().includes(pid); }
+function togglePin(pid) {
+  if (!pid) return;
+  const cur = pinnedIds();
+  const i = cur.indexOf(pid);
+  if (i >= 0) cur.splice(i, 1); else cur.unshift(pid);
+  try { localStorage.setItem("kanban-pinned", JSON.stringify(cur)); } catch (e) {}
+  renderOverview();
+  toast(i >= 0 ? "已取消置顶" : "已置顶，会排在总览最前面");
+}
+function recentIds() { return _lsList("kanban-recent"); }
+function pushRecent(pid) {
+  if (!pid) return;
+  const cur = recentIds().filter(x => x !== pid);
+  cur.unshift(pid);
+  try { localStorage.setItem("kanban-recent", JSON.stringify(cur.slice(0, 8))); } catch (e) {}
+}
 
 // ============ AI 设置弹窗 Tab 切换 ============
 // 「设置 / 用量」是两个 tabpanel：切换只有一条路，aria-selected 与 hidden 同进退，
@@ -508,6 +648,7 @@ function setDetailState(mode, err, pid) {
 }
 
 async function openDetail(pid) {
+  pushRecent(pid);
   currentPid = pid;
   // 换项目看一眼就要一份现值：清掉上一份 git 缓存（同一次停留期间仍复用，
   // 免得每存一个任务就去跑一次 git log）
@@ -596,6 +737,7 @@ function renderDetail() {
   renderReadiness(p.id);
   renderMemories(p.id);
   renderMilestones();
+  renderTimeline();
   const tasks = sortTasks(p.tasks || [], taskSortMode);
   document.getElementById("d-task-total").textContent = "共 " + tasks.length + " 个任务";
   const cols = { "待办": "col-todo", "进行中": "col-doing", "待审查": "col-review", "已完成": "col-done", "阻塞": "col-blocked" };

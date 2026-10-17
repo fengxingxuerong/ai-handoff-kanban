@@ -22,6 +22,17 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 CHANNELS = ["msedge", "chrome"]
 
 
+def open_header_menu(page, act: str):
+    """从顶栏「✨ AI」下拉里选一项（AI 指令 / AI 监管 / 会话捕获）。
+
+    2026-10-17 顶栏分组后，这三个操作不再平铺在顶栏上，而是收进下拉菜单 ——
+    直接 open_header_menu(page, "openAICmd") 会因为菜单项 hidden 而超时。
+    先点开「✨ AI」再点菜单项，走的也正是用户真实的那条路径。
+    """
+    page.click("[data-act='toggleHeaderMenu']")
+    page.click(f".hmenu-item[data-act='{act}']")
+
+
 @pytest.fixture(scope="module")
 def browser():
     pw = sync_playwright().start()
@@ -318,7 +329,7 @@ def test_ai_report_renders_into_panel(ai_ui):
                       "risks": ["文档滞后"], "suggestions": [{"text": "补交接文档", "apply_to": "next_action"}]}],
         "global_suggestions": ["统一收口"],
     })
-    page.click("[data-act='openReport']")
+    open_header_menu(page, "openReport")
     page.wait_for_selector("#report-panel.show", timeout=15000)
 
     body = page.locator("#report-body")
@@ -335,7 +346,7 @@ def test_ai_command_needs_confirmation_before_writing(ai_ui):
                                  "title": "指令加的任务", "desc": "来自自然语言"}],
                     "reply": "好的"})
 
-    page.click("[data-act='openAICmd']")
+    open_header_menu(page, "openAICmd")
     page.wait_for_selector("#cmd-input", timeout=10000)
     page.fill("#cmd-input", "给指令目标项目加个任务：指令加的任务")
     page.click("#cmd-send-btn")
@@ -363,7 +374,7 @@ def test_executing_the_same_ai_command_twice_creates_once(ai_ui):
         {"type": "create_task", "project_id": pid, "title": "指令建的一条"},
         {"type": "create_project", "name": "指令建的项目"},
     ], "reply": "好"})
-    page.click("[data-act='openAICmd']")
+    open_header_menu(page, "openAICmd")
     page.wait_for_selector("#cmd-input", timeout=10000)
     page.fill("#cmd-input", "建一条任务，再顺手开一个叫「指令建的项目」的项目")
     page.click("#cmd-send-btn")
@@ -388,7 +399,7 @@ def test_ai_command_update_sends_a_patch_not_a_read_modify_put(ai_ui):
     pid = make_project(api, "指令只改进度的项目", handoff_note="这一句不该被牵连")["id"]
     stub.push_json({"actions": [{"type": "update_project", "project_id": pid,
                                  "field": "progress", "value": 66}], "reply": "好"})
-    page.click("[data-act='openAICmd']")
+    open_header_menu(page, "openAICmd")
     page.wait_for_selector("#cmd-input", timeout=10000)
     page.fill("#cmd-input", "把「指令只改进度的项目」进度改成 66%")
     page.click("#cmd-send-btn")
@@ -767,7 +778,7 @@ def test_ai_action_type_cannot_inject_markup(ai_ui):
     pid = make_project(api, "指令注入靶")["id"]
     stub.push_json({"actions": [{"type": '"><img id=tag-probe src=x>',
                                  "project_id": pid, "title": "注入探针"}], "reply": "r"})
-    page.click("[data-act='openAICmd']")
+    open_header_menu(page, "openAICmd")
     page.wait_for_selector("#cmd-input", timeout=10000)
     page.fill("#cmd-input", "随便下个指令")
     page.click("#cmd-send-btn")
@@ -952,7 +963,7 @@ def test_closing_command_modal_abandons_pending_actions(ai_ui):
     page, api, stub, _ = ai_ui
     make_project(api, "放弃操作项目")
     stub.push_json({"actions": [{"type": "create_project", "name": "不该被建出来"}], "reply": "r"})
-    page.click("[data-act='openAICmd']")
+    open_header_menu(page, "openAICmd")
     page.wait_for_selector("#cmd-input", timeout=10000)
     page.fill("#cmd-input", "随便建个项目")
     page.click("#cmd-send-btn")
@@ -961,7 +972,7 @@ def test_closing_command_modal_abandons_pending_actions(ai_ui):
     page.keyboard.press("Escape")
     page.wait_for_selector("#ai-cmd-modal", state="hidden", timeout=10000)
 
-    page.click("[data-act='openAICmd']")
+    open_header_menu(page, "openAICmd")
     page.wait_for_selector("#ai-cmd-modal.show", timeout=10000)
     assert not page.locator("#cmd-exec-row").is_visible(), "重开还挂着上一次的确认按钮"
     names = [x["name"] for x in api.get("/api/projects")[1]["projects"]]
@@ -1004,7 +1015,7 @@ def test_custom_tags_are_visible_and_reset_between_projects(ui):
 def test_session_scan_button_clears_loading_state(ui):
     """扫描到 0 条会话时以前直接 return，跳过收尾 → 按钮永久停在转圈态"""
     page, api, _ = ui
-    page.click("[data-act='openSessionCapture']")
+    open_header_menu(page, "openSessionCapture")
     page.wait_for_selector("#session-modal.show", timeout=10000)
     page.click("[data-act='scanSessions']")
     # 空结果那条分支以前直接 return、跳过收尾；无论扫到几条，收尾都必须执行
@@ -1342,7 +1353,7 @@ def test_trends_modal_renders_chart_after_a_report(ai_ui):
                       "risks": [], "suggestions": []}],
         "global_suggestions": [],
     })
-    page.click("[data-act='openReport']")
+    open_header_menu(page, "openReport")
     page.wait_for_selector("#report-panel.show", timeout=15000)
     page.locator("#report-body").locator("text=节奏正常").first.wait_for(timeout=15000)
     # 遮罩与返回按钮都是 closeReport，必须点面板里那个 —— 点遮罩会被面板挡住点不到
@@ -1408,7 +1419,7 @@ def test_session_capture_full_flow_to_project(ai_ui, tmp_path):
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("[data-act='openProjectModal']", timeout=20000)
 
-    page.click("[data-act='openSessionCapture']")
+    open_header_menu(page, "openSessionCapture")
     page.wait_for_selector("#session-modal.show", timeout=10000)
     page.wait_for_selector(".sess-item", timeout=15000)
     # 本机真实的 Claude Code 会话也会被扫进来，必须点名自己的那个文件

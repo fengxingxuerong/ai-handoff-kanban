@@ -450,6 +450,7 @@ async function loadVersion() {
     document.getElementById("app-version").textContent = "版本信息读取失败";
   }
 }
+initPanelCollapse();
 loadViews();
 loadVersion();
 loadOverview();

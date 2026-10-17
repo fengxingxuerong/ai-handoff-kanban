@@ -72,17 +72,34 @@ function renderDash() {
     <div class="bar-row"><span class="b-name" title="${esc(p.name)}">${esc(p.name)}</span>
     <div class="b-track"><div class="b-fill" style="width:${p.progress}%"></div></div>
     <span class="b-num">${p.progress}%</span></div>`).join("");
+
+  // 原来这里铺了 9 张同样大小的统计卡，九个数字等权重地排在眼前 —— 真正的重点
+  // （逾期/临期/阻塞这些"要动手的"）反而淹在里面。现在压成 3 个 KPI：
+  // 规模（项目）、体量（任务）、以及唯一需要你立刻关注的「需要关注」。
+  const done = sd["已完成"] || 0, doing = sd["进行中"] || 0;
+  const planning = sd["规划中"] || 0, paused = sd["已暂停"] || 0;
+  const blocked = stats.blocked_tasks || 0;
+  const duesoon = stats.duesoon_tasks || 0;
+  const overdue = stats.overdue_tasks || 0;
+  const attention = blocked + duesoon + overdue;
+
   el.innerHTML = `
-    <div class="stat-cards">
-      <div class="stat-card"><span class="s-num accent">${stats.project_total}</span><span class="s-lab">项目总数</span></div>
-      <div class="stat-card"><span class="s-num" style="color:var(--blue)">${sd["进行中"] || 0}</span><span class="s-lab">进行中</span></div>
-      <div class="stat-card"><span class="s-num green">${sd["已完成"] || 0}</span><span class="s-lab">已完成</span></div>
-      <div class="stat-card"><span class="s-num purple">${stats.total_tasks}</span><span class="s-lab">任务总数</span></div>
-      <div class="stat-card"><span class="s-num red">${stats.blocked_tasks}</span><span class="s-lab">阻塞任务</span></div>
-      <div class="stat-card"><span class="s-num orange">${stats.duesoon_tasks || 0}</span><span class="s-lab">临期任务(2天内)</span></div>
-      <div class="stat-card"><span class="s-num ${stats.overdue_tasks ? "red" : ""}" style="${stats.overdue_tasks ? "" : "color:var(--text-faint)"}">${stats.overdue_tasks || 0}</span><span class="s-lab">逾期任务</span></div>
-      <div class="stat-card"><span class="s-num accent">${stats.avg_progress}%</span><span class="s-lab">平均进度</span></div>
-      <div class="stat-card"><span class="s-num orange">${stats.avg_readiness}</span><span class="s-lab">平均就绪度</span></div>
+    <div class="kpi-row">
+      <div class="kpi accent">
+        <span class="k-lab">项目总数</span>
+        <span class="k-num">${stats.project_total}</span>
+        <span class="k-sub">进行中 ${doing} · 规划中 ${planning} · 已暂停 ${paused} · 已完成 ${done}</span>
+      </div>
+      <div class="kpi blue">
+        <span class="k-lab">任务总数</span>
+        <span class="k-num">${stats.total_tasks}</span>
+        <span class="k-sub">平均进度 ${stats.avg_progress}% · 平均就绪度 ${stats.avg_readiness}</span>
+      </div>
+      <div class="kpi ${attention ? "alert" : "ok"}">
+        <span class="k-lab">需要关注</span>
+        <span class="k-num">${attention}</span>
+        <span class="k-sub">${attention ? `逾期 ${overdue} · 临期 ${duesoon} · 阻塞 ${blocked}` : "没有逾期 / 临期 / 阻塞的任务 👍"}</span>
+      </div>
     </div>
     <div class="chart-row">
       <div class="chart-card"><h4>📊 项目状态分布</h4>
@@ -147,21 +164,27 @@ function renderReadiness(pid) {
 }
 
 // ============ 健康分趋势图 ============
-async function openTrends() {
+async function openTrends(arg) {
   openModal("trend-modal");
   document.getElementById("trend-body").innerHTML = '<div class="r-loading"><div class="spinner"></div><div>加载趋势数据…</div></div>';
+  // arg === "current"：从详情页进来，只看这个项目；总览那枚按钮不带参 = 看全部项目
+  const onlyCurrent = arg === "current" && !!current;
   try {
     const d = await api("/api/ai/trends");
-    renderTrends(d.series || []);
+    let series = d.series || [];
+    if (onlyCurrent) series = series.filter(s => s.name === current.name);
+    renderTrends(series, onlyCurrent);
   } catch (e) {
     document.getElementById("trend-body").innerHTML = '<div class="trend-empty" style="color:var(--red)">加载失败：' + esc(e.message) + "</div>";
   }
 }
 
-function renderTrends(series) {
+function renderTrends(series, onlyCurrent) {
   const body = document.getElementById("trend-body");
   if (!series.length) {
-    body.innerHTML = '<div class="trend-empty"><div class="big">📉</div>还没有监管报告数据。先去「📊 AI 监管」生成报告，就能看到各项目健康分随时间的趋势。</div>';
+    body.innerHTML = onlyCurrent
+      ? '<div class="trend-empty"><div class="big">📉</div>这个项目还没有监管报告。点顶栏「✨ AI → 📊 AI 监管」跑一次，之后这里就会出现它的健康分走势。</div>'
+      : '<div class="trend-empty"><div class="big">📉</div>还没有监管报告数据。先去「📊 AI 监管」生成报告，就能看到各项目健康分随时间的趋势。</div>';
     return;
   }
   const times = [...new Set(series.flatMap(s => (s.points || []).map(p => p.time)))].sort();
@@ -500,6 +523,75 @@ async function renderReality() {
     `<div class="verdict ${v[0]}">${v[1]}</div>`).join("");
 }
 
+// ============ 截止时间轴 ============
+// 详情页此前只有两个维度：状态（看板五列）和依赖顺序（依赖图）—— 唯独没有**时间**。
+// 任务设了 due_date 之后，界面上只落到卡片上一行小字和仪表盘里的两个计数，
+// 看不出"这周要交几件、哪件已经拖了"。这里把设了截止的未完成任务按日期排成一条轴。
+// 口径与后端一致：due_date 只认 YYYY-MM-DD（_sanitize 会归一），逾期按自然日算。
+function renderTimeline() {
+  const panel = document.getElementById("timeline-panel");
+  const body = document.getElementById("timeline-body");
+  const note = document.getElementById("timeline-note");
+  if (!panel || !body || !current) return;
+
+  const DAY = 86400000;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dated = (current.tasks || []).filter(t => t.due_date);
+  const open = dated.filter(t => t.status !== "已完成");
+
+  if (!open.length) {
+    panel.style.display = "block";
+    body.innerHTML = dated.length
+      ? '<div class="tl-empty">所有设了截止日期的任务都已完成 ✓</div>'
+      : '<div class="tl-empty">还没有任务设截止日期。<br>给任务填上「截止日期」后，这里会按时间排出来'
+        + '（<b>逾期</b>红 · <b>今天</b>橙 · 越远越淡）。</div>';
+    if (note) note.textContent = "";
+    return;
+  }
+
+  const groups = new Map();
+  for (const t of open) {
+    const d = String(t.due_date).slice(0, 10);
+    if (!groups.has(d)) groups.set(d, []);
+    groups.get(d).push(t);
+  }
+  const days = [...groups.keys()].sort();
+  const rows = days.map(d => {
+    const diff = Math.round((new Date(d + "T00:00:00") - today) / DAY);
+    const [cls, lab] = diff < 0 ? ["over", `逾期 ${-diff} 天`]
+      : diff === 0 ? ["today", "今天"]
+      : diff === 1 ? ["soon", "明天"]
+      : diff <= 7 ? ["soon", `${diff} 天后`]
+      : ["later", `${diff} 天后`];
+    const items = groups.get(d).map(t =>
+      `<span class="tl-chip st-${taskStCls(t.status)}" title="${esc(t.title)}｜${esc(t.status)}｜优先级 ${esc(priCls(t.priority))}">${esc(t.title)}</span>`).join("");
+    return `<div class="tl-row ${cls}">
+      <div class="tl-date"><b>${esc(d.slice(5))}</b><span>${lab}</span></div>
+      <div class="tl-items">${items}</div>
+    </div>`;
+  }).join("");
+
+  // 逾期多少条要明说 —— 只画颜色不报数，等于把"要不要马上动手"交给用户去数
+  const overdue = days.filter(d => new Date(d + "T00:00:00") < today)
+    .reduce((a, d) => a + groups.get(d).length, 0);
+  const doneCount = dated.length - open.length;
+  const bits = [`${open.length} 条未完成设了截止`];
+  bits.push(overdue ? `${overdue} 条已逾期` : "没有逾期");
+  if (doneCount) bits.push(`另有 ${doneCount} 条已完成`);
+  note.textContent = bits.join(" · ");
+
+  body.innerHTML = rows;
+  panel.style.display = "block";
+}
+
+// 依赖图的描边颜色 = 任务状态（后端 dep_graph_svg 上的色），但图上从来没有说明 ——
+// 不解释颜色的图等于让人猜。图例与图同一处渲染，跟着主题走。
+function graphLegend() {
+  return `<div class="graph-legend">${["待办", "进行中", "待审查", "已完成", "阻塞"]
+    .map(s => `<span><i class="st-${s}"></i>${s}</span>`).join("")}</div>`;
+}
+
 /**
  * 依赖图：画的是"这堆活的形状"，SVG 由后端那份 `dep_graph_svg` 生成
  * （前端不再画第二遍 —— 同一件事两套实现是本项目反复栽的形状）。
@@ -521,7 +613,7 @@ async function renderGraph() {
       body.innerHTML = "";
       return;
     }
-    body.innerHTML = g.svg;
+    body.innerHTML = g.svg + graphLegend();
     const bits = [g.truncated ? `共 ${g.nodes} 条，只画前 ${g.shown} 条` : `${g.nodes} 条任务`];
     // 末列里可能混着"第 5 层"的节点，图上看着像并行、其实有前后关系 —— 不标注就是图在撒谎
     if (g.collapsed) bits.push("深于 4 层的已并入末列，末列内可能仍有先后");

@@ -26,16 +26,26 @@
     </div>
   </div>
   <div class="header-actions">
-    <button class="btn" data-act="openAICmd">🤖 AI 指令</button>
-    <button class="btn" data-act="openReport">📊 AI 监管</button>
     <button class="btn" data-act="openToday" title="跨项目列出依赖已满足、现在就能动手的任务">☀️ 今日</button>
     <button class="btn" data-act="openInbox" id="inbox-btn" title="需要你拍板的事：逾期 / 待审查 / 阻塞——只有等人的才进这里">
       🔔 拍板<span class="inbox-badge" id="inbox-badge" style="display:none">0</span></button>
+    <div class="hmenu-wrap">
+      <button class="btn" id="hmenu-ai-btn" data-act="toggleHeaderMenu" data-arg="ai"
+              aria-haspopup="true" aria-expanded="false" aria-controls="hmenu-ai" title="AI 相关操作">
+        ✨ AI<span class="caret" aria-hidden="true">▾</span></button>
+      <div class="hmenu" id="hmenu-ai" role="menu" aria-labelledby="hmenu-ai-btn" hidden>
+        <button class="hmenu-item" role="menuitem" data-act="openAICmd">
+          <span class="hm-t">🤖 AI 指令</span><span class="hm-s">用大白话建项目 / 改状态 / 写交接</span></button>
+        <button class="hmenu-item" role="menuitem" data-act="openReport">
+          <span class="hm-t">📊 AI 监管</span><span class="hm-s">跨项目健康分与风险洞察</span></button>
+        <button class="hmenu-item" role="menuitem" data-act="openSessionCapture">
+          <span class="hm-t">📥 会话捕获</span><span class="hm-s">扫描本机 AI 会话并提炼入库</span></button>
+      </div>
+    </div>
     <span class="header-sep" aria-hidden="true"></span>
-    <button class="btn" data-act="openGlobalSearch" title="全局任务搜索（Ctrl+K）">🔎</button>
-    <button class="btn" data-act="openSessionCapture" title="捕获本机 AI 工具会话并提炼入库">📥 捕获</button>
-    <button class="btn" data-act="toggleTheme" title="切换深浅色主题" id="theme-btn">🌙</button>
-    <button class="btn" data-act="openAISettings" title="AI 设置">⚙️</button>
+    <button class="btn icon" data-act="openGlobalSearch" title="全局任务搜索（Ctrl+K）">🔎</button>
+    <button class="btn icon" data-act="toggleTheme" title="切换深浅色主题" id="theme-btn">🌙</button>
+    <button class="btn icon" data-act="openAISettings" title="AI 设置">⚙️</button>
     <span class="header-sep" aria-hidden="true"></span>
     <button class="btn primary" data-act="openProjectModal">＋ 新建项目</button>
   </div>
@@ -49,6 +59,7 @@
   <button class="chip" data-f="规划中" data-act="setFilter" data-arg="规划中">规划中</button>
   <button class="chip" data-f="已暂停" data-act="setFilter" data-arg="已暂停">已暂停</button>
   <button class="chip" data-f="已完成" data-act="setFilter" data-arg="已完成">已完成</button>
+  <button class="chip" data-f="最近" data-act="setFilter" data-arg="最近" title="最近打开过的项目（只记在本机）">🕘 最近</button>
   <div class="spacer"></div>
   <span class="view-ctl">
     <select id="view-sel" title="按已保存的筛选条件快速切换" aria-label="已保存的视图">
@@ -67,7 +78,11 @@
 <!-- 总览视图 -->
 <div id="view-overview">
   <div id="dash"></div>
-  <div class="grid" id="grid"></div>
+  <div class="grid" id="grid">
+    <div class="skel-card"></div>
+    <div class="skel-card"></div>
+    <div class="skel-card"></div>
+  </div>
   <div class="empty" id="empty" style="display:none">
     <div class="big">🗂️</div>
     <div id="empty-msg">还没有项目，点右上角「新建项目」开始搭建你的交接看板吧</div>
@@ -84,7 +99,8 @@
       <span class="badge" id="d-status"></span>
       <span class="badge pr-" id="d-priority"></span>
       <div class="spacer"></div>
-<button class="btn" data-act="openTaskModal">＋ 新建任务</button>
+      <button class="btn" data-act="openTaskModal">＋ 新建任务</button>
+      <button class="btn" data-act="openTrends" data-arg="current" title="只看这个项目的健康分走势">📈 趋势</button>
       <button class="btn" data-act="openAssignModal" title="把指定优先级、未完成、依赖已就绪的任务批量指派给某个智能体">🤖 自动分配</button>
       <button class="btn" data-act="editProject">✎ 编辑项目</button>
       <button class="btn danger" data-act="deleteProject">🗑 删除</button>
@@ -182,6 +198,12 @@
       </div>
 
       <div>
+        <div class="panel" id="timeline-panel" style="display:none">
+          <h3 style="justify-content:space-between">⏱ 截止时间轴
+            <span id="timeline-note" style="color:var(--text-faint);font-size:11px;font-weight:400;text-transform:none;letter-spacing:0"></span>
+          </h3>
+          <div id="timeline-body"></div>
+        </div>
         <div class="panel" id="graph-panel" style="display:none">
           <h3 style="justify-content:space-between">🧬 依赖形状
             <span id="graph-note" style="color:var(--text-faint);font-size:11px;font-weight:400;text-transform:none;letter-spacing:0"></span>
@@ -237,6 +259,7 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="proj-modal-title">
     <div class="mhead"><h2 id="proj-modal-title">新建项目</h2><button class="btn icon" data-act="closeModal" data-arg="proj-modal">✕</button></div>
     <div class="mbody">
+      <div class="form-section"><span>基本信息</span></div>
       <div class="field"><label>项目名称 <span class="req">*</span></label><input id="f-name" placeholder="例如：EduSmart 学生管理系统" data-enter="saveProject"></div>
       <div class="row3">
         <div class="field"><label>状态</label><select id="f-status">
@@ -260,6 +283,7 @@
         </div>
 <input id="f-tag-input" placeholder="输入新标签后按回车添加" style="margin-top:8px">
       </div>
+      <div class="form-section"><span>交接信息（新智能体接手时会优先读这里）</span></div>
       <div class="field">
         <label>里程碑（可选，用于把任务归进发布节点）</label>
         <div id="f-milestones" aria-label="里程碑列表"></div>
@@ -286,8 +310,10 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
     <div class="mhead"><h2 id="task-modal-title">新建任务</h2><button class="btn icon" data-act="closeModal" data-arg="task-modal">✕</button></div>
     <div class="mbody">
+      <div class="form-section"><span>基本信息</span></div>
       <div class="field"><label>任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调" data-enter="saveTask"></div>
       <div class="field"><label>任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、背景……"></textarea></div>
+      <div class="form-section"><span>验收与关联（会给接手的人看）</span></div>
       <div class="field"><label>验收标准（可选，一行一条——「怎么算完成」写清楚，验收和交接都有据可依）</label>
         <textarea id="t-acceptance" rows="3" placeholder="例如：&#10;全部用例通过&#10;README 补上用法一节"></textarea>
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">最多 10 条、单条 120 字；会带进交接包与接手页，接手的人照着验收</div>
@@ -296,6 +322,7 @@
       <div class="field"><label>前置任务（可选，按住 Ctrl 多选）</label><select id="t-deps" multiple size="4"></select>
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了前置，交接包与 AGENTS.md 会按依赖排好顺序，AI 也能直接问「现在该做哪个」</div>
       </div>
+      <div class="form-section"><span>排期与指派</span></div>
       <div class="row3">
         <div class="field"><label>状态</label><select id="t-status">
           <option>待办</option><option>进行中</option><option>待审查</option><option>已完成</option><option>阻塞</option>

@@ -960,3 +960,199 @@ header {
 }
 #recover-list .recover-item:first-child { border-top: none; }
 .recover-desc { color: var(--text-faint); font-size: 11px; }
+
+/* ============================================================================
+   2026-10-17 信息架构轮：顶栏分组 / 总览 KPI / 卡片降噪
+   ----------------------------------------------------------------------------
+   治的是"九个东西等权重摊在眼前"——主次分不出，重点（要动手的）淹在里面：
+     · 顶栏 9 个平铺按钮 → 高频前置 + 图标按钮 + 「✨ AI」下拉
+     · 总览 9 张等大统计卡 → 3 个 KPI（只有"需要关注"带告警色）
+     · 项目卡 8 行 → 5 行：五个计数药丸并成一条堆叠条，优先级/标签/时间收进页脚
+   全是新类名（.kpi / .stack / .head / .card-foot），旧的 .stat-cards / .stats
+   保留不动，避免误伤别处。
+   ========================================================================== */
+
+/* —— 顶栏下拉 —— */
+.hmenu-wrap { position: relative; display: inline-flex; }
+.hmenu-wrap .caret { font-size: 9px; margin-left: 4px; opacity: .65; }
+.hmenu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
+  min-width: 236px; padding: 6px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.hmenu[hidden] { display: none; }
+.hmenu-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  width: 100%; text-align: left; cursor: pointer;
+  padding: 8px 10px; border: 0; border-radius: var(--r-sm);
+  background: transparent; color: var(--text); font: inherit; font-size: 13px;
+  transition: background var(--t-fast) var(--ease);
+}
+.hmenu-item:hover, .hmenu-item:focus-visible { background: var(--card-hover); }
+.hmenu-item .hm-t { font-weight: 600; }
+.hmenu-item .hm-s { font-size: 11px; color: var(--text-faint); }
+
+/* —— 总览 KPI —— */
+.kpi-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+  gap: 12px; margin-bottom: 12px;
+}
+.kpi {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 14px 16px; border-radius: var(--radius);
+  background: var(--card); border: 1px solid var(--border);
+  position: relative; overflow: hidden;
+}
+.kpi::before {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 3px;
+  background: var(--accent-line);
+}
+.kpi.alert { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
+.kpi.alert::before { background: var(--red); }
+.kpi.ok::before { background: var(--green); }
+.kpi .k-lab { font-size: 11.5px; color: var(--text-faint); letter-spacing: .03em; }
+.kpi .k-num {
+  font-size: 26px; font-weight: 800; line-height: 1.15; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.kpi .k-sub { font-size: 11px; color: var(--text-dim); }
+.kpi.accent .k-num { color: var(--accent); }
+.kpi.blue .k-num { color: var(--blue); }
+.kpi.alert .k-num { color: var(--red); }
+.kpi.ok .k-num { color: var(--green); }
+
+/* —— 任务构成堆叠条（KPI / 项目卡共用一套色） —— */
+.stack {
+  display: flex; height: 8px; border-radius: var(--r-pill);
+  overflow: hidden; background: var(--bg-soft);
+}
+.stack > i { display: block; height: 100%; min-width: 3px; }
+.stack > i.s-todo { background: var(--gray); }
+.stack > i.s-doing { background: var(--blue); }
+.stack > i.s-review { background: var(--purple); }
+.stack > i.s-done { background: var(--green); }
+.stack > i.s-blocked { background: var(--red); }
+
+/* —— 项目卡降噪 —— */
+.pcard .head { display: flex; align-items: center; gap: 8px; }
+.pcard .head .name {
+  flex: 1; min-width: 0; font-size: 15px; font-weight: 700; letter-spacing: .01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pcard .head .badge { flex-shrink: 0; }
+.pcard .actions { flex-shrink: 0; }
+.pcard .stack-row { display: flex; align-items: center; gap: 10px; }
+.pcard .stack-row .stack { flex: 1; }
+.pcard .stack-row .cnt {
+  font-size: 11.5px; color: var(--text-dim); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pcard .card-foot {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 11px; color: var(--text-faint); margin-top: auto;
+}
+.pcard .card-foot .spacer { flex: 1; min-width: 8px; }
+.pri-lab { font-size: 11px; font-weight: 600; }
+
+/* —— 详情页「截止时间轴」——
+   看板管状态、依赖图管顺序，时间这一维此前完全缺位。色带含义：
+   逾期红 / 今天橙 / 一周内中性描边 / 更远淡描边；条内的 chip 复用 st-* 的状态配色。 */
+#timeline-body { display: flex; flex-direction: column; gap: 6px; }
+.tl-row {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 6px 8px; border-radius: var(--r-sm); background: var(--bg-soft);
+  border-left: 3px solid var(--border);
+}
+.tl-row.over {
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  border-left-color: var(--red);
+}
+.tl-row.today {
+  background: color-mix(in srgb, var(--orange) 10%, transparent);
+  border-left-color: var(--orange);
+}
+.tl-row.soon { border-left-color: var(--accent-line); }
+.tl-row.later { border-left-color: var(--border-soft); }
+.tl-date {
+  display: flex; flex-direction: column; flex-shrink: 0;
+  min-width: 62px; font-size: 10.5px; color: var(--text-faint);
+}
+.tl-date b { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.tl-row.over .tl-date b, .tl-row.over .tl-date span { color: var(--red); }
+.tl-row.today .tl-date b, .tl-row.today .tl-date span { color: var(--orange); }
+.tl-items { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 0; }
+.tl-chip {
+  font-size: 11.5px; padding: 2px 8px; border-radius: var(--r-xs);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tl-empty { font-size: 12px; color: var(--text-faint); line-height: 1.75; }
+
+/* —— 详情页面板折叠 ——
+   标题即开关（h3 带 role=button + data-keyact）。低频面板默认收起，把"要滚很久"压下来；
+   折叠态在 localStorage，跨次打开保持一致。 */
+.panel-head-toggle { cursor: pointer; user-select: none; }
+.panel-head-toggle::after {
+  content: "▾"; margin-left: auto; padding-left: 8px;
+  font-size: 10px; color: var(--text-faint);
+  transition: transform var(--t) var(--ease);
+}
+.panel.collapsed > h3.panel-head-toggle::after { transform: rotate(-90deg); }
+.panel.collapsed > *:not(h3) { display: none; }
+.panel-head-toggle:focus-visible {
+  outline: none; border-radius: var(--r-xs);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+/* —— 卡片置顶星标（个人工作台）——
+   常显而不是 hover 才出现：星标本身就是"这个我置顶了"的状态，藏起来等于白置顶。 */
+.pcard .pin {
+  flex-shrink: 0; padding: 1px 5px; font-size: 13px; line-height: 1;
+  color: var(--text-faint); background: transparent; border-color: transparent;
+}
+.pcard .pin:hover { color: var(--orange); }
+.pcard .pin.on { color: var(--orange); }
+
+/* —— 依赖图图例：描边色 = 状态 —— */
+.graph-legend {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  margin-top: 10px; font-size: 11px; color: var(--text-dim);
+}
+.graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.graph-legend i {
+  width: 9px; height: 9px; border-radius: 3px;
+  display: inline-block; background: currentColor;
+}
+
+/* —— 弹窗表单分区标题 ——
+   项目弹窗 10 个字段、任务弹窗 11 个，一路平铺下来分不清哪几项是一组。
+   分区标题带一条延伸的分隔线，把「基本信息 / 交接信息 / 验收与关联 / 排期与指派」分开。 */
+.form-section {
+  display: flex; align-items: center; gap: 10px;
+  margin: 6px 0 10px; font-size: 11.5px; font-weight: 600;
+  color: var(--text-dim); letter-spacing: .04em;
+}
+.form-section::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* —— 首屏骨架卡 ——
+   数据回来的那一瞬之前，网格里什么都不画 = 一块白；有骨架至少说明"在加载"。
+   尊重 prefers-reduced-motion：关掉流光只留静态底色。 */
+.skel-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); height: 172px;
+  position: relative; overflow: hidden;
+}
+.skel-card::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%,
+    color-mix(in srgb, var(--text) 7%, transparent) 50%, transparent 70%);
+  animation: skel-sweep 1.4s ease-in-out infinite;
+}
+@keyframes skel-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel-card::after { animation: none; opacity: .45; }
+}
