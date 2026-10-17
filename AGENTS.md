@@ -788,6 +788,18 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   步骤清单里有「装 Playwright 自带 chromium（界面门禁的第三级降级）」且成功（runner 上没有系统
   Edge/Chrome，走的就是这级降级），actions 大版本兼容也一并验证。
   **改 workflow 一律按"它会被真执行"来写** —— 这句话现在有实测背书。
+  **2026-10-18 连跑两次**：`fa9bfac`（探针 mtime 契约 + 版本号对账门禁）首跑**红在一条前端 E2E**
+  （`tests/test_frontend_e2e.py::test_detail_view_skips_rebuilding_the_hidden_overview`，
+  run `39052162314`，报"切回总览时没有补渲染"），同一份代码**本地全绿** —— 根因是用例赌了机器快慢：
+  `showOverview` 里 `loadOverview()` 是异步补渲染（等一次 `/api/projects` 回来才重建卡片），
+  用例点完立刻读卡片文本，本机 fetch 快就过、runner 上慢一拍就读到旧数据。定性办法是
+  **扣住 `/api/projects` 不放**做确定性复现（扣住时旧判据必红、放行后新判据等得到 → 竞态而非产品缺陷，
+  隐藏期间不重渲染是有意的优化），修法按惯例改成条件等待（`wait_for_function`）而不是加长睡眠；
+  `6421e2d` 复跑 run `39053864773`：`gates` **465 秒 success**、7 个步骤全绿。
+  **拉 job 日志**是排 CI 红的第一手段，注意两点：① `.../actions/jobs/{job_id}/logs` 会 302 到 blob 存储，
+  **跟随重定向时必须去掉 `Authorization` 头**（`curl -sL` 自动去掉；自己用 urllib 跟跳会撞 401）；
+  ② 仓库路径写错一个字母，API 回的是 `404 Not Found` 而**不是**空列表 —— 把它读成 "run 还没创建"
+  会白等好几轮（本次就这样绕了一圈，正确路径是 `fengxingxuerong/look`）。
   推送这一跳本身也会抖（2026-10-15 首遇，**2026-10-16 更正了探法**）：一次 `git push` 报
   `Failed to connect to github.com:443 after 21070 ms`，而**同一时刻 `api.github.com` 返回 200** ——
   分端点探测（含一个无关对照站点）定性为"主站线路被干扰、不是断网"。处置：本地提交一个都不动、
