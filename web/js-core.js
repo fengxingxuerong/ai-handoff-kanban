@@ -222,6 +222,7 @@ function renderOverview() {
   grid.innerHTML = list.map(p => cardHTML(p)).join("");
   grid.dataset.rendered = "1";   // 骨架屏让位给真实卡片；也是给失败分支的信号"已经有内容了"
   bindCardEvents();
+  updateBulkBar();               // 重画后同步批量条（勾选状态与计数）
 }
 
 function cardHTML(p) {
@@ -244,6 +245,8 @@ function cardHTML(p) {
     + `</div>`;
   return `<div class="pcard" data-pid="${esc(p.id)}" tabindex="0" role="button" data-keyact="1">
     <div class="head">
+      <input type="checkbox" class="pick" data-pick="1" aria-label="选择这个项目"
+             ${selectedPids.has(p.id) ? "checked" : ""}>
       <button class="btn small pin${pinned ? " on" : ""}" data-act="pin" aria-pressed="${pinned}"
               title="${pinned ? "取消置顶" : "置顶（排在总览最前面）"}">${pinned ? "★" : "☆"}</button>
       <span class="name" title="${esc(p.name)}">${esc(p.name)}</span>
@@ -282,6 +285,12 @@ function bindCardEvents() {
     const card = e.target.closest(".pcard");
     if (!card) return;
     const pid = card.dataset.pid;
+    const pick = e.target.closest("[data-pick]");
+    if (pick) {                                            // 勾选：只改选择集，不打开详情
+      if (pick.checked) selectedPids.add(pid); else selectedPids.delete(pid);
+      updateBulkBar();
+      return;
+    }
     const actBtn = e.target.closest("[data-act]");
     if (actBtn) {
       const act = actBtn.dataset.act;
@@ -317,6 +326,10 @@ const ACTIONS = {
   // 卡片上的置顶星标：实际分发在 bindCardEvents（卡片内的点击不走全局委托），
   // 这里登记一份是为了契约（每个 data-act 都要在表里）兼兜底。
   pin: (arg, ev, el) => togglePin(el.closest(".pcard") && el.closest(".pcard").dataset.pid),
+  // 批量操作：data-arg 要转发（目标状态就写在它上面）
+  bulkStatus: (arg) => bulkSetStatus(arg),
+  bulkDelete: () => bulkDelete(),
+  bulkClear: () => bulkClear(),
   openAllPackage: () => openAllPackage(),
   openToday: () => openToday(),
   openInbox: () => openInbox(),
@@ -518,6 +531,65 @@ function pushRecent(pid) {
   const cur = recentIds().filter(x => x !== pid);
   cur.unshift(pid);
   try { localStorage.setItem("kanban-recent", JSON.stringify(cur.slice(0, 8))); } catch (e) {}
+}
+
+// ============ 批量操作（多选项目） ============
+// 选中态只活在内存里：它表达的是"现在要动这几个"的临时选择，刷新即该消失。
+// 持久化反而危险 —— 下次打开时还选中着一批自己早忘了的项目，手一滑就批量删了。
+let selectedPids = new Set();
+
+function updateBulkBar() {
+  const bar = document.getElementById("bulk-bar");
+  if (!bar) return;
+  // 项目可能已被删、或被当前筛选挡掉：选中的集合里只留"现在还看得见"的
+  const visible = new Set();
+  document.querySelectorAll("#grid .pcard").forEach(c => visible.add(c.dataset.pid));
+  [...selectedPids].forEach(pid => { if (!visible.has(pid)) selectedPids.delete(pid); });
+  const n = selectedPids.size;
+  bar.style.display = n ? "flex" : "none";
+  const cnt = document.getElementById("bulk-count");
+  if (cnt) cnt.textContent = "已选 " + n + " 个";
+}
+
+function bulkClear() {
+  selectedPids.clear();
+  renderOverview();       // 重画一遍把复选框的勾去掉
+  updateBulkBar();
+}
+
+async function bulkSetStatus(status) {
+  const ids = [...selectedPids];
+  if (!ids.length) return;
+  let ok = 0, fail = 0;
+  for (const pid of ids) {
+    try {
+      await api("/api/projects/" + pid, { method: "PATCH", body: JSON.stringify({ status }) });
+      ok++;
+    } catch (e) { fail++; }
+  }
+  toast(`已把 ${ok} 个项目设为「${status}」` + (fail ? `，${fail} 个失败` : ""));
+  selectedPids.clear();
+  await loadOverview();
+  updateBulkBar();
+}
+
+async function bulkDelete() {
+  const ids = [...selectedPids];
+  if (!ids.length) return;
+  const names = (projects || []).filter(p => ids.includes(p.id)).map(p => p.name);
+  const preview = names.slice(0, 5).join("\n") + (names.length > 5 ? `\n…另 ${names.length - 5} 个` : "");
+  if (!confirm(`确定删除这 ${ids.length} 个项目吗？\n\n${preview}\n\n删除后界面上无法撤销（数据快照里还能恢复）。`)) return;
+  let ok = 0, fail = 0;
+  for (const pid of ids) {
+    try {
+      await api("/api/projects/" + pid, { method: "DELETE" });
+      ok++;
+    } catch (e) { fail++; }
+  }
+  toast(`已删除 ${ok} 个项目` + (fail ? `，${fail} 个失败` : ""));
+  selectedPids.clear();
+  await loadOverview();
+  updateBulkBar();
 }
 
 // ============ AI 设置弹窗 Tab 切换 ============

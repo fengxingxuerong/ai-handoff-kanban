@@ -1114,6 +1114,26 @@ header {
 .pcard .pin:hover { color: var(--orange); }
 .pcard .pin.on { color: var(--orange); }
 
+/* —— 批量操作条 ——
+   勾选任意项目卡后从总览顶部浮出。选中态只在内存里，刷新即消失。 */
+.bulk-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; margin-bottom: 12px;
+  background: var(--card); border: 1px solid var(--accent-line);
+  border-radius: var(--radius); box-shadow: var(--shadow-soft);
+}
+.bulk-count { font-size: 12.5px; font-weight: 600; color: var(--accent); }
+.bulk-spacer { flex: 1; }
+
+/* 卡片上的多选框：与 .actions 一样 hover / 聚焦才显形，但一旦勾上就常显 ——
+   否则 hover 一走，用户看不见自己选了谁 */
+.pcard .pick {
+  flex-shrink: 0; opacity: 0; cursor: pointer;
+  accent-color: var(--accent);
+  transition: opacity var(--t-fast) var(--ease);
+}
+.pcard:hover .pick, .pcard:focus-within .pick, .pcard .pick:checked { opacity: 1; }
+
 /* —— 依赖图图例：描边色 = 状态 —— */
 .graph-legend {
   display: flex; flex-wrap: wrap; gap: 12px;

@@ -77,6 +77,15 @@
 
 <!-- 总览视图 -->
 <div id="view-overview">
+  <div class="bulk-bar" id="bulk-bar" style="display:none" role="region" aria-label="批量操作">
+    <span class="bulk-count" id="bulk-count">已选 0 个</span>
+    <button class="btn small" data-act="bulkStatus" data-arg="进行中">设为进行中</button>
+    <button class="btn small" data-act="bulkStatus" data-arg="已完成">设为已完成</button>
+    <button class="btn small" data-act="bulkStatus" data-arg="已暂停">设为已暂停</button>
+    <button class="btn small danger" data-act="bulkDelete">🗑 删除所选</button>
+    <span class="bulk-spacer"></span>
+    <button class="btn small" data-act="bulkClear">取消选择</button>
+  </div>
   <div id="dash"></div>
   <div class="grid" id="grid">
     <div class="skel-card"></div>
