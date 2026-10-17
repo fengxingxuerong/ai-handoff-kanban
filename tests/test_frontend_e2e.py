@@ -234,6 +234,9 @@ def test_delete_project_asks_confirmation(ui):
     page.locator(".pcard").first.click()
     page.wait_for_selector("#view-detail.active", timeout=10000)
 
+    # 删除现在收在详情页「更多」菜单里；先展开再点，验证的是菜单可发现性 + 原确认门。
+    page.click(".d-more > summary")
+    page.wait_for_selector(".d-more-pop")
     seen = []
     page.on("dialog", lambda d: (seen.append(d.message), d.accept()))
     page.click("[data-act='deleteProject']")

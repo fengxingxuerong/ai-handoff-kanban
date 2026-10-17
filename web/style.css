@@ -1356,3 +1356,55 @@ header { padding: 10px 20px; gap: 12px; }
   border-top: 1px dashed var(--border-soft);
   margin-top: 8px;
 }
+
+
+/* 详情页次级操作收进「更多」菜单 */
+.d-more { position: relative; }
+.d-more > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.d-more > summary::-webkit-details-marker { display: none; }
+.d-more > summary::after {
+  content: "▾";
+  font-size: 10px;
+  opacity: .65;
+}
+.d-more[open] > summary {
+  background: var(--card-hover);
+  border-color: var(--border);
+  color: var(--text);
+}
+.d-more-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  min-width: 172px;
+  padding: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .24);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.d-more-pop .btn {
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-dim);
+  text-align: left;
+  font-size: 12px;
+}
+.d-more-pop .btn:hover {
+  background: var(--card-hover);
+  color: var(--text);
+  transform: none;
+  box-shadow: none;
+}
+.d-more-pop .btn.danger { color: var(--red); }
