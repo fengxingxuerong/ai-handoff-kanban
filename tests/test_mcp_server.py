@@ -651,6 +651,21 @@ def test_context_tool_returns_live_link(mcp):
     assert f"127.0.0.1:18320/api/context/{pid}" in text
 
 
+def test_context_includes_review_task_and_acceptance(mcp):
+    """MCP 接手包不能只报“待办”标题：待审查任务和验收标准必须一起给，
+    否则新智能体知道做什么、不知道做到哪算完。"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "接管验收上下文"})[0])
+    tid = last_id(mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "流式导出实现", "status": "待审查",
+        "acceptance": ["10 万行不 OOM", "契约测试通过"],
+    })[0])
+    text, err = mcp.tool("kanban_context", {"project_id": pid})
+    assert not err
+    assert "待审查" in text and "流式导出实现" in text, text
+    assert "验收" in text and "10 万行不 OOM" in text, text
+    assert tid  # 任务 id 仍然可用（不把它降级成标题匹配）
+
+
 # ---------------- 字段保真：只传要改的字段时，不能把没提的字段抹掉 ----------------
 
 def _task_on_disk(data_dir: Path, tid: str) -> dict:

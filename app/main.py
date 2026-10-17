@@ -890,7 +890,7 @@ def project_context(pid: str, redact: int = 0):
         }),
         "start_here": [  # 现在就能动手的（依赖已满足）
             {"id": t["id"], "title": mask(t.get("title") or ""), "priority": t.get("priority"),
-             "refs": t.get("refs") or []} for t in ready
+             "refs": t.get("refs") or [], "acceptance": t.get("acceptance") or []} for t in ready
         ],
         "tasks": {
             "todo": [slim(t) for t in tasks if t.get("status") == "待办"],

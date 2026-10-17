@@ -858,11 +858,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 当前进度与下一步
 
-**状态：v1.5.1（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
+**状态：v1.5.2（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 里写的版本号与 `app/version.py` 同数 ——
 2026-10-18 之前这一条**没有门禁**，1.5.0 落地后两份文档里都还是 1.4.0（`1.5.0` 字样出现 0 次）。
 1.2.0 → 1.2.1（2026-10-07）只带一个用户可见修复（`/api/inbox` 补「依赖没满足的不算」过滤，见提交 317a239）与 journal.py 拆分重构（32b2b32）。
+**1.5.1 → 1.5.2（2026-10-18）：MCP 接手包收口。** `kanban_context` 增加待审查任务、refs 与验收标准；HTTP `/api/context` 的 `start_here` 同步带 `acceptance`；新增 1 条 MCP 回归，90 条 MCP 测试通过。
 **1.5.0 → 1.5.1（2026-10-18）：交接文档收口轮。** AGENTS.md 增加 `Definition of Done` 与任务字段（refs / acceptance / 依赖 / 截止）；修复新智能体接管时「验收标准：材料未提供」的缺口；46 条交接相关测试通过。
 **1.4.0 → 1.5.0（2026-10-17）：交付收口轮（修复为主，但含一条桌面端行为变化，故按次版本号）。**
 项目卡标题改两行布局（长标题不再被截成一行看不全）；`KANBAN_TOKEN` 注入桌面 UI
@@ -907,8 +908,8 @@ AI 简报，de1dfe2）；随后第四轮对标 claude-mem（99k★）深挖并�
 
 **验证基线（2026-10-18 文档对账轮：探针 mtime 契约 + 版本号对账门禁 + 交付物忽略规则；
 上一次全门禁 2026-10-17 交付收口轮）**：
-`pytest` 736 收集（731 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
-34 个测试文件、690 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+`pytest` 737 收集（732 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
+34 个测试文件、691 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
 2026-10-17 新增 7 条回归：首页 token meta 注入、memories/config last-good 恢复、批量删除原子性与预快照、项目名视觉截断几何、token 模式下桌面 UI 可写；`frozen_smoke` 11/11。
 2026-10-18 新增 3 条：探针"跑完不留痕"契约 2 条（`tests/test_mutation_probe.py`：内容与 **mtime** 都要还原；
 A/B 时发现直接比"改前/改后"会被 Windows 文件时间 15.6ms 粒度骗过 —— 用例显式把 mtime 拨到一小时前才成为确定性判据）

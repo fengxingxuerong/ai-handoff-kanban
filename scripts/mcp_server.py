@@ -557,19 +557,32 @@ def t_context(args: dict) -> str:
     if mems:
         parts.append("项目记忆（决策/坑/约定，接手时自动带上）：")
         parts += [f"  - [{m.get('type')}] {m.get('text')}" for m in mems]
+    def _task_line(t: dict) -> str:
+        """MCP 接手包也要带验收标准；只报标题会让新智能体知道做什么、不知道做到哪算完。"""
+        bits = [t["title"], f"（{t.get('priority', '中')}）"]
+        refs = t.get("refs") or []
+        if refs:
+            bits.append(" @" + "、".join(refs))
+        acc = [a for a in (t.get("acceptance") or []) if a]
+        if acc:
+            bits.append(" — 验收：" + "；".join(acc))
+        return "".join(bits)
+
     if ctx["start_here"]:
         parts.append("现在就能动手的任务：")
-        parts += [f"  - {t['title']}（{t.get('priority','中')}）{' @' + '、'.join(t['refs']) if t.get('refs') else ''}"
-                  for t in ctx["start_here"]]
+        parts += [f"  - {_task_line(t)}" for t in ctx["start_here"]]
     todo = ctx["tasks"]["todo"]
     doing = ctx["tasks"]["in_progress"]
+    review = ctx["tasks"].get("review") or []
     blocked = ctx["tasks"]["blocked"]
     if doing:
-        parts.append("进行中：" + "；".join(t["title"] for t in doing))
+        parts.append("进行中：" + "；".join(_task_line(t) for t in doing))
+    if review:
+        parts.append("待审查：" + "；".join(_task_line(t) for t in review))
     if todo:
-        parts.append("待办：" + "；".join(t["title"] for t in todo))
+        parts.append("待办：" + "；".join(_task_line(t) for t in todo))
     if blocked:
-        parts.append("阻塞：" + "；".join(t["title"] for t in blocked))
+        parts.append("阻塞：" + "；".join(_task_line(t) for t in blocked))
     rd = ctx["readiness"]
     parts.append(f"交接就绪度：{rd['score']}/100" + (f"（缺口：{'、'.join(rd['missing'])}）" if rd["missing"] else "（齐备）"))
     # 直链也要带上这次同样的脱敏口径：不然是"工具给了脱敏版、链接指向未脱敏版"
