@@ -2,7 +2,7 @@
 
 多项目任务中枢桌面应用，专为「切换 AI 智能体做项目」设计：每个项目带交接说明与下一步行动，一键复制交接摘要，新智能体接手零成本。内置 **AI 自我监管**（多 LLM 端点自动分析健康度、生成建议、维护任务），并有 **可视化仪表盘** 与 **一键完整交接包** 提升交付效率。
 
-> 当前版本 **v1.6.2**。`app/version.py` 是唯一事实来源 —— 界面版本条、`/api/health`、
+> 当前版本 **v1.7.0**。`app/version.py` 是唯一事实来源 —— 界面版本条、`/api/health`、
 > MCP `serverInfo`、exe 的 PE 版本资源都读它，`tests/test_docs.py` 会核对本文档与 AGENTS.md 写的是同一个数。
 
 ## 界面
@@ -210,7 +210,7 @@ build.bat
 
 ```
 项目任务看板/
-├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 22 个模块，见 AGENTS.md）
+├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 23 个模块，见 AGENTS.md）
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
 ├── web/index.html          # 前端页面骨架（零内联脚本；深色主题，含 AI 界面）
 ├── web/js-*.js             # 前端逻辑五个文件：core(ACTIONS 分发)/edit/render/data/boot（无构建、无 CDN）

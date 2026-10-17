@@ -13,7 +13,7 @@
 
 | 路径 | 职责 |
 | --- | --- |
-| `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程。**2026-09-26 起分轮拆出（3596 行 → 下表 22 个模块），本文件只留路由编排、数据层临界区与有全局状态的部分** |
+| `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程。**2026-09-26 起分轮拆出（3596 行 → 下表 23 个模块），本文件只留路由编排、数据层临界区与有全局状态的部分** |
 | `app/taskgraph.py` | 任务依赖图：`clean_deps` / `task_graph` / `has_cycle` / `topo_order` / `_break_dep_cycles` / `executable_tasks` / `deps_blocking`（与 /api/inbox 共用的"被前置挡住"谓词，2026-10-07 抽出）/ `_dedupe_ids` / `clean_refs`（纯函数，从 main 逐字搬来） |
 | `app/due.py` | 日期类判定（纯函数）：截止日期归一 `_clean_due_date`、状态判定 `_due_state`、记忆过期 `_memory_expired`、记忆召回排序 `recall_memories`（2026-10-11 对标 claude-mem Awareness：决策/坑/约定优先于事实，同类内时间新在前；AGENTS.md 的 12 条窗口与 AI 简报的 10 条窗口共用一套，避免晚写的背景事实把早记的坑挤出窗口） |
 | `app/journal.py` | 过程轨迹与验收标准的清洗与上限（纯函数，2026-10-07 从 main 拆出）：`append_journal`（溢出**折叠成摘要**的写入侧）/ `compress_journal` / `clean_journal` / `clean_acceptance` 与 `MAX_JOURNAL*`、`MAX_ACCEPTANCE*`、`JOURNAL_SNIPPET`。**这些上限常量的 monkeypatch 点在这里**（main 是转发别名，patch 别名改不到函数读的全局）；时钟由 main 的 `_append_journal` 包装注入，本模块不 import main |
@@ -23,6 +23,7 @@
 | `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note`，以及**条目级尺寸估算** `text_size` / `size_note` / `estimate_tokens`（2026-10-11 对标 claude-mem 的渐进式披露最小落地：给记忆检索输出报每条成本，HTTP / MCP / 前端记忆面板三处同一口径；口径与纪律见硬性约定 29） |
 | `app/sessions.py` | 会话扫描与文本提取（目录遍历有界、只读文件尾部、源内外校验） |
 | `app/gitinfo.py` | git 集成（2026-10-06 从 main 搬出）：`git_snapshot` / `_run_git` / `_git_cache`。只读、列表传参、绝不拼 shell。**`_run_git`/`_git_cache`/`GIT_TIMEOUT` 的 monkeypatch 点在这里**（main 里是转发别名） |
+| `app/repo_watch.py` | 仓库变化雷达（2026-10-18）：按 `repo_path` 扫描 git，检测未提交/新提交，按任务完成度给建议进度；`repo_watch.json` 基线 + `repo_audit.jsonl` 确认审计。**只有用户显式确认才写 progress** |
 | `app/agentfiles.py` | 多智能体入口文件投影（`AGENT_ENTRY_TARGETS` 白名单 → 各工具要求的相对路径，含第 9 个 `.claude/skills` 投影） |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁）、掩码找 Key `merge_keys`（2026-10-07 从 main 迁入，与 `mask_matches` 同域） |
 | `app/filelock.py` | 跨进程文件锁（msvcrt/fcntl 一份实现，`main` 与 `llm` 共用）。两边不能互相 import，所以锁不放在任何一边里 |
@@ -858,11 +859,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 当前进度与下一步
 
-**状态：v1.6.2（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
+**状态：v1.7.0（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 里写的版本号与 `app/version.py` 同数 ——
 2026-10-18 之前这一条**没有门禁**，1.5.0 落地后两份文档里都还是 1.4.0（`1.5.0` 字样出现 0 次）。
 1.2.0 → 1.2.1（2026-10-07）只带一个用户可见修复（`/api/inbox` 补「依赖没满足的不算」过滤，见提交 317a239）与 journal.py 拆分重构（32b2b32）。
+**1.6.2 → 1.7.0（2026-10-18）：仓库变化雷达。** 新增 `app/repo_watch.py` 与 `GET /api/repo-watch` / `POST /api/projects/{pid}/repo-ack`；检测未提交/新提交，按任务完成度给建议进度；只有用户确认后才写 `progress`，并追加 `repo_audit.jsonl`。详情页 15s 轮询提示，不自动改进度。
 **1.6.1 → 1.6.2（2026-10-18）：详情页顶部操作收口。** 趋势 / 自动分配 / 编辑 / 删除收进「更多」菜单；新建任务保留为唯一主操作；删除确认门测试同步为「先展开菜单再点删除」。
 **1.6.0 → 1.6.1（2026-10-18）：宽屏看板空列收口。** 1201px 以上改用 flex 看板，空列压缩到 0.62 权重并显示「暂无任务」空态；减少任务少时右侧的大面积空框。
 **1.5.2 → 1.6.0（2026-10-18）：前端 UI 精修。** 顶栏改为「项目视图 / 工具 / 主操作」三组；单一强调色替代蓝紫渐变；项目列表增加明确标题与更稳的卡片基线；详情页「新建任务」升为主操作、交接工具改为主按钮 + 2 列网格、就绪度降噪；360px 左栏给看板更多空间。业务逻辑与 data-act 未改；前端 108 条 E2E 通过。
@@ -911,8 +913,8 @@ AI 简报，de1dfe2）；随后第四轮对标 claude-mem（99k★）深挖并�
 
 **验证基线（2026-10-18 文档对账轮：探针 mtime 契约 + 版本号对账门禁 + 交付物忽略规则；
 上一次全门禁 2026-10-17 交付收口轮）**：
-`pytest` 737 收集（732 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
-34 个测试文件、691 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+`pytest` 738 收集（733 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
+35 个测试文件、692 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
 2026-10-17 新增 7 条回归：首页 token meta 注入、memories/config last-good 恢复、批量删除原子性与预快照、项目名视觉截断几何、token 模式下桌面 UI 可写；`frozen_smoke` 11/11。
 2026-10-18 新增 3 条：探针"跑完不留痕"契约 2 条（`tests/test_mutation_probe.py`：内容与 **mtime** 都要还原；
 A/B 时发现直接比"改前/改后"会被 Windows 文件时间 15.6ms 粒度骗过 —— 用例显式把 mtime 拨到一小时前才成为确定性判据）

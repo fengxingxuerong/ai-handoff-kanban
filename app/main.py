@@ -100,6 +100,7 @@ from .handoff_md import build_handoff_markdown
 # AGENTS.md 文档生成（依赖注入式）：2026-10-06 拆出。_build_agents_md_local / _generate_agents_md
 # 是本文件的注入包装（原签名保留），本体见 app/agentsmd.py
 from . import agentsmd
+from . import repo_watch as repo_metrics
 # AI 编排的只读计算层：2026-10-06 拆出（看板简报 / 会话提炼）。写动作不走这里，
 # 落库仍在 main 的 mutate() 临界区；_projects_brief / _summarize_inner 是原签名注入包装
 from . import aiprompt
@@ -735,6 +736,12 @@ class BulkDeleteIn(BaseModel):
     """批量删除：一次请求完成预快照 + 全有或全无，避免逐条 DELETE 的半删状态。"""
     ids: list[str] = Field(..., min_length=1, max_length=100)
     confirm: bool = False
+
+
+class RepoAckIn(BaseModel):
+    """确认仓库已读；progress 为空时只清变化标记，不改百分比。"""
+    progress: int | None = Field(None, ge=0, le=100)
+    note: str = ""
 
 
 # ---------------- 应用 ----------------
@@ -2774,6 +2781,48 @@ def project_git(pid: str, limit: int = 10):
     # 放在这里而不是新端点，也因为这个检查只在"仓库读得到"时才有意义。
     snap["refs"] = check_refs_exist(found[1].get("repo_path", ""), found[1].get("tasks") or [])
     return snap
+
+
+@app.get("/api/repo-watch")
+def repo_watch_events(pid: str = ""):
+    """仓库变化雷达：按需扫描，返回 changed + 建议进度；不写项目 progress。"""
+    data = get_projects_data()
+    projects = data.get("projects") or []
+    if pid:
+        projects = [p for p in projects if p.get("id") == pid]
+        if not projects:
+            raise HTTPException(404, "项目不存在")
+    events = repo_metrics.scan_projects([p for p in projects if p.get("repo_path")], use_cache=False)
+    return {"ok": True, "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "changes": events, "audit": repo_metrics.recent_audit(10) if not pid else []}
+
+
+@app.post("/api/projects/{pid}/repo-ack")
+def repo_ack(pid: str, body: RepoAckIn):
+    """确认代码变化已读；只有这里（用户显式动作）才允许顺便写 progress。"""
+    data = get_projects_data()
+    found = next(((i, p) for i, p in enumerate(data.get("projects") or []) if p.get("id") == pid), None)
+    if not found:
+        raise HTTPException(404, "项目不存在")
+    project = found[1]
+    event = repo_metrics.scan_projects([project], use_cache=False)[0]
+    before = project.get("progress")
+
+    def worker(current: dict):
+        p = next((x for x in current.get("projects") or [] if x.get("id") == pid), None)
+        if p is None:
+            raise HTTPException(404, "项目不存在")
+        b = p.get("progress")
+        if body.progress is not None:
+            p["progress"] = body.progress
+            p["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        return True, {"before": b, "after": p.get("progress")}
+
+    changed, result = mutate(worker)
+    after = result["after"]
+    audit = repo_metrics.ack(pid, event, result["before"], after, body.note, actor="human")
+    return {"ok": True, "before": result["before"], "after": after,
+            "event": event, "audit": audit}
 
 
 @app.get("/api/projects/{pid}/graph")

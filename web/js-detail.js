@@ -70,12 +70,14 @@ async function openDetail(pid) {
     current = await api("/api/projects/" + pid);
     setDetailState(null);
     renderDetail();
+    startRepoWatch(pid);
   } catch (e) {
     setDetailState("error", e.message, pid);   // 停在原地让人能重试，而不是闪一条 toast
   }
 }
 
 function showOverview() {
+  stopRepoWatch();
   document.getElementById("view-overview").style.display = "block";
   document.getElementById("view-detail").classList.remove("active");
   loadOverview();
@@ -222,3 +224,89 @@ renderReality();
   renderStats();
 }
 
+
+
+// ============ 仓库变化雷达 ============
+// 只在详情页停留时轮询当前仓库；检测到变化才提示，不自动写 progress。
+let _repoWatchTimer = null;
+let _repoWatchEvent = null;
+
+function stopRepoWatch() {
+  if (_repoWatchTimer) {
+    clearInterval(_repoWatchTimer);
+    _repoWatchTimer = null;
+  }
+  _repoWatchEvent = null;
+  const el = document.getElementById("repo-watch");
+  if (el) { el.hidden = true; el.innerHTML = ""; }
+}
+
+function _repoWatchHtml(e) {
+  const head = (e.head && e.head.hash) ? e.head.hash : "—";
+  const dirty = Number(e.dirty_count || 0);
+  const files = (e.dirty_files || []).slice(0, 4).map(esc).join("、");
+  const suggestion = (e.suggested_progress !== null && e.suggested_progress !== undefined)
+    ? `建议进度 ${e.current_progress}% → ${e.suggested_progress}%`
+    : "代码已变化，请确认下一步";
+  return `
+    <div class="rw-mark"></div>
+    <div class="rw-body">
+      <div class="rw-title">代码有变化 <span class="rw-head">${esc(head)}</span></div>
+      <div class="rw-meta">${dirty ? `${dirty} 个未提交文件${files ? "：" + files : ""}` : "有新提交"} · ${esc(suggestion)}</div>
+      ${e.reason ? `<div class="rw-reason">${esc(e.reason)}</div>` : ""}
+    </div>
+    <div class="rw-actions">
+      <button class="btn primary small" data-act="repoAck">${e.suggested_progress !== null && e.suggested_progress !== undefined ? "确认并同步" : "标记已读"}</button>
+      <button class="btn small" data-act="repoLater">稍后</button>
+    </div>`;
+}
+
+async function loadRepoWatch(pid) {
+  const el = document.getElementById("repo-watch");
+  if (!el) return;
+  try {
+    const r = await api("/api/repo-watch?pid=" + encodeURIComponent(pid));
+    const e = (r.changes || [])[0];
+    _repoWatchEvent = e || null;
+    if (!e || !e.changed) { el.hidden = true; el.innerHTML = ""; return; }
+    el.innerHTML = _repoWatchHtml(e);
+    el.hidden = false;
+  } catch (e) {
+    // 仓库不可读/网络失败时不要把详情页搞成错误页；下次轮询再试。
+    el.hidden = true;
+  }
+}
+
+function startRepoWatch(pid) {
+  stopRepoWatch();
+  if (!pid) return;
+  loadRepoWatch(pid);
+  _repoWatchTimer = setInterval(() => {
+    if (document.getElementById("view-detail").classList.contains("active") && currentPid === pid) {
+      loadRepoWatch(pid);
+    }
+  }, 15000);
+}
+
+async function ackRepoWatch() {
+  if (!_repoWatchEvent || !currentPid) return;
+  const progress = _repoWatchEvent.suggested_progress;
+  try {
+    const r = await api("/api/projects/" + encodeURIComponent(currentPid) + "/repo-ack", {
+      method: "POST",
+      body: JSON.stringify({ progress: progress == null ? null : progress, note: "代码变化雷达" }),
+    });
+    toast(progress == null ? "已标记代码变化" : `已同步进度：${r.before}% → ${r.after}%`);
+    stopRepoWatch();
+    await openDetail(currentPid);
+  } catch (e) {
+    toast("同步失败：" + e.message);
+  }
+}
+
+function dismissRepoWatch() {
+  const el = document.getElementById("repo-watch");
+  if (el) { el.hidden = true; el.innerHTML = ""; }
+  stopRepoWatch();
+  toast("已稍后处理；下次打开详情会再提醒");
+}

@@ -201,6 +201,8 @@ const ACTIONS = {
   downloadHandoffPage: () => downloadHandoffPage(),
   openAIHandoff: () => openAIHandoff(),
   applySuggestion: (arg, ev, el) => applySuggestion(el),
+  repoAck: () => ackRepoWatch(),
+  repoLater: () => dismissRepoWatch(),
   // —— 弹窗通用 ——
   closeModal: arg => closeOneModal(arg),
   closeReport: () => closeReport(),
