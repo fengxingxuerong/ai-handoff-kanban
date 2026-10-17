@@ -259,14 +259,21 @@ def test_frontend_stats_panel_and_usage_tab_hooks():
     """对账测试（测试约定 13）：前端这三样东西必须真实存在，否则改一边不会变红：
     - 详情页有 #stats-panel 且 renderDetail 真的调 renderStats；
     - 设置弹窗有 #ai-pane-usage（用量 Tab）与 #ai-budget-limit 输入；
-    - switchAITab 注册进 ACTIONS（data-act 能分发到）。"""
+    - switchAITab 注册进 ACTIONS（data-act 能分发到）。
+
+    **JS 那几条一律对着"整个前端"判，不写具体文件名**：2026-10-18 把 5 个 js-*.js 重新
+    分成 10 个之后，`renderStats();` 随 renderDetail 搬去了 js-detail.js，这条用例当场红 ——
+    而它本来就该问"整个前端里有没有这件事"，不是"它在哪个文件里"（`frontend_src.py` 就是
+    为这个目的存在的：契约测的是整个前端）。
+    """
+    from frontend_src import frontend_source
+
     html = _read_web("index.html")
     assert 'id="stats-panel"' in html
     assert 'id="ai-pane-usage"' in html
     assert 'id="ai-budget-limit"' in html
-    js_render = _read_web("js-render.js")
-    assert "async function renderStats()" in js_render
-    assert "/api/projects/${pid}/stats" in js_render
-    js_core = _read_web("js-core.js")
-    assert "renderStats();" in js_core
-    assert "switchAITab: " in js_core, "switchAITab 必须注册进 ACTIONS，否则 data-act 分发不到"
+    front = frontend_source()
+    assert "async function renderStats()" in front
+    assert "/api/projects/${pid}/stats" in front
+    assert "renderStats();" in front, "renderDetail 必须真的调 renderStats"
+    assert "switchAITab: " in front, "switchAITab 必须注册进 ACTIONS，否则 data-act 分发不到"

@@ -36,7 +36,7 @@
 | `app/usage_stats.py` | LLM 用量聚合（纯函数，2026-10-01）：usage.jsonl 的按日/端点/模型聚合与预算水位，`/api/usage` 的口径 |
 | `app/aireports.py` | 监管报告的落盘/裁剪/历史/趋势（2026-10-06 拆出）：`reports_dir` / `_save_report` / `_trim_reports` / `_latest_report_before` / `_attach_trends` / 提示词构造。**`MAX_REPORTS` 的 monkeypatch 点在这里**（main 是转发别名）；`_run_analyze` 编排留在 main |
 | `app/aiprompt.py` | AI 编排的只读计算层（2026-10-06 拆出，依赖注入式）：看板简报 `projects_brief`（记忆分桶/git 探测经回调注入，main 的 monkeypatch 照常有效）与会话提炼 `summarize_inner`（find_project 注入）。**不落库** —— 写动作仍走 main 的 mutate() 临界区 |
-| `web/index.html` + `web/js-*.js` + `web/style.css` | 前端。09-28 起 JS 拆成五个文件（`js-core` ACTIONS 分发表 / `js-edit` / `js-render` / `js-data` / `js-boot` 启动序列），index.html **零内联脚本**；无构建、无 CDN 依赖，交互统一走 `data-act` 事件委托 |
+| `web/index.html` + `web/js-*.js` + `web/style.css` | 前端。**2026-10-18 起 JS 按关注点分成 10 个文件**（加载顺序：`js-core` 基础设施与 ACTIONS 分发表 → `js-overview` 总览 → `js-detail` 详情 → `js-render` 渲染工具 → `js-reality` 代码现实 → `js-handoff` 交接物 → `js-edit` 表单编辑 → `js-ai` AI → `js-data` 数据 → `js-boot` 启动序列），index.html **零内联脚本**；无构建、无 CDN 依赖，全部函数是全局函数，交互统一走 `data-act` 事件委托。拆的是**关注点**不是字节数；静态契约一律用 `tests/frontend_src.py:frontend_source()` 对着"整个前端"判，**不要写具体文件名**（`test_p0_stats.py` 里曾写死 `js-core.js`，搬家当天就红） |
 | `tests/` | pytest 套件（用例数见文末「验证基线」，此处不写死）+ 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测数字只写在文末基线那一处）。含真实浏览器点击测试 `test_frontend_e2e.py` |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
 | `scripts/live_check.py` | 对着**已在跑**的实例打接口做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
@@ -908,6 +908,13 @@ AI 简报，de1dfe2）；随后第四轮对标 claude-mem（99k★）深挖并�
 2026-10-18 新增 3 条：探针"跑完不留痕"契约 2 条（`tests/test_mutation_probe.py`：内容与 **mtime** 都要还原；
 A/B 时发现直接比"改前/改后"会被 Windows 文件时间 15.6ms 粒度骗过 —— 用例显式把 mtime 拨到一小时前才成为确定性判据）
 与版本号对账 1 条（`tests/test_docs.py::test_version_in_docs_matches_version_py`，见「当前进度」）。
+2026-10-18 前端分层：`web/js-*.js` 由 5 个按**关注点**重分成 10 个
+（core / overview / detail / render / reality / handoff / edit / ai / data / boot），
+逐字搬运（拆分脚本自校验：连续段拼回与原文逐字一致、无重名、声明集合不变），只换头部注释；
+顺带修掉一处测试与文件布局的耦合 —— `test_p0_stats.py` 曾写死 `js-core.js` / `js-render.js`，
+`renderStats();` 随 `renderDetail` 搬去 `js-detail.js` 后当场红，改为 `frontend_src.frontend_source()`
+对着"整个前端"判（并按纪律做了 A/B：把调用改名确认真的会红）。验收：10 个文件逐个 `node --check` 通过、
+全量 pytest 绿、`ci_local --quick` 3/3（真实浏览器 `live_ui_check` 16/0、零 JS 报错）、重打包 + `frozen_smoke` 11/11。
 2026-10-18 修复：`scripts/mutation_probe.py` 还原时连 mtime 一起拨回 —— 此前每跑一次探针都会把
 `frozen_smoke` 的「产物不比源码旧」门禁刷成假红（实测 10 通过 / 1 失败，点名一串"刚改过"的文件）。
 2026-10-18 忽略规则：`.gitignore` 补 `DELIVERY/**/*.exe`、`DELIVERY/**/*.log`、`/.openclaw_eval_*`、

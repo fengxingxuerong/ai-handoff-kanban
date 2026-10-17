@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-# 2026-09-28 前端拆成 index.html + style.css + 5 个 js-*.js。
+# 2026-09-28 前端拆成 index.html + style.css + 多份 js-*.js；2026-10-18 按关注点重新分成 10 份。
 # 契约测的是"整个前端"而不是某一个文件，所以读拼接后的源码（顺序与浏览器加载一致）。
 from frontend_src import frontend_source  # noqa: E402
 

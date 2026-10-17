@@ -663,9 +663,17 @@
 </div>
 
 
+<!-- 分层后的加载顺序：基础设施 → 三个视图层 → 两个工具层 → 编辑/数据 → 启动序列。
+     没有模块系统（无构建、无 CDN），靠顺序加载；全部函数是全局函数，跨文件调用都发生在
+     事件回调里，所以顺序只影响"谁先把自己的 DOM 接线装上"，详见各文件头部注释。 -->
 <script src="web/js-core.js"></script>
-<script src="web/js-edit.js"></script>
+<script src="web/js-overview.js"></script>
+<script src="web/js-detail.js"></script>
 <script src="web/js-render.js"></script>
+<script src="web/js-reality.js"></script>
+<script src="web/js-handoff.js"></script>
+<script src="web/js-edit.js"></script>
+<script src="web/js-ai.js"></script>
 <script src="web/js-data.js"></script>
 <script src="web/js-boot.js"></script>
 
