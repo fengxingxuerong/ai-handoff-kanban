@@ -20,13 +20,16 @@
    跑出来"存活"没有任何意义，不要往表里加。
 2. 存活不等于"测试写错了"，也可能是"这条规则确实没被测到"—— 两者都要补断言，
    补完再跑一次本脚本自证（存活 → 被杀）才闭环。
-3. 探针只改本地工作区文件，**跑完一定还原**（内存备份 + finally，不依赖 git）。
+3. 探针只改本地工作区文件，**跑完一定还原**（内存备份 + finally，不依赖 git），
+   而且**内容与 mtime 都要还原**（见 `_restore_mtime`：还原只写内容会把 mtime 刷成"刚刚"，
+   让 frozen_smoke 的"产物比源码旧"那条门禁在每次探针之后稳定假红）。
    探针运行期间不要并行跑别的测试。
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -541,18 +544,39 @@ def run_tests(files: list[str], timeout: int) -> tuple[str, float]:
     return "error", dt                          # 2=中断 3=内部错误 4=用法错 5=没收集到
 
 
+def _restore_mtime(path: Path, st: os.stat_result) -> None:
+    """把还原后的文件时间戳拨回注入之前。
+
+    为什么必须拨回去：`frozen_smoke` 判断"这个 exe 是不是落后于源码"靠的正是
+    `app/*.py` / `web/*` 的 mtime 与构建戳比较 —— 后端被 PyInstaller 打进 .pyc，
+    没法逐字节比对，mtime 是唯一可用的代理。而本脚本每跑一次都会把探过的文件
+    逐个改写两遍（注入一遍、还原一遍），不拨回去它们就全部变成"刚刚改过"，
+    于是**每次全量探针之后那条门禁都会稳定假红**，直到重打包为止。
+    实测（2026-10-18）：`frozen_smoke` 10 通过 / 1 失败，失败项点名 aiprompt.py、
+    assign.py、due.py、handoff_meta.py、idem.py、journal.py 等一串"刚改过"的文件 ——
+    而 exe 内嵌前端的字节比对是同过的，说明产物其实不旧。一条本该只报"改了源码
+    忘重打包"的门禁被噪音盖住，人很快会对这个红点脱敏，那才是真损失。
+    """
+    try:
+        os.utime(path, (st.st_atime, st.st_mtime))
+    except OSError:                                             # pragma: no cover
+        pass
+
+
 def apply_and_run(m: dict, timeout: int) -> dict:
     path = ROOT / m["file"]
     original = path.read_text(encoding="utf-8")
     if m["old"] not in original:
         return {**m, "status": "inconclusive", "note": "变异文本没匹配上（源码改过？更新变异表）",
                 "dt": 0.0}
+    st = path.stat()
     try:
         path.write_text(original.replace(m["old"], m["new"], 1), encoding="utf-8")
         status, dt = run_tests(m["tests"], timeout)
         return {**m, "status": status, "note": "", "dt": dt}
     finally:
         path.write_text(original, encoding="utf-8")
+        _restore_mtime(path, st)
 
 
 def main() -> int:

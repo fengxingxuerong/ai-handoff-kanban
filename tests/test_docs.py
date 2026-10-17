@@ -19,6 +19,7 @@ AGENTS = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 MCP_SRC = (ROOT / "scripts" / "mcp_server.py").read_text(encoding="utf-8")
 PROBE_SRC = (ROOT / "scripts" / "mutation_probe.py").read_text(encoding="utf-8")
+VERSION_SRC = (ROOT / "app" / "version.py").read_text(encoding="utf-8")
 
 # 打包时生成的构建戳与纯声明模块不算"拆出来的模块"
 _NOT_A_MODULE = {"__init__.py", "main.py", "version.py", "_build_stamp.py"}
@@ -81,3 +82,28 @@ def test_documented_test_file_count_is_real():
     m = re.search(r"(\d+) 个测试文件", AGENTS)
     assert m, "验证基线里应写着测试文件数"
     assert int(m.group(1)) == actual, f"文档写 {m.group(1)} 个测试文件，实际 {actual} 个"
+
+
+def _current_version() -> str:
+    """当前版本号从 `app/version.py` 现读（不写第二份）。"""
+    m = re.search(r'^__version__ = "([^"]+)"', VERSION_SRC, re.M)
+    assert m, "app/version.py 里应有 __version__ 定义"
+    return m.group(1)
+
+
+def test_version_in_docs_matches_version_py():
+    """两份文档里写的版本号必须与 `app/version.py` 同数。
+
+    为什么补这条：1.5.0 落地之后，AGENTS.md 与 README 里 `1.5.0` 各出现 **0 次** ——
+    AGENTS.md 的「当前进度」还写着「状态：v1.4.0」，README 干脆通篇没有版本号。
+    版本号是"单一事实来源"这句话在本项目已经落地（界面版本条 / `/api/health` /
+    MCP `serverInfo` / exe 的 PE 版本资源都读它），唯独**文档这一侧没人看着** ——
+    而这类"只出现在散文里的事实"正是本文件存在的理由（探针 45→54、MCP 工具 17→23、
+    模块 21→22 都漂过）。判据取「状态行 + 版本叙事」两处，避免只改一处也算过。
+    """
+    v = _current_version()
+    assert f"状态：v{v}" in AGENTS, (
+        f"AGENTS.md「当前进度」的状态行必须写当前版本 v{v}（现读自 app/version.py）")
+    assert f"v{v}" in README, f"README 里应写明当前版本 v{v}"
+    assert AGENTS.count(v) >= 2, (
+        f"AGENTS.md 里 {v} 只出现一次：状态行之外还应有一轮版本叙事（改了什么、为什么）")

@@ -50,7 +50,7 @@
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复" |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 55 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"）；2026-10-14 拆出 `app/security.py` 时把四条安全探针的 `file` 串同步改到新家（不改就是哑火），并按用户拍板收紧 fail-closed 边界，新增 `forbidden_target_fails_open` 与 `forbidden_root_unresolvable_allowed` 增至 55 条 |
+| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 55 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"）；2026-10-14 拆出 `app/security.py` 时把四条安全探针的 `file` 串同步改到新家（不改就是哑火），并按用户拍板收紧 fail-closed 边界，新增 `forbidden_target_fails_open` 与 `forbidden_root_unresolvable_allowed` 增至 55 条。**2026-10-18**：还原时**连 mtime 一起拨回**（`_restore_mtime`，用例 `tests/test_mutation_probe.py`）—— 探针每跑一次会把探过的文件改写两遍，只还原内容就会把它们全刷成"刚刚改过"，而 `frozen_smoke` 判断"exe 是否落后于源码"靠的正是 mtime，于是那条门禁在**每次跑完探针之后稳定假红**（实测 2026-10-18：10 通过 / 1 失败，点名一串刚改过的文件，而同一次里"内嵌前端就是仓库这一份"是过的 —— 产物其实不旧）。一条本该只报"忘重打包"的门禁被噪音盖住，人很快就对它脱敏 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
 
@@ -822,6 +822,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   `app/_build_stamp.py`（`scripts/make_stamp.py` 生成，`build.bat`/CI 自动跑）。
   **不要手填时间**：历史上它是常量 `"2026-09-15 12:00"`，而 exe 实际是 23:46 打的，
   于是"靠它判断是否落后"完全落空。
+  **这条判据吃 mtime，所以任何"改文件又还原"的工具都会污染它** —— 变异探针就踩过
+  （2026-10-18 起已修：`_restore_mtime` 把时间戳一起拨回去）。看到它点名一串文件、
+  而"内嵌前端就是仓库这一份"却是过的，先怀疑是不是刚跑过探针，别急着重打包。
 - **数据目录**：默认 `%USERPROFILE%\.ai-kanban`（Windows 下优先 `USERPROFILE` 而不是 `HOME`，
   否则受 Git Bash 的 HOME 干扰）。测试请用 `KANBAN_DATA_DIR` 隔离。
 - **端口占用不等于自己活着**：`desktop.py` 只看端口通不通，18320 被别的程序占了会在窗口里
@@ -839,7 +842,18 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 当前进度与下一步
 
-**状态：v1.4.0（以 `app/version.py` 为准）、可用。** 1.2.0 → 1.2.1（2026-10-07）只带一个用户可见修复（`/api/inbox` 补「依赖没满足的不算」过滤，见提交 317a239）与 journal.py 拆分重构（32b2b32）。
+**状态：v1.5.0（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
+（界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
+且 `tests/test_docs.py` 会核对本文件与 README 里写的版本号与 `app/version.py` 同数 ——
+2026-10-18 之前这一条**没有门禁**，1.5.0 落地后两份文档里都还是 1.4.0（`1.5.0` 字样出现 0 次）。
+1.2.0 → 1.2.1（2026-10-07）只带一个用户可见修复（`/api/inbox` 补「依赖没满足的不算」过滤，见提交 317a239）与 journal.py 拆分重构（32b2b32）。
+**1.4.0 → 1.5.0（2026-10-17）：交付收口轮（修复为主，但含一条桌面端行为变化，故按次版本号）。**
+项目卡标题改两行布局（长标题不再被截成一行看不全）；`KANBAN_TOKEN` 注入桌面 UI
+（带 token 的实例里窗口内也能写，不再只读 401）；`memories.json` / `config.json` 也补上
+`last-good` 自愈 + 损坏留证（此前只有 `projects.json` 有，另两份坏了就是真丢）；
+批量删除项目改「服务端预快照 + 全有或全无」（中途失败不留半删状态）；表单标签/弹窗标题/
+对比度可访问性修复。新增 7 条回归（首页 token meta 注入、memories/config last-good 恢复、
+批量删除原子性与预快照、项目名视觉截断几何、token 模式下桌面 UI 可写）。
 **1.3.0 → 1.4.0（2026-10-15）：桌面端视觉精修轮（一次面向用户的界面改版，故按次版本号）。**
 保留原有深蓝科技风，做设计系统级精修而非换皮：`web/style.css` 重写为 token 化设计系统
 （色值/圆角/阴影/动效收敛为 `--r-*` / `--shadow*` / `--t*` 等，深浅两套主题同源可读），
@@ -874,15 +888,25 @@ AI 简报，de1dfe2）；随后第四轮对标 claude-mem（99k★）深挖并�
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-10-17 交付收口轮，含 token/自愈/批量删除/可访问性修复；上一次全门禁 2026-10-14）**：
-`pytest` 733 收集（728 通过 / 5 跳过 / 1 重跑，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
-33 个测试文件、687 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+**验证基线（2026-10-18 文档对账轮：探针 mtime 契约 + 版本号对账门禁 + 交付物忽略规则；
+上一次全门禁 2026-10-17 交付收口轮）**：
+`pytest` 736 收集（731 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
+34 个测试文件、690 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
 2026-10-17 新增 7 条回归：首页 token meta 注入、memories/config last-good 恢复、批量删除原子性与预快照、项目名视觉截断几何、token 模式下桌面 UI 可写；`frozen_smoke` 11/11。
+2026-10-18 新增 3 条：探针"跑完不留痕"契约 2 条（`tests/test_mutation_probe.py`：内容与 **mtime** 都要还原；
+A/B 时发现直接比"改前/改后"会被 Windows 文件时间 15.6ms 粒度骗过 —— 用例显式把 mtime 拨到一小时前才成为确定性判据）
+与版本号对账 1 条（`tests/test_docs.py::test_version_in_docs_matches_version_py`，见「当前进度」）。
+2026-10-18 修复：`scripts/mutation_probe.py` 还原时连 mtime 一起拨回 —— 此前每跑一次探针都会把
+`frozen_smoke` 的「产物不比源码旧」门禁刷成假红（实测 10 通过 / 1 失败，点名一串"刚改过"的文件）。
+2026-10-18 忽略规则：`.gitignore` 补 `DELIVERY/**/*.exe`、`DELIVERY/**/*.log`、`/.openclaw_eval_*`、
+`/mutation-probe-*.json` —— 2026-10-17 的交付目录里躺着 38MB（两个 19MB 的 exe），
+一次 `git add -A` 就会连同"18MB 产物不进版本库"的约定一起被推翻。
 2026-10-17 真实模型验证：`KANBAN_LIVE=1 tests/test_ai.py` 5/5；`scripts/real_ai_test.py` 7/0（含 kimi-k3→AMD、NVIDIA→SenseNova 的失败回退）。
 2026-10-17 本地全跑 `scripts/mutation_probe.py`：55/55 被杀（0 存活 / 0 未生效）。
 **文档对账在 `tests/test_docs.py`**（2026-10-14 新增）：README/AGENTS.md 里写死的
-工具数、模块数、探针数、测试文件数与代码事实对账 —— 这类"只出现在散文里的数字"
-漂过好几次（探针 45→54、MCP 工具 17→23、模块 21→22），从此机械可查。
+工具数、模块数、探针数、测试文件数与**版本号**与代码事实对账 —— 这类"只出现在散文里的数字"
+漂过好几次（探针 45→54、MCP 工具 17→23、模块 21→22，以及 1.5.0 落地后两份文档里 `1.5.0`
+出现 **0 次**、状态行还停在 v1.4.0），从此机械可查。
 2026-10-11 第四轮对标补（`test_p1_absorb.py` + `test_mcp_server.py`）：记忆按类型加权召回
 `recall_memories`（高价值类型优先 + 同类内时间新在前、未知类型按事实兜底、AGENTS.md 的 12 条窗口
 不被后写的背景事实挤空、AI 简报同套召回且仍过脱敏）与**条目级尺寸估算**

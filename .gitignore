@@ -34,6 +34,18 @@ _backup_*/
 # pytest 指定 basetemp 时的落点（2026-09-28 用过 .basetemp 这个名字）
 .basetemp/
 
+# 交付目录 DELIVERY/ 里的**文档**是要入库的（历史上 4 份 .md/.html 都在版本库里），
+# 但二进制与运行日志不入库：2026-10-17 的交付目录里有 38MB（两个 19MB 的 exe + 日志），
+# 一次 `git add -A` 就会把它们吞进仓库 —— 而"18MB 产物不进版本库"是既有约定（dist/ 也是忽略的）。
+DELIVERY/**/*.exe
+DELIVERY/**/*.log
+
+# 别的工具在本仓留下的临时评估件 + 探针结果转储：只属于"那一次会话"，
+# 留着会让 `git status` 与本地门禁看着有不同的工作区状态（见 AGENTS.md 容易踩的坑）。
+/.openclaw_eval_*
+/mutation-probe-*.json
+
+
 # 会话与文档查看器的临时缓存
 .dumate/
 .tmp/

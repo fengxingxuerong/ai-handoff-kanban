@@ -31,9 +31,6 @@ from pathlib import Path
 # git 快照（export-all 冷态 5.8s → <1s）、记忆按类型加权召回（对标 claude-mem 的 Awareness）、
 # 条目级尺寸估算（记忆检索输出报每条成本）；另含两个修复：
 # PATCH 非法枚举统一 422、中文密钥脱敏补规则。
-# 1.5.0（2026-10-17）：交付收口轮 —— 项目卡标题两行布局；KANBAN_TOKEN 注入桌面 UI；
-# memories/config 增加 last-good + 损坏留证；批量删除改服务端预快照 + 全有或全无；
-# 表单标签/弹窗标题/对比度可访问性修复。
 # 1.4.0（2026-10-15）：桌面端视觉精修轮（一次面向用户的界面改版，故按次版本号）——
 # style.css 重写为 token 化设计系统（深浅两套主题同源，层次/质感/动效统一）；
 # 布局改 flex 自适应（提醒横幅出现不再顶出第二条滚动条、详情视图底部不再被裁）；
@@ -41,6 +38,9 @@ from pathlib import Path
 # 顺手修掉两个「JS 在用、CSS 未定义」的 token：--purple（任务统计堆叠条
 # 「待审查」那一段 fill 无效、实际渲染成黑色）与 --line（恢复来源列表分隔线整条失效）。
 # 前端契约零改动：类名 / data-act / a11y 契约 / 弹窗数 / --banner-h 高度 calc 全部保持。
+# 1.5.0（2026-10-17）：交付收口轮 —— 项目卡标题两行布局；KANBAN_TOKEN 注入桌面 UI；
+# memories/config 增加 last-good + 损坏留证；批量删除改服务端预快照 + 全有或全无；
+# 表单标签/弹窗标题/对比度可访问性修复。
 __version__ = "1.5.0"
 
 ROOT = Path(__file__).resolve().parent.parent
