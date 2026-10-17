@@ -38,6 +38,7 @@ from pathlib import Path
 # 顺手修掉两个「JS 在用、CSS 未定义」的 token：--purple（任务统计堆叠条
 # 「待审查」那一段 fill 无效、实际渲染成黑色）与 --line（恢复来源列表分隔线整条失效）。
 # 前端契约零改动：类名 / data-act / a11y 契约 / 弹窗数 / --banner-h 高度 calc 全部保持。
+# 1.6.1（2026-10-18）：宽屏看板空列压缩 + 空态提示；空列不再等宽占用主区域。
 # 1.6.0（2026-10-18）：前端 UI 精修 —— 顶栏分组、单一强调色、项目列表层级、详情页主操作与交接工具网格、卡片基线与对比度收敛。
 # 1.5.2（2026-10-18）：MCP 接手包收口 —— kanban_context 补待审查任务、refs 与验收标准；
 # HTTP /api/context 的 start_here 同步带 acceptance；新增 1 条 MCP 回归。
@@ -46,7 +47,7 @@ from pathlib import Path
 # 1.5.0（2026-10-17）：交付收口轮 —— 项目卡标题两行布局；KANBAN_TOKEN 注入桌面 UI；
 # memories/config 增加 last-good + 损坏留证；批量删除改服务端预快照 + 全有或全无；
 # 表单标签/弹窗标题/对比度可访问性修复。
-__version__ = "1.6.0"
+__version__ = "1.6.1"
 
 ROOT = Path(__file__).resolve().parent.parent
 

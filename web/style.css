@@ -1334,3 +1334,25 @@ header { padding: 10px 20px; gap: 12px; }
   color: var(--text);
   border-color: var(--border-soft);
 }
+
+/* 2026-10-18 UI refinement pass 3：宽屏下压缩空看板列，并给空列明确空态 */
+@media (min-width: 1201px) {
+  .kanban { display: flex; align-items: stretch; }
+  .kanban .kcol { flex: 1 1 0; min-width: 0; }
+  .kanban .kcol:not(:has(.tcard)) {
+    flex: 0.62 1 0;
+    background: transparent;
+    border-style: dashed;
+  }
+  .kanban .kcol:not(:has(.tcard)) .khead { opacity: .72; }
+}
+.kcol:not(:has(.tcard))::after {
+  content: "暂无任务";
+  display: block;
+  padding: 18px 6px 12px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+  border-top: 1px dashed var(--border-soft);
+  margin-top: 8px;
+}
