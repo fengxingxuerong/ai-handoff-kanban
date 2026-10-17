@@ -26,6 +26,7 @@
     </div>
   </div>
   <div class="header-actions">
+    <div class="header-nav" role="group" aria-label="项目视图">
     <button class="btn" data-act="openToday" title="跨项目列出依赖已满足、现在就能动手的任务">☀️ 今日</button>
     <button class="btn" data-act="openInbox" id="inbox-btn" title="需要你拍板的事：逾期 / 待审查 / 阻塞——只有等人的才进这里">
       🔔 拍板<span class="inbox-badge" id="inbox-badge" style="display:none">0</span></button>
@@ -42,12 +43,13 @@
           <span class="hm-t">📥 会话捕获</span><span class="hm-s">扫描本机 AI 会话并提炼入库</span></button>
       </div>
     </div>
-    <span class="header-sep" aria-hidden="true"></span>
+    </div>
+    <div class="header-tools" role="group" aria-label="工具">
     <button class="btn icon" data-act="openGlobalSearch" title="全局任务搜索（Ctrl+K）">🔎</button>
     <button class="btn icon" data-act="toggleTheme" title="切换深浅色主题" id="theme-btn">🌙</button>
     <button class="btn icon" data-act="openAISettings" title="AI 设置">⚙️</button>
-    <span class="header-sep" aria-hidden="true"></span>
-    <button class="btn primary" data-act="openProjectModal">＋ 新建项目</button>
+    </div>
+    <button class="btn primary header-cta" data-act="openProjectModal">＋ 新建项目</button>
   </div>
 </header>
 
@@ -87,6 +89,7 @@
     <button class="btn small" data-act="bulkClear">取消选择</button>
   </div>
   <div id="dash"></div>
+  <div class="list-head"><strong>项目</strong><span>按最近更新排序</span></div>
   <div class="grid" id="grid">
     <div class="skel-card"></div>
     <div class="skel-card"></div>
@@ -108,11 +111,11 @@
       <span class="badge" id="d-status"></span>
       <span class="badge pr-" id="d-priority"></span>
       <div class="spacer"></div>
-      <button class="btn" data-act="openTaskModal">＋ 新建任务</button>
+      <button class="btn primary" data-act="openTaskModal">＋ 新建任务</button>
       <button class="btn" data-act="openTrends" data-arg="current" title="只看这个项目的健康分走势">📈 趋势</button>
       <button class="btn" data-act="openAssignModal" title="把指定优先级、未完成、依赖已就绪的任务批量指派给某个智能体">🤖 自动分配</button>
       <button class="btn" data-act="editProject">✎ 编辑项目</button>
-      <button class="btn danger" data-act="deleteProject">🗑 删除</button>
+      <button class="btn danger ghost" data-act="deleteProject">🗑 删除</button>
     </div>
 
     <div class="d-layout">

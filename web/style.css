@@ -1177,3 +1177,160 @@ header {
 @media (prefers-reduced-motion: reduce) {
   .skel-card::after { animation: none; opacity: .45; }
 }
+
+/* ============================================================================
+   2026-10-18 UI refinement
+   方向：保留深蓝仪表盘身份，降低装饰性渐变，建立单一强调色 + 清晰主操作层级。
+   只做视觉/布局增强，不改 data-act、不改业务逻辑。
+   ========================================================================== */
+:root {
+  --accent2: var(--accent);
+  --accent2-soft: var(--accent-soft);
+  --panel-radius: 14px;
+}
+body { font-size: 13.5px; line-height: 1.55; }
+
+/* 顶栏：视图 / 工具 / 主操作 三组，而不是一排同级按钮 */
+header { padding: 10px 20px; gap: 12px; }
+.header-actions { gap: 8px; align-items: center; }
+.header-nav, .header-tools {
+  display: flex; align-items: center; gap: 2px;
+  padding: 2px; border: 1px solid var(--border-soft);
+  border-radius: 10px; background: color-mix(in srgb, var(--bg-soft) 52%, transparent);
+}
+.header-nav .btn, .header-tools .btn {
+  border-color: transparent; background: transparent; box-shadow: none;
+  padding: 7px 9px; font-weight: 500;
+}
+.header-nav .btn:hover, .header-tools .btn:hover {
+  background: var(--card-hover); transform: none; box-shadow: none;
+}
+.header-tools .btn.icon { padding: 7px 8px; }
+.header-nav .inbox-badge { margin-left: 2px; }
+.header-cta { padding: 8px 16px; font-weight: 650; }
+
+/* 品牌与主按钮：去掉装饰性渐变，保留一个强调色 */
+.logo .mark {
+  background: var(--accent); color: #07111d;
+  box-shadow: none; border-radius: 10px;
+}
+.logo .mark::after { display: none; }
+.btn.primary {
+  background: var(--accent); border: 1px solid var(--accent);
+  color: #07111d; box-shadow: none;
+}
+.btn.primary:hover { filter: none; background: color-mix(in srgb, var(--accent) 88%, white); box-shadow: none; }
+:root[data-theme="light"] .btn.primary,
+:root[data-theme="light"] .logo .mark { color: #fff; }
+.chip.active { background: var(--accent); border-color: var(--accent); color: #07111d; }
+:root[data-theme="light"] .chip.active { color: #fff; }
+
+/* 列表标题：让「项目」成为总览的第二层焦点 */
+.list-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 18px 2px 10px; margin-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.list-head strong { font-size: 13px; letter-spacing: .04em; }
+.list-head span { font-size: 11px; color: var(--text-faint); }
+
+/* 卡片：减少悬浮跳动，提升边界与阅读节奏 */
+.grid { gap: 14px; }
+.pcard { padding: 18px; gap: 11px; border-radius: 14px; border-color: var(--border-soft); }
+.pcard::before { height: 2px; background: var(--accent); }
+.pcard:hover {
+  transform: none; border-color: var(--accent-line);
+  box-shadow: 0 8px 24px rgba(0,0,0,.14);
+}
+.pcard .name { font-size: 15.5px; font-weight: 650; line-height: 1.4; }
+.pcard .next-action {
+  background: var(--bg-soft); border: 1px solid var(--border-soft);
+  border-left: 2px solid var(--accent); border-radius: 8px;
+}
+.pcard .next-action .lab { color: var(--text); }
+.tag {
+  color: var(--text-dim); background: transparent;
+  border-color: var(--border); border-radius: 6px;
+}
+.bar > i { background: var(--accent); box-shadow: none; }
+
+/* 详情：面板和目录降噪，主操作更明确 */
+.panel { border-radius: var(--panel-radius); padding: 15px; border-color: var(--border-soft); }
+.panel h3 { color: var(--text-dim); letter-spacing: .06em; font-size: 11.5px; }
+.d-head { gap: 10px; margin-bottom: 18px; }
+.d-head .title { font-size: 21px; font-weight: 650; }
+.d-head .btn { padding: 7px 11px; }
+.d-head .btn.danger.ghost {
+  color: var(--red); background: transparent; border-color: transparent;
+}
+.d-head .btn.danger.ghost:hover {
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  border-color: color-mix(in srgb, var(--red) 34%, transparent);
+}
+
+/* 交接工具：从 8 个碎按钮改成 1 个主操作 + 2 列工具 */
+.handoff-box {
+  background: var(--card); border: 1px solid var(--border-soft);
+  border-radius: var(--panel-radius); padding: 14px;
+}
+.handoff-box .tip { color: var(--text-dim); line-height: 1.5; margin-bottom: 10px; }
+.handoff-box .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.handoff-box .btns .btn {
+  justify-content: flex-start; padding: 8px 9px; min-height: 34px;
+  font-size: 11.5px; line-height: 1.35; white-space: normal; text-align: left;
+}
+.handoff-box .btns .btn:first-child {
+  grid-column: 1 / -1; background: var(--accent); border-color: var(--accent);
+  color: #07111d; font-weight: 650;
+}
+:root[data-theme="light"] .handoff-box .btns .btn:first-child { color: #fff; }
+
+/* 就绪度：不再是全页最亮的视觉焦点 */
+.readiness-top { gap: 12px; }
+.rd-ring { width: 48px; height: 48px; font-size: 13px; box-shadow: none; }
+.rd-ring.rd-hi { background: color-mix(in srgb, var(--green) 58%, var(--card)); }
+.rd-ring.rd-mid { background: color-mix(in srgb, var(--orange) 58%, var(--card)); }
+.rd-ring.rd-lo { background: color-mix(in srgb, var(--red) 58%, var(--card)); }
+
+/* 窄窗口：保留分组，但允许顶栏回归普通按钮，避免挤压 */
+@media (max-width: 980px) {
+  header { padding: 10px 14px; }
+  .header-nav, .header-tools { background: transparent; border-color: transparent; padding: 0; }
+  .header-nav .btn, .header-tools .btn { border-color: var(--border); background: var(--card); }
+}
+
+/* 2026-10-18 UI refinement pass 2：让总览主 CTA 退后一步，让项目卡基线更稳 */
+.header-actions .header-cta {
+  background: transparent;
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.header-actions .header-cta:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.pcard .next-action { min-height: 48px; }
+.pcard .card-foot { min-height: 18px; }
+.handoff-box .btns .btn:not(:first-child) {
+  background: transparent;
+  border-color: var(--border-soft);
+  color: var(--text-dim);
+}
+.handoff-box .btns .btn:not(:first-child):hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+.d-layout { grid-template-columns: 360px 1fr; }
+@media (max-width: 980px) { .d-layout { grid-template-columns: 1fr; } }
+
+/* 详情页顶部：主操作只保留「新建任务」，其余降为工具级 */
+.d-head .btn:not(.primary):not(.danger.ghost) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+.d-head .btn:not(.primary):not(.danger.ghost):hover {
+  background: var(--card-hover);
+  color: var(--text);
+  border-color: var(--border-soft);
+}
