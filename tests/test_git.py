@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-from app.main import git_snapshot
+from app.main import check_refs_exist, git_snapshot
 
 pytestmark = pytest.mark.skipif(
     subprocess.run(["git", "--version"], capture_output=True).returncode != 0,
@@ -225,3 +225,44 @@ def test_brief_skips_git_when_unavailable(ai_client):
     ai_client.create_project("没有仓库的项目", repo_path=r"C:\nope\nope")
     brief = ai_client.get("/api/projects")[1]["projects"]
     assert brief, "列表接口不依赖 git"
+
+
+# ---------------- 任务 refs 失效检测（第五轮对标 drift auditing 的任务层形态） ----------------
+
+def test_check_refs_exist_flags_only_missing(tmp_path):
+    """refs 失效检测：存在的文件不报，改名/删掉的报出来；冒号后的行号不参与校验。"""
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "main.py").write_text("x", encoding="utf-8")
+    tasks = [
+        {"id": "t1", "title": "改接口", "refs": ["app/main.py:120", "app/gone.py"]},
+        {"id": "t2", "title": "写测试", "refs": ["tests/"]},          # 目录也被删了
+    ]
+    res = check_refs_exist(str(tmp_path), tasks)
+    assert res["ok"] is True
+    assert res["total"] == 3, "行号那截不该让 app/main.py 变成两条"
+    assert [m["ref"] for m in res["missing"]] == ["app/gone.py", "tests/"]
+    assert res["missing"][0]["task_id"] == "t1"
+    assert res["missing"][0]["task"] == "改接口", "报出来要能指回是哪条任务写的"
+
+
+def test_check_refs_exist_says_why_when_it_cannot_check(tmp_path):
+    """仓库路径不存在时要说"没法查"，而不是报"全都失效" —— 两者在界面上长得一样，
+    但一个该忽略、一个该动手。"""
+    res = check_refs_exist(str(tmp_path / "没有这个目录"), [{"id": "t", "refs": ["a.py"]}])
+    assert res["ok"] is False and res["total"] == 0 and res["missing"] == []
+
+
+def test_git_endpoint_carries_stale_refs(ai_client, tmp_path):
+    """/api/projects/{pid}/git 要顺手带上 refs 检查结果（同一个「代码现状」出口，
+    前端不必再为它发一次请求）。"""
+    repo = make_repo(tmp_path, commits=1)
+    (repo / "app").mkdir()
+    (repo / "app" / "main.py").write_text("x", encoding="utf-8")
+    _, p = ai_client.create_project("带失效引用的项目", repo_path=str(repo), status="进行中")
+    ai_client.post(f"/api/projects/{p['id']}/tasks",
+                   {"title": "改接口", "refs": ["app/main.py:12", "app/renamed.py"]})
+
+    status, snap = ai_client.get(f"/api/projects/{p['id']}/git")
+    assert status == 200
+    assert snap["refs"]["ok"] is True
+    assert [m["ref"] for m in snap["refs"]["missing"]] == ["app/renamed.py"]

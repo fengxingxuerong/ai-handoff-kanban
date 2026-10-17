@@ -120,6 +120,7 @@ from .gitinfo import (  # noqa: F401
     _git_cache,
     _git_sliced,
     _run_git,
+    check_refs_exist,
     git_snapshot,
     prefetch_snapshots,
 )
@@ -2686,6 +2687,9 @@ def project_git(pid: str, limit: int = 10):
     snap = git_snapshot(found[1].get("repo_path", ""), limit=limit, use_cache=False)
     if not snap.get("ok"):
         raise HTTPException(400, snap.get("error", "无法读取仓库信息"))
+    # 顺手把任务 refs 的"还在不在"也查了：同一个「代码现状」出口，前端不必再发一次请求。
+    # 放在这里而不是新端点，也因为这个检查只在"仓库读得到"时才有意义。
+    snap["refs"] = check_refs_exist(found[1].get("repo_path", ""), found[1].get("tasks") or [])
     return snap
 
 

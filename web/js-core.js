@@ -465,9 +465,11 @@ document.addEventListener("keydown", e => {
 // 接手时才细看的参考信息，日常更关心任务与时间轴。这里让每块面板的**标题本身**成为开关
 // （h3 加 role=button + data-keyact，点击与 Enter/空格走同一条路），低频的默认收起,
 // 折叠态记在 localStorage，下次打开保持一致。
-// 默认收起只挑"接手时才细看"的两块。项目记忆**不折**：记决策/坑/约定是持续动作，
-// 而且它的列表本来就有 260px 自己的滚动区，展开也不会失控。
-const PANEL_DEFAULT_COLLAPSED = ["项目背景", "看板说的"];
+// 默认只收起真正"接手时才细看"的那一块（项目背景）。另外两块**不折**：
+// · 项目记忆：记决策/坑/约定是持续动作，不是接手时才看；它自己的列表也有滚动区
+// · 看板说的 vs 代码：它是**告警出口**（进度对不上、refs 失效、代码停了都从这里说），
+//   默认收起等于把要动手的信号藏起来 —— 2026-10-17 加 refs 失效检测时实测到这点
+const PANEL_DEFAULT_COLLAPSED = ["项目背景"];
 
 function _panelKey(panel, h3) {
   return "kanban-panel-" + (panel.id || (h3.textContent || "").trim().slice(0, 14));

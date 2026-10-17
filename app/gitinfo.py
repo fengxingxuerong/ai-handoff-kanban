@@ -147,3 +147,38 @@ def git_snapshot(repo_path: str, limit: int = 10, use_cache: bool = True) -> dic
     if use_cache:
         _git_cache[cache_key] = (time.time(), snapshot)
     return _git_sliced(snapshot, limit)
+
+
+# 失效引用最多报这么多条：真实的交接场景里"三五处对不上"就足够说明问题，
+# 报满一屏反而没人看；输出的口径是"有几处、都是谁"，不是一个不漏的清单。
+MAX_REF_MISSING = 50
+
+
+def check_refs_exist(repo_path: str, tasks: list[dict]) -> dict:
+    """检查任务里的「相关代码位置」（refs）在仓库里还在不在。
+
+    为什么值得单独做（第五轮竞品对标里 drift auditing 在**任务层**的同族形态）：
+    refs 是写给人/AI 的"去这里改"路标；文件被改名或挪走之后，它就悄悄变成一条死路 ——
+    看板上看不出任何异常，接手的智能体照着找一圈才发现，而这正是交接最贵的那种浪费。
+
+    ref 的形态：`app/main.py:120` / `app/main.py` / `tests/`（目录也算）。
+    **冒号后的行号不校验**：行号漂移太常见，报出来只会变成噪音、把真问题淹掉。
+    """
+    base = Path(repo_path or "")
+    if not repo_path or not base.is_dir():
+        return {"ok": False, "total": 0, "missing": [], "checked_tasks": 0}
+    total = 0
+    missing: list[dict] = []
+    for t in tasks:
+        for ref in (t.get("refs") or []):
+            raw = str(ref).split(":")[0].strip().replace("\\", "/")
+            if not raw:
+                continue
+            total += 1
+            try:
+                exists = (base / raw).exists()
+            except OSError:
+                exists = False
+            if not exists and len(missing) < MAX_REF_MISSING:
+                missing.append({"task_id": t.get("id"), "task": t.get("title"), "ref": str(ref)})
+    return {"ok": True, "total": total, "missing": missing, "checked_tasks": len(tasks)}

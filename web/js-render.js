@@ -523,6 +523,15 @@ function realityVerdicts(p, g) {
                    + `顺手更新一下 progress / next_action。`]);
   }
   if (!out.length) out.push(["ok", "两边节奏对得上：看板记录的动静与提交记录没有互相打脸。"]);
+  // 任务里写的「相关代码位置」还找不找得到 —— 文件改名/挪走后 refs 会变成死路，
+  // 而看板上看不出任何异常（接手的人照着找一圈才发现，这是交接里最贵的浪费）。
+  const refs = g && g.refs;
+  if (refs && refs.ok && (refs.missing || []).length) {
+    const shown = refs.missing.slice(0, 3).map(m => m.ref).join("、");
+    out.push(["warn", `任务里写的代码位置有 <b>${refs.missing.length}</b> 处已经找不到了`
+                   + `（${esc(shown)}${refs.missing.length > 3 ? " 等" : ""}）—— 文件多半被改名或挪走了，`
+                   + `接手的人照着找会扑空。`]);
+  }
   return out;
 }
 
