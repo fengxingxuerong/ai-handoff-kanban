@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
+
 import pytest
 
 
@@ -244,14 +246,22 @@ def test_projects_brief_carries_stalled_signal(monkeypatch):
     口径唯一在 project_stats._stalled —— 进行中且 updated_at 超 7 天才算。"""
     import app.main as k
 
+    # 日期一律相对"今天"算：写死绝对日期的话，今天看着"刚动"的那条会随日历推移
+    # 自己变成"停滞"（2026-10-17 实测踩到：用例里的 2026-10-08 当初确实刚动，
+    # 9 天后再跑就不是了，count 由 1 变 2）。见 AGENTS.md「用例不能依赖墙钟」。
+    now = datetime.now()
+    stale = (now - timedelta(days=45)).strftime("%Y-%m-%d %H:%M")
+    fresh = (now - timedelta(days=1)).strftime("%Y-%m-%d %H:%M")
+    very_stale = (now - timedelta(days=90)).strftime("%Y-%m-%d %H:%M")
+
     brief = k._projects_brief([
         {"id": "p1", "name": "停滞板", "status": "进行中", "tags": [],
          "tasks": [{"id": "t1", "title": "停了很久", "status": "进行中",
-                    "updated_at": "2026-09-01 10:00"},
+                    "updated_at": stale},
                    {"id": "t2", "title": "刚动的", "status": "进行中",
-                    "updated_at": "2026-10-08 09:00"},
+                    "updated_at": fresh},
                    {"id": "t3", "title": "停很久的待办", "status": "待办",
-                    "updated_at": "2026-08-01 08:00"}]}])
+                    "updated_at": very_stale}]}])
     st = brief[0]["stalled"]
     assert st["count"] == 1, st
     assert st["tasks"][0]["id"] == "t1" and st["tasks"][0]["idle_days"] >= 30, st
