@@ -56,9 +56,24 @@ def build_agents_md_local(p: dict, memory_rows: list[dict], now: str) -> str:
             refs = "、".join(t.get("refs") or [])
             deps = [d for d in (t.get("depends_on") or []) if d in by_id]
             dep_txt = "，前置：" + "、".join(by_id[d].get("title", d) for d in deps) if deps else ""
+            acc = "；".join(t.get("acceptance") or [])
             lines.append(f"- [{t.get('status', '待办')}] {t.get('title')}（优先级 {t.get('priority', '中')}）"
-                         + (f" — 涉及：{refs}" if refs else "") + dep_txt)
+                         + (f" — 涉及：{refs}" if refs else "") + dep_txt
+                         + (f" — 验收：{acc}" if acc else ""))
         lines.append("")
+
+        # 独立一节：新智能体最先找的就是“怎么算完成”，不要让它从任务行里猜。
+        done_lines = []
+        for t in tasks:
+            acc = [a for a in (t.get("acceptance") or []) if a]
+            if acc:
+                done_lines.append(f"- **{t.get('title')}**")
+                done_lines.extend(f"  - {a}" for a in acc)
+        if done_lines:
+            lines.append("## 验收标准（Definition of Done）")
+            lines.append("")
+            lines.extend(done_lines)
+            lines.append("")
     if memory_rows:
         lines.append("## 项目记忆（决策 / 坑 / 约定）")
         lines.append("")
@@ -77,7 +92,8 @@ def generate_agents_md(p: dict, *, project_memories_fn, local_builder_fn) -> tup
         "1) 总行数控制在 150 行以内，紧凑高信号；\n"
         "2) 只写 AI 无法从代码直接推断的信息：精确的构建/测试命令、代码约定、关键决策、已知的坑、当前进度；\n"
         "3) 使用 Markdown 小标题组织；具体务实，禁止空话套话（如'代码要规范'）；\n"
-        "4) 命令若有不确定，写'请查看仓库 README 或 package.json scripts'，不要编造。\n"
+        "4) 命令若有不确定，写'请查看仓库 README 或 package.json scripts'，不要编造；\n"
+        "5) 每个未完成任务必须带验收标准（Definition of Done），并保留 refs、前置依赖和截止日期。\n"
         "直接输出 AGENTS.md 正文，不要任何额外说明。"
     )
     # 送给模型的那一份**必须脱敏**：这条不是"用户点名让润色自己写的文本"那个豁免档，
@@ -88,8 +104,12 @@ def generate_agents_md(p: dict, *, project_memories_fn, local_builder_fn) -> tup
         "status": p.get("status", ""), "progress": p.get("progress", 0),
         "background": p.get("background", ""), "handoff_note": p.get("handoff_note", ""),
         "next_action": p.get("next_action", ""),
-        "tasks": [{"title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", "")}
-                  for t in (p.get("tasks") or [])],
+        "tasks": [{
+            "title": t["title"], "status": t.get("status", ""), "priority": t.get("priority", ""),
+            "agent": t.get("agent", ""), "due_date": t.get("due_date", ""),
+            "refs": t.get("refs") or [], "acceptance": t.get("acceptance") or [],
+            "depends_on": t.get("depends_on") or [],
+        } for t in (p.get("tasks") or [])],
         # 记忆层也送进去：系统提示词第 2 条要的就是"关键决策、已知的坑"，
         # 而这三样恰恰是用户特意记在记忆层里的东西（不送就等于白记）
         "memories": [{"type": m.get("type", ""), "text": m.get("text", "")}

@@ -858,11 +858,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 当前进度与下一步
 
-**状态：v1.5.0（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
+**状态：v1.5.1（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 里写的版本号与 `app/version.py` 同数 ——
 2026-10-18 之前这一条**没有门禁**，1.5.0 落地后两份文档里都还是 1.4.0（`1.5.0` 字样出现 0 次）。
 1.2.0 → 1.2.1（2026-10-07）只带一个用户可见修复（`/api/inbox` 补「依赖没满足的不算」过滤，见提交 317a239）与 journal.py 拆分重构（32b2b32）。
+**1.5.0 → 1.5.1（2026-10-18）：交接文档收口轮。** AGENTS.md 增加 `Definition of Done` 与任务字段（refs / acceptance / 依赖 / 截止）；修复新智能体接管时「验收标准：材料未提供」的缺口；46 条交接相关测试通过。
 **1.4.0 → 1.5.0（2026-10-17）：交付收口轮（修复为主，但含一条桌面端行为变化，故按次版本号）。**
 项目卡标题改两行布局（长标题不再被截成一行看不全）；`KANBAN_TOKEN` 注入桌面 UI
 （带 token 的实例里窗口内也能写，不再只读 401）；`memories.json` / `config.json` 也补上

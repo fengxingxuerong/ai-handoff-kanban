@@ -38,10 +38,12 @@ from pathlib import Path
 # 顺手修掉两个「JS 在用、CSS 未定义」的 token：--purple（任务统计堆叠条
 # 「待审查」那一段 fill 无效、实际渲染成黑色）与 --line（恢复来源列表分隔线整条失效）。
 # 前端契约零改动：类名 / data-act / a11y 契约 / 弹窗数 / --banner-h 高度 calc 全部保持。
+# 1.5.1（2026-10-18）：交接文档收口 —— AGENTS.md 补 Definition of Done、refs/验收/依赖/截止；
+# 修复新智能体接管时「验收标准：材料未提供」的缺口；46 条交接相关测试通过。
 # 1.5.0（2026-10-17）：交付收口轮 —— 项目卡标题两行布局；KANBAN_TOKEN 注入桌面 UI；
 # memories/config 增加 last-good + 损坏留证；批量删除改服务端预快照 + 全有或全无；
 # 表单标签/弹窗标题/对比度可访问性修复。
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 
 ROOT = Path(__file__).resolve().parent.parent
 
