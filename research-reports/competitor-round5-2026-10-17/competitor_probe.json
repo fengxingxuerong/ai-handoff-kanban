@@ -1,0 +1,877 @@
+[
+  {
+    "full_name": "MasihMoafi/Elpis",
+    "stars": 46,
+    "desc": "A Codex-based coding-agent TUI with explicit context control, auditable Smart Prune, and local session continuity.",
+    "pushed_at": "2026-10-16",
+    "topics": [
+      "agentic-coding",
+      "ai-agents",
+      "anthropic",
+      "cli",
+      "codex",
+      "coding-assistant",
+      "context-engineering",
+      "llm"
+    ],
+    "url": "https://github.com/MasihMoafi/Elpis"
+  },
+  {
+    "full_name": "amazeeio/drupal-agents-md",
+    "stars": 38,
+    "desc": "Drupal AGENTS.md: provide the context and instructions to help AI coding agents work on your Drupal 10.x+ project.",
+    "pushed_at": "2026-04-23",
+    "topics": [],
+    "url": "https://github.com/amazeeio/drupal-agents-md"
+  },
+  {
+    "full_name": "alpertarhan/pi-smart-compact",
+    "stars": 36,
+    "desc": "Pi Continuity — context hygiene and session continuity for the Pi Coding Agent: recoverable cleanup, checkpoints, memory and verified compaction (npm: pi-smart-compact)",
+    "pushed_at": "2026-10-14",
+    "topics": [
+      "ai-agent",
+      "bun",
+      "context-compression",
+      "llm",
+      "pi",
+      "pi-coding-agent",
+      "pi-extension",
+      "smart-compaction"
+    ],
+    "url": "https://github.com/alpertarhan/pi-smart-compact"
+  },
+  {
+    "full_name": "rentprompts/awesome-agent-md",
+    "stars": 15,
+    "desc": "An Awesome list, of open AGENTS.md (prompt) for guiding coding agents, Already used by over 20k open-source projects.  Think of AGENTS.md as a README for agents: a dedicated, Accurate place to provide the context and ins",
+    "pushed_at": "2025-08-21",
+    "topics": [],
+    "url": "https://github.com/rentprompts/awesome-agent-md"
+  },
+  {
+    "full_name": "dkothule/ai-context",
+    "stars": 11,
+    "desc": "Unified context system for seamless multi-agent AI development. Works with Cursor, Claude Code, Codex, and Google Antigravity. Single source of truth, session continuity, and zero context loss when switching between AI a",
+    "pushed_at": "2026-09-10",
+    "topics": [],
+    "url": "https://github.com/dkothule/ai-context"
+  },
+  {
+    "full_name": "ashfulcra/fulcra-tools",
+    "stars": 10,
+    "desc": " Long-running AI agents coordinating over their human's own Fulcra account — shared bus, cross-model reviews, session continuity, load balancing. Unofficial, MIT.",
+    "pushed_at": "2026-10-17",
+    "topics": [
+      "agent-coordination",
+      "ai-agents",
+      "chatgpt",
+      "claude",
+      "claude-code",
+      "claude-code-plugin",
+      "claude-skills",
+      "codex"
+    ],
+    "url": "https://github.com/ashfulcra/fulcra-tools"
+  },
+  {
+    "full_name": "E-Conners-Lab/NetworkOps_Platform",
+    "stars": 10,
+    "desc": "AI-powered network automation via Netbox and Model Context Protocol (MCP). 178 tools for multi-vendor infrastructure   management, self-healing agents, drift detection, and a real-time web dashboard.",
+    "pushed_at": "2026-09-22",
+    "topics": [
+      "ai-agents",
+      "mcp",
+      "multi-vendor",
+      "netbox",
+      "network-automation",
+      "python",
+      "react"
+    ],
+    "url": "https://github.com/E-Conners-Lab/NetworkOps_Platform"
+  },
+  {
+    "full_name": "gr8pr1/ebpf-adaptive-security-agent",
+    "stars": 9,
+    "desc": "Host-based security monitoring agent using eBPF to learn normal system behavior and detect anomalies. Two-phase operation: seasonal baselining (24h x 7d buckets) with EWMA drift adaptation, then z-score anomaly detection",
+    "pushed_at": "2026-06-13",
+    "topics": [],
+    "url": "https://github.com/gr8pr1/ebpf-adaptive-security-agent"
+  },
+  {
+    "full_name": "aliihsaad/the-vault",
+    "stars": 8,
+    "desc": "Local-first AI memory system for coding agents: desktop app, CLI, and MCP server for durable project context, handoffs, recall, and task continuity.",
+    "pushed_at": "2026-10-10",
+    "topics": [
+      "agent-memory",
+      "ai-agents",
+      "ai-memory",
+      "claude",
+      "codex",
+      "developer-tools",
+      "electron",
+      "knowledge-management"
+    ],
+    "url": "https://github.com/aliihsaad/the-vault"
+  },
+  {
+    "full_name": "Phil200727/contextops",
+    "stars": 8,
+    "desc": "A lightweight, file-based Kanban engine for orchestrating AI coding agents — plan, assign, and review tasks through a local board, with full context tracking in plain Markdown/YAML files.",
+    "pushed_at": "2026-07-26",
+    "topics": [],
+    "url": "https://github.com/Phil200727/contextops"
+  },
+  {
+    "full_name": "StringKe/std-agent",
+    "stars": 8,
+    "desc": "One .stdai/ source of truth, fanned out to 22 AI coding tools: Claude Code, Codex, Cursor, Copilot, Gemini CLI, Windsurf/Devin, Amp, Warp and more. Native formats, Agent Skills, MCP, context budgets, drift detection.",
+    "pushed_at": "2026-09-18",
+    "topics": [
+      "agent-skills",
+      "agents",
+      "agents-md",
+      "ai",
+      "ai-agents",
+      "ai-cli",
+      "ai-configuration",
+      "ai-tools"
+    ],
+    "url": "https://github.com/StringKe/std-agent"
+  },
+  {
+    "full_name": "leesgit/passbaton",
+    "stars": 7,
+    "desc": "Session continuity for AI coding agents — your agent picks up where it left off. Persistent memory for Claude Code, OpenAI Codex CLI & Google Gemini CLI, sharing one local db: auto context injection, compaction handover,",
+    "pushed_at": "2026-10-14",
+    "topics": [
+      "agent-memory",
+      "ai",
+      "ai-agent",
+      "anthropic",
+      "claude",
+      "claude-code",
+      "codex",
+      "codex-cli"
+    ],
+    "url": "https://github.com/leesgit/passbaton"
+  },
+  {
+    "full_name": "wxk995/agent-kb-template",
+    "stars": 6,
+    "desc": "A lightweight Markdown + Git knowledge base template for AI agents, with hot/warm/cold context layers and project memory handoff.",
+    "pushed_at": "2026-08-16",
+    "topics": [],
+    "url": "https://github.com/wxk995/agent-kb-template"
+  },
+  {
+    "full_name": "VAIXLNS/VAIXLNS",
+    "stars": 6,
+    "desc": "╔════════════════════════════════════أرى أن هذا أصبح أقرب إلى Blueprint سيادي وليس مجرد مخطط نظام. ومع ذلك، إذا كان الهدف أن يكون هذا الرسم المرجعي النهائي (Master Architecture Blueprint) فلا تزال هناك فجوة معمارية واحدة",
+    "pushed_at": "2026-09-02",
+    "topics": [],
+    "url": "https://github.com/VAIXLNS/VAIXLNS"
+  },
+  {
+    "full_name": "fullymiddleaged/Clawness",
+    "stars": 5,
+    "desc": "Claude Code & OpenClaw plugin, with a context-aware rules engine that injects only the rules each prompt needs. Codebase-aware, ~4ms lookup, pure Python. 222 rules / 30 domains for full-stack and scientific work. Include",
+    "pushed_at": "2026-10-04",
+    "topics": [
+      "agentic-coding",
+      "ai-agents",
+      "ai-coding",
+      "bm25",
+      "claude",
+      "claude-code",
+      "claude-code-plugin",
+      "code-review"
+    ],
+    "url": "https://github.com/fullymiddleaged/Clawness"
+  },
+  {
+    "full_name": "meet987654/pipecat-session-continuity",
+    "stars": 5,
+    "desc": "It is a drop-in resilience library that checkpoints LLM context and pending tool calls to Redis and seamlessly restores them on reconnect, so Pipecat voice agents survive network drops, refreshes, and backgrounding to pi",
+    "pushed_at": "2026-10-13",
+    "topics": [],
+    "url": "https://github.com/meet987654/pipecat-session-continuity"
+  },
+  {
+    "full_name": "citadelgrad/feynman-paperclip-adapter",
+    "stars": 5,
+    "desc": "The Feynman adapter is the Paperclip integration layer that lets Paperclip run Feynman as a local agent. It resolves the local Feynman install, injects Paperclip runtime    context, launches Feynman/Pi with the right mod",
+    "pushed_at": "2026-09-09",
+    "topics": [],
+    "url": "https://github.com/citadelgrad/feynman-paperclip-adapter"
+  },
+  {
+    "full_name": "Avinash-Amudala/weftgate",
+    "stars": 4,
+    "desc": "New session. Same project brain. Local memory, compact context and handoffs for coding agents, with verification built in. One install. CLI + MCP.",
+    "pushed_at": "2026-09-15",
+    "topics": [
+      "agent-memory",
+      "ai-agents",
+      "claude-code",
+      "code-quality",
+      "codex",
+      "context-engineering",
+      "cursor",
+      "developer-tools"
+    ],
+    "url": "https://github.com/Avinash-Amudala/weftgate"
+  },
+  {
+    "full_name": "s1nthagent/openclaw-memory",
+    "stars": 4,
+    "desc": "Persistent memory system for OpenClaw agents - solves context loss, enables cross-session continuity",
+    "pushed_at": "2026-02-03",
+    "topics": [],
+    "url": "https://github.com/s1nthagent/openclaw-memory"
+  },
+  {
+    "full_name": "commonspaceai/commonspace",
+    "stars": 4,
+    "desc": "The local-first workspace for the agents you already use. Durable conversations, shared context, and native session continuity.",
+    "pushed_at": "2026-10-16",
+    "topics": [
+      "agent-client-protocol",
+      "ai-agents",
+      "coding-agents",
+      "collaboration",
+      "developer-tools",
+      "local-first",
+      "mcp",
+      "nodejs"
+    ],
+    "url": "https://github.com/commonspaceai/commonspace"
+  },
+  {
+    "full_name": "i3T4AN/Archivist-MCP",
+    "stars": 4,
+    "desc": "Archivist MCP is a local-first memory server for coding agents. It persists decisions, incidents, rules, entities, and graph relationships in SQLite, then exposes them over MCP (stdio/HTTP), SSE team mode, and WebUI. Bui",
+    "pushed_at": "2026-03-23",
+    "topics": [
+      "developer-tools",
+      "knowledge-graph",
+      "mcp",
+      "mcp-client",
+      "mcp-server",
+      "mcp-tools",
+      "model-context-protocol",
+      "sqlite"
+    ],
+    "url": "https://github.com/i3T4AN/Archivist-MCP"
+  },
+  {
+    "full_name": "Cashcoin123/Cashcoin123",
+    "stars": 4,
+    "desc": "# Application card: GitHub Copilot Chat  Learn how to use GitHub Copilot Chat responsibly by understanding its purposes, capabilities, and limitations.  ## What is an Application Card?  <!-- Do not modify this text.-->  ",
+    "pushed_at": "2026-10-05",
+    "topics": [
+      "config",
+      "github-config"
+    ],
+    "url": "https://github.com/Cashcoin123/Cashcoin123"
+  },
+  {
+    "full_name": "msxy22/NetworkOps_Platform",
+    "stars": 4,
+    "desc": "AI-powered network automation via Model Context Protocol (MCP). 178 tools for multi-vendor infrastructure   management, self-healing agents, drift detection, and a real-time web dashboard.",
+    "pushed_at": "2026-02-19",
+    "topics": [],
+    "url": "https://github.com/msxy22/NetworkOps_Platform"
+  },
+  {
+    "full_name": "ragnarok268/agent-memory-layer",
+    "stars": 3,
+    "desc": "A persistent memory layer for autonomous coding agents that preserves project intent, decisions, and handoff context.",
+    "pushed_at": "2026-06-22",
+    "topics": [],
+    "url": "https://github.com/ragnarok268/agent-memory-layer"
+  },
+  {
+    "full_name": "sandeepbollavaram/Kairo",
+    "stars": 3,
+    "desc": "Persistent engineering memory & session-continuity control layer for AI coding agents (Claude Code, Codex, Cursor, Gemini), built on the Model Context Protocol. Scans a repo once, remembers architecture/decisions/changes",
+    "pushed_at": "2026-05-30",
+    "topics": [
+      "ai-agents",
+      "ai-memory",
+      "claude-code",
+      "developer-tools",
+      "llm-tools",
+      "mcp",
+      "model-context-protocol",
+      "session-continuity"
+    ],
+    "url": "https://github.com/sandeepbollavaram/Kairo"
+  },
+  {
+    "full_name": "msiksnis/benjamin-docs",
+    "stars": 3,
+    "desc": "Persistent project memory for AI coding agents.",
+    "pushed_at": "2026-07-12",
+    "topics": [
+      "agent-memory",
+      "ai-agents",
+      "claude-code",
+      "cli",
+      "codex",
+      "coding-agents",
+      "cursor",
+      "developer-tools"
+    ],
+    "url": "https://github.com/msiksnis/benjamin-docs"
+  },
+  {
+    "full_name": "marcusgoll/atlas-guardrails",
+    "stars": 3,
+    "desc": "Guardrails for LLM Coding Agents (Context Packing, Anti-Duplication, Drift Detection)",
+    "pushed_at": "2026-01-22",
+    "topics": [
+      "claude",
+      "devtools",
+      "guardrails",
+      "llm",
+      "mcp",
+      "typescript"
+    ],
+    "url": "https://github.com/marcusgoll/atlas-guardrails"
+  },
+  {
+    "full_name": "sagarkrishnamoorthy/ai-security-driftguard",
+    "stars": 3,
+    "desc": "DriftGuard is an AI Security Drift Detection and Enforcement Platform that secures the entire AI ecosystem by continuously monitoring and remediating security, compliance, and governance drift across LLMs, agents, RAG pi",
+    "pushed_at": "2025-12-22",
+    "topics": [],
+    "url": "https://github.com/sagarkrishnamoorthy/ai-security-driftguard"
+  },
+  {
+    "full_name": "davccavalcante/racs",
+    "stars": 3,
+    "desc": "RACS (Remote Agent Context Store): prefix-cache management for production agents. Stability-aware prompt planning, provider-faithful cache directives for Anthropic, OpenAI, Gemini, Bedrock and more, TTL keep-warm schedul",
+    "pushed_at": "2026-09-10",
+    "topics": [
+      "ai-agents",
+      "anthropic",
+      "bedrock",
+      "cache-analytics",
+      "cache-management",
+      "context-caching",
+      "cost-optimization",
+      "edge"
+    ],
+    "url": "https://github.com/davccavalcante/racs"
+  },
+  {
+    "full_name": "YANZi26/codex-context-management-template",
+    "stars": 2,
+    "desc": "A lightweight project memory and handoff template for Codex and AI coding agents.",
+    "pushed_at": "2026-05-29",
+    "topics": [
+      "ai-agents",
+      "ai-coding",
+      "codex",
+      "context-management",
+      "developer-tools",
+      "project-handoff"
+    ],
+    "url": "https://github.com/YANZi26/codex-context-management-template"
+  },
+  {
+    "full_name": "JayCRL/CloudSoul",
+    "stars": 2,
+    "desc": "A cloud-native memory and handoff layer for AI agents, keeping context, habits, and project knowledge synced across machines and tools.",
+    "pushed_at": "2026-07-01",
+    "topics": [],
+    "url": "https://github.com/JayCRL/CloudSoul"
+  },
+  {
+    "full_name": "arxdsilva/agent-office",
+    "stars": 2,
+    "desc": "Desktop command center for AI coding agents: shared project memory, a context engine, a local MCP server and handoffs across Claude Code, Codex, Cursor, Gemini CLI and Copilot, shown as a live 3D virtual office.",
+    "pushed_at": "2026-10-14",
+    "topics": [
+      "agent-memory",
+      "agent-orchestration",
+      "agentic-ai",
+      "ai-agents",
+      "ai-tools",
+      "claude-code",
+      "codex",
+      "coding-agents"
+    ],
+    "url": "https://github.com/arxdsilva/agent-office"
+  },
+  {
+    "full_name": "r00tbear/project-context-skill",
+    "stars": 2,
+    "desc": "Audit & context-file generation skill for AI agents (Claude Code, Codex, Cursor): read-only codebase audit, target-architecture interview, agents.md + docs with wikilinks, drift detection, PR review gate",
+    "pushed_at": "2026-09-23",
+    "topics": [
+      "agents-md",
+      "ai-agents",
+      "claude-code",
+      "code-audit",
+      "skill"
+    ],
+    "url": "https://github.com/r00tbear/project-context-skill"
+  },
+  {
+    "full_name": "rakib-nyc/skillassay",
+    "stars": 2,
+    "desc": "Static analyzer for AI coding-agent context — and an Agent Skill your agent can run. Measures always-on context cost of CLAUDE.md, AGENTS.md and Agent Skills; finds skills that won't load, redundant instructions, stale p",
+    "pushed_at": "2026-08-16",
+    "topics": [
+      "agent-skills",
+      "agents-md",
+      "ai-agents",
+      "claude",
+      "claude-code",
+      "claude-md",
+      "claude-skills",
+      "cli"
+    ],
+    "url": "https://github.com/rakib-nyc/skillassay"
+  },
+  {
+    "full_name": "DriftOS/driftos-mcp-server",
+    "stars": 2,
+    "desc": "MCP server for conversational memory and semantic drift detection in AI agents.",
+    "pushed_at": "2025-12-09",
+    "topics": [
+      "ai",
+      "context",
+      "llm",
+      "mcp-server",
+      "nodejs",
+      "typescript"
+    ],
+    "url": "https://github.com/DriftOS/driftos-mcp-server"
+  },
+  {
+    "full_name": "ucsandman/context-handoff-bundle",
+    "stars": 2,
+    "desc": "Resume yesterday's AI coding session for ~3% of the tokens. Save what your agent learned, load it in any terminal -- with drift detection.",
+    "pushed_at": "2026-09-17",
+    "topics": [
+      "ai",
+      "claude-code",
+      "cli",
+      "coding-agent",
+      "context-management",
+      "developer-tools",
+      "python",
+      "session-continuity"
+    ],
+    "url": "https://github.com/ucsandman/context-handoff-bundle"
+  },
+  {
+    "full_name": "dr-gareth-roberts/context-engineering",
+    "stars": 2,
+    "desc": "Context engineering toolkit for LLMs — pack, cache, debug, red-team, and orchestrate context windows. Council of Experts, adversarial testing, immune system, context compiler, drift detection, multi-agent entanglement. T",
+    "pushed_at": "2026-10-04",
+    "topics": [
+      "adversarial-testing",
+      "ai",
+      "context-engineering",
+      "context-packing",
+      "context-window",
+      "council-of-experts",
+      "llm",
+      "llm-tools"
+    ],
+    "url": "https://github.com/dr-gareth-roberts/context-engineering"
+  },
+  {
+    "full_name": "Lord1Egypt/ThothMemory",
+    "stars": 1,
+    "desc": "Local-first shared memory for AI agents. Persistent project context, evidence-based handoffs, PostgreSQL, and MCP integration for Codex, Claude Code and OpenCode.",
+    "pushed_at": "2026-10-14",
+    "topics": [
+      "agent-memory",
+      "ai-agents",
+      "ai-automation",
+      "claude-code",
+      "codex",
+      "developer-tools",
+      "docker",
+      "docker-compose"
+    ],
+    "url": "https://github.com/Lord1Egypt/ThothMemory"
+  },
+  {
+    "full_name": "tashev11/tashevos",
+    "stars": 1,
+    "desc": "The open control plane for AI coding: shared memory, context optimization, agent handoffs, project health, auto-healing and conflict protection.",
+    "pushed_at": "2026-10-14",
+    "topics": [
+      "agent-memory",
+      "ai",
+      "claude",
+      "codex",
+      "coding-agents",
+      "context-engineering",
+      "cursor",
+      "developer-tools"
+    ],
+    "url": "https://github.com/tashev11/tashevos"
+  },
+  {
+    "full_name": "skadri1601/Mneia",
+    "stars": 1,
+    "desc": "Shared project memory and handoff for teams working with AI agents. Checkpoint decisions, rehydrate context, hand work over — through MCP or the CLI, in Claude Code, Cursor, or Codex.",
+    "pushed_at": "2026-08-29",
+    "topics": [
+      "agent-memory",
+      "agentic-ai",
+      "ai",
+      "ai-agents",
+      "ai-memory",
+      "claude-code",
+      "context-engineering",
+      "context-management"
+    ],
+    "url": "https://github.com/skadri1601/Mneia"
+  },
+  {
+    "full_name": "Nhat-TheDev/GoalTracker",
+    "stars": 1,
+    "desc": "MCP server that gives AI coding agents persistent, structured project memory — Goal → Spec → Milestone → Task → Note in one SQLite file, so context resets and agent handoffs are a one-tool-call recovery, not a re-read.",
+    "pushed_at": "2026-09-10",
+    "topics": [
+      "agent-skills",
+      "ai-agents",
+      "llm-tools",
+      "mcp",
+      "mcp-server",
+      "project-management",
+      "task-management"
+    ],
+    "url": "https://github.com/Nhat-TheDev/GoalTracker"
+  },
+  {
+    "full_name": "pinkpixel-dev/agent-context-kit",
+    "stars": 1,
+    "desc": "Durable project context for AI coding agents: an AGENTS.md template, three context files, and the skills to read and maintain them.",
+    "pushed_at": "2026-09-03",
+    "topics": [
+      "agent-skills",
+      "agents",
+      "agents-md-template",
+      "ai",
+      "ai-agents",
+      "ai-assisted-development",
+      "claude-code",
+      "claude-skills"
+    ],
+    "url": "https://github.com/pinkpixel-dev/agent-context-kit"
+  },
+  {
+    "full_name": "rumotion/ai-agent-project-template",
+    "stars": 1,
+    "desc": "A portable template for AI coding projects: canonical AGENTS.md instructions, shared project memory, validated context, bounded worker reports and dependency-free tooling.",
+    "pushed_at": "2026-10-03",
+    "topics": [
+      "agent-skills",
+      "agents-md",
+      "ai-agents",
+      "ai-assisted-coding",
+      "boilerplate",
+      "claude-code",
+      "cline",
+      "coding-agents"
+    ],
+    "url": "https://github.com/rumotion/ai-agent-project-template"
+  },
+  {
+    "full_name": "mhadikz/agent-context-framework",
+    "stars": 1,
+    "desc": "Onboarding manuals for AI coding agents. AGENTS.md, CLAUDE.md, and project context for Next.js and NestJS, from a small team to an enterprise.",
+    "pushed_at": "2026-09-23",
+    "topics": [
+      "agents-md",
+      "ai-coding-agents",
+      "claude-code",
+      "cursor",
+      "github-copilot",
+      "llm",
+      "nestjs",
+      "nextjs"
+    ],
+    "url": "https://github.com/mhadikz/agent-context-framework"
+  },
+  {
+    "full_name": "twj0415/vt-agent-hub",
+    "stars": 1,
+    "desc": "VT AgentDock is a desktop workspace for managing AI coding tools, projects, rules, skills, presets, and AGENTS.md context.",
+    "pushed_at": "2026-06-03",
+    "topics": [],
+    "url": "https://github.com/twj0415/vt-agent-hub"
+  },
+  {
+    "full_name": "raulvallejo/agents-md",
+    "stars": 1,
+    "desc": "A production-ready AGENTS.md template for AI agent projects - persistent context for Claude Code, Cursor, and Windsurf",
+    "pushed_at": "2026-04-12",
+    "topics": [],
+    "url": "https://github.com/raulvallejo/agents-md"
+  },
+  {
+    "full_name": "api-evangelist/agents-md",
+    "stars": 1,
+    "desc": "AGENTS.md — independent third-party profile of a public API surface, by API Evangelist. AGENTS.md is an open standard file format that provides context and instructions to AI coding agents working on software projects. L",
+    "pushed_at": "2026-10-08",
+    "topics": [
+      "ai-agents",
+      "ai-copilot",
+      "apis-json",
+      "coding-standards",
+      "developer-workflow",
+      "documentation",
+      "open-standard"
+    ],
+    "url": "https://github.com/api-evangelist/agents-md"
+  },
+  {
+    "full_name": "aajll/agents-template.md",
+    "stars": 1,
+    "desc": "A template for a projects AGENTS.md: a dedicated, predictable place to provide context and instructions to help AI coding agents work on your project.",
+    "pushed_at": "2026-04-24",
+    "topics": [],
+    "url": "https://github.com/aajll/agents-template.md"
+  },
+  {
+    "full_name": "Gucky/AgentFileArchitecture",
+    "stars": 1,
+    "desc": "An installable skill for Codex and other AI coding assistants that keeps AGENTS.md concise and routes detailed, project-specific guidance into focused extensions. It speeds re-orientation after context compression and pr",
+    "pushed_at": "2026-07-20",
+    "topics": [],
+    "url": "https://github.com/Gucky/AgentFileArchitecture"
+  },
+  {
+    "full_name": "Vladev0/agentboard",
+    "stars": 1,
+    "desc": "Local kanban task board for humans and AI coding agents, backed by a markdown vault",
+    "pushed_at": "2026-09-23",
+    "topics": [
+      "ai-agents",
+      "kanban",
+      "local-first-ai",
+      "markdown",
+      "mcp",
+      "model-context-protocol",
+      "react",
+      "self-hosted"
+    ],
+    "url": "https://github.com/Vladev0/agentboard"
+  },
+  {
+    "full_name": "technikatsu/ai-task-manager",
+    "stars": 1,
+    "desc": "AI-first local-first desktop control room for ai-agent-workflow markdown task boards. Basically AI-controlled kanban board.",
+    "pushed_at": "2026-05-24",
+    "topics": [
+      "agentic-workflows",
+      "ai-agents",
+      "claude-code",
+      "desktop-app",
+      "kanban",
+      "local-first",
+      "markdown",
+      "svelte"
+    ],
+    "url": "https://github.com/technikatsu/ai-task-manager"
+  },
+  {
+    "full_name": "BhanuTabeti/agent-board",
+    "stars": 1,
+    "desc": "A lean, local task board + methodology for building software with AI coding agents — disciplined, test-first, isolated. Markdown + git only.",
+    "pushed_at": "2026-06-15",
+    "topics": [
+      "ai-agents",
+      "blackboard",
+      "claude-code",
+      "developer-tools",
+      "git-worktrees",
+      "kanban",
+      "tdd"
+    ],
+    "url": "https://github.com/BhanuTabeti/agent-board"
+  },
+  {
+    "full_name": "karlll/knutpunkt",
+    "stars": 0,
+    "desc": "Local Kanban board for humans and AI agents. File-based task management with Markdown, drag-and-drop UI, and real-time updates.",
+    "pushed_at": "2026-07-30",
+    "topics": [
+      "agent",
+      "ai",
+      "kanban",
+      "markdown",
+      "mcp",
+      "task-management"
+    ],
+    "url": "https://github.com/karlll/knutpunkt"
+  },
+  {
+    "full_name": "SamP-S/north",
+    "stars": 0,
+    "desc": "In-repo markdown task board for humans and AI agents - a single-binary CLI/TUI, no daemon, git stays yours.",
+    "pushed_at": "2026-07-18",
+    "topics": [
+      "ai",
+      "ai-agents",
+      "claude",
+      "claude-code",
+      "cli",
+      "developer-tools",
+      "git",
+      "golang"
+    ],
+    "url": "https://github.com/SamP-S/north"
+  },
+  {
+    "full_name": "TheMightySebas/klaudban",
+    "stars": 0,
+    "desc": "Self-hosted markdown kanban for AI agents. Each task is a vault .md file. Works with Claude out of the box, or as a plain Obsidian-friendly board.",
+    "pushed_at": "2026-05-24",
+    "topics": [
+      "automation",
+      "claude",
+      "claude-code",
+      "kanban",
+      "kanban-board",
+      "self-hosted",
+      "task-management",
+      "task-manager"
+    ],
+    "url": "https://github.com/TheMightySebas/klaudban"
+  },
+  {
+    "full_name": "tranhaianh20571-droid/project-handoff-skill",
+    "stars": 0,
+    "desc": "Agent skill: evidence-based, independently actionable project handoff documents",
+    "pushed_at": "2026-09-19",
+    "topics": [
+      "agent-skill",
+      "claude-code",
+      "codex",
+      "documentation",
+      "handoff",
+      "skill"
+    ],
+    "url": "https://github.com/tranhaianh20571-droid/project-handoff-skill"
+  },
+  {
+    "full_name": "DevAngusC/Project-Context-Build-Skill-Agent",
+    "stars": 0,
+    "desc": "Documentation-first Codex skill agent for building PROJECT_CONTEXT.md and CODEX_HANDOFF_PROMPT.md",
+    "pushed_at": "2026-06-07",
+    "topics": [],
+    "url": "https://github.com/DevAngusC/Project-Context-Build-Skill-Agent"
+  },
+  {
+    "full_name": "nessed/librarian-agent-simulation",
+    "stars": 0,
+    "desc": "Research-assistant workspace: documentation, registries, automation and project handoffs for a document-heavy research project.",
+    "pushed_at": "2026-09-08",
+    "topics": [],
+    "url": "https://github.com/nessed/librarian-agent-simulation"
+  },
+  {
+    "full_name": "mp2123/Gemini_Codex_Project_1_Docs",
+    "stars": 0,
+    "desc": "Documentation for Gemini/Codex workflow automation, agent handoff, and durable project context",
+    "pushed_at": "2026-06-19",
+    "topics": [
+      "agent-workflows",
+      "ai-workflow",
+      "antigravity",
+      "automation",
+      "codex",
+      "developer-tools",
+      "documentation",
+      "gemini"
+    ],
+    "url": "https://github.com/mp2123/Gemini_Codex_Project_1_Docs"
+  },
+  {
+    "full_name": "maitreyi0002-beep/maitreyi-portfolio",
+    "stars": 0,
+    "desc": "Product design portfolio. Portable source, project memory, and agent handoff documentation.",
+    "pushed_at": "2026-09-20",
+    "topics": [],
+    "url": "https://github.com/maitreyi0002-beep/maitreyi-portfolio"
+  },
+  {
+    "full_name": "fullREFIT/agent-references",
+    "stars": 0,
+    "desc": "Universal templates and protocols for AI-enabled development workflows, including session continuity tools (chat-recap), project documentation templates (project-handoff), and MCP configuration guides.",
+    "pushed_at": "2026-01-18",
+    "topics": [],
+    "url": "https://github.com/fullREFIT/agent-references"
+  },
+  {
+    "full_name": "ouroboros965018276-collab/universal-project-governance",
+    "stars": 0,
+    "desc": "通用项目治理 | Universal Project Governance — A model-agnostic Agent Skill for continuous project governance, cleanup, technical-debt control, documentation truth, validation, chronology, and handoff continuity.",
+    "pushed_at": "2026-10-16",
+    "topics": [],
+    "url": "https://github.com/ouroboros965018276-collab/universal-project-governance"
+  },
+  {
+    "full_name": "JYIng007/spec-driven-project-sop",
+    "stars": 0,
+    "desc": "Spec-driven project bootstrap SOPs for Codex, Claude Code and AI coding agents｜从需求草稿、多 SPEC 架构到项目文档、Checkpoint 与 Handoff。",
+    "pushed_at": "2026-07-27",
+    "topics": [
+      "agentic-workflow",
+      "ai-agents",
+      "ai-coding",
+      "ai-coding-agent",
+      "claude-code",
+      "codex",
+      "developer-tools",
+      "documentation"
+    ],
+    "url": "https://github.com/JYIng007/spec-driven-project-sop"
+  },
+  {
+    "full_name": "DinhLucent/shield-system",
+    "stars": 0,
+    "desc": "A repo-embedded control plane for disciplined AI agent teams: role gates, durable artifacts, verification, handoffs, and dashboard-driven dispatch.Hệ thống nhúng agent team vào các dự án: zero build, exist project, exist",
+    "pushed_at": "2026-05-03",
+    "topics": [
+      "agent-orchestration",
+      "ai-agents",
+      "ai-workflows",
+      "control-plane",
+      "developer-tools",
+      "documentation",
+      "multi-agent-systems",
+      "prompt-engineering"
+    ],
+    "url": "https://github.com/DinhLucent/shield-system"
+  },
+  {
+    "full_name": "xobi667/ai-memory",
+    "stars": 0,
+    "desc": "AI Agent 的项目记忆与文档管理 Skill。Ask your agent to install, organize project docs, and resume work across sessions. Codex · Claude Code · Cursor.",
+    "pushed_at": "2026-10-15",
+    "topics": [
+      "agent-memory",
+      "agent-skills",
+      "ai-agents",
+      "ai-memory",
+      "claude-code",
+      "codex",
+      "context-management",
+      "cursor"
+    ],
+    "url": "https://github.com/xobi667/ai-memory"
+  }
+]

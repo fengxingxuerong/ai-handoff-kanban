@@ -393,6 +393,7 @@ const ACTIONS = {
   generateAgentsMD: () => generateAgentsMD(),
   copyAgentsMD: () => copyAgentsMD(),
   previewAgentFiles: () => previewAgentFiles(),
+  checkAgentFiles: () => checkAgentFiles(),
   writeAgentFiles: (arg, ev, el) => writeAgentFiles({ currentTarget: el }),
   copyPackage: () => copyPackage(),
   runSummarize: () => runSummarize(),

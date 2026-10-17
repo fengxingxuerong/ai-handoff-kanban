@@ -1910,6 +1910,7 @@ class AgentFilesBody(BaseModel):
     targets: list[str] | None = None
     content: str | None = None          # 前端已预览过的内容，传回来可省一次模型调用
     overwrite: bool = False             # 默认不覆盖仓库里已有的入口文件（可能是用户手写的）
+    check_only: bool = False            # 只体检：逐目标比对本应写的内容与磁盘现状，不写盘
 
 
 @app.post("/api/export/agent-files/{pid}")
@@ -1938,6 +1939,36 @@ def export_agent_files(pid: str, body: AgentFilesBody):
     base = Path(target_dir)
     if _is_forbidden_target(base):
         raise HTTPException(400, "不允许写入系统目录，请换一个项目目录")
+
+    if body.check_only:
+        # 入口投影体检（对标 std-agent 的 `status` / `fix` 里那个 status）：
+        # 为什么需要它 —— 写入路径对"已存在的文件"是**默认跳过**的（怕冲掉用户手写的内容），
+        # 于是"仓库里那份入口早就跟看板漂移了"这件事从来没人体检过；
+        # 而漂移的入口恰恰是接手方最信任的东西。行尾归一化后再比：CRLF/LF 不算漂移。
+        checks: list[dict] = []
+        for rel, text in entries.items():
+            target = base / rel
+            if _is_forbidden_target(target):
+                checks.append({"path": rel, "state": "blocked", "bytes": 0})
+                continue
+            if not target.exists():
+                checks.append({"path": rel, "state": "missing", "bytes": 0})
+                continue
+            try:
+                current = target.read_text(encoding="utf-8")
+            except Exception:
+                checks.append({"path": rel, "state": "unreadable", "bytes": 0})
+                continue
+            same = current.replace("\r\n", "\n") == text.replace("\r\n", "\n")
+            checks.append({"path": rel, "state": "ok" if same else "drift",
+                           "bytes": len(current.encode("utf-8"))})
+        result["checks"] = checks
+        result["check_summary"] = {k: sum(1 for c in checks if c["state"] == k)
+                                   for k in ("ok", "drift", "missing", "blocked", "unreadable")}
+        result["dir"] = str(base)
+        result["preview"] = False
+        return result
+
     for rel, text in entries.items():
         target = base / rel
         if _is_forbidden_target(target):

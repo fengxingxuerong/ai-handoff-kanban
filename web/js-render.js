@@ -379,6 +379,45 @@ async function writeAgentFiles(ev) {
   btn.classList.remove("ai-loading-btn");
 }
 
+// ============ 入口投影体检（对标 std-agent 的 `status`） ============
+// 写盘对"已存在的入口文件"是默认跳过的（怕冲掉用户手写的内容），于是
+// "仓库里那份入口早就跟看板漂移了"这件事从来没人体检过 —— 而漂移的入口
+// 恰恰是接手方最信任的东西。这里只读比对，逐目标给出状态，不改一个字节。
+function renderAgentFileChecks(res) {
+  const box = document.getElementById("agentsmd-files");
+  const s = res.check_summary || {};
+  const LABEL = { ok: "✓ 一致", drift: "⚠ 已漂移", missing: "· 未写入", blocked: "✗ 路径被拦", unreadable: "? 读不了" };
+  const COLOR = { ok: "var(--green)", drift: "var(--orange)", missing: "var(--text-faint)", blocked: "var(--red)", unreadable: "var(--red)" };
+  const head = `体检 ${esc(res.dir || "")}：`
+    + `<b style="color:var(--green)">${s.ok || 0} 一致</b> · `
+    + `<b style="color:${s.drift ? "var(--orange)" : "var(--text-faint)"}">${s.drift || 0} 已漂移</b> · `
+    + `${s.missing || 0} 未写入`;
+  const rows = (res.checks || []).map(c =>
+    `<div style="display:flex;gap:10px"><span style="width:74px;flex-shrink:0;color:${COLOR[c.state] || "inherit"}">${LABEL[c.state] || esc(c.state)}</span><span>${esc(c.path)}</span></div>`).join("");
+  const hint = (s.drift || 0)
+    ? '<div style="margin-top:5px;color:var(--orange)">漂移的入口已经和看板对不上了 —— 勾选「覆盖」再点「写入项目目录」即可修复</div>'
+    : "";
+  box.innerHTML = `<div style="margin-bottom:4px;color:var(--text-faint)">${head}</div>${rows}${hint}`;
+  box.style.display = "block";
+}
+
+async function checkAgentFiles() {
+  if (!currentPid) return;
+  const dir = document.getElementById("agentsmd-dir").value.trim();
+  if (!dir) { toast("先填「项目根目录」——体检要读磁盘上已有的入口文件"); return; }
+  const btn = document.getElementById("agentsmd-check-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "体检中…"; }
+  try {
+    const r = await api("/api/export/agent-files/" + currentPid, {
+      method: "POST", body: JSON.stringify({ ...agentFilesBody(), check_only: true }),
+    });
+    renderAgentFileChecks(r);
+    const s = r.check_summary || {};
+    toast(`入口体检：${s.ok || 0} 一致 / ${s.drift || 0} 已漂移 / ${s.missing || 0} 未写入`);
+  } catch (e) { toast("体检失败：" + e.message); }
+  if (btn) { btn.disabled = false; btn.textContent = "🔍 体检入口"; }
+}
+
 async function saveAgentsMD(ev) {
   const content = document.getElementById("agentsmd-content").value;
   if (!content.trim()) { toast("内容为空，先点「生成」"); return; }

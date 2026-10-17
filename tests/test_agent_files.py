@@ -243,3 +243,71 @@ def test_agentsmd_memory_recall_masks_before_sending_to_the_model(ai_client):
     assert ai.post(f"/api/export/agentsmd/{p['id']}")[0] == 200
     sent = json.dumps(ai.stub.calls[-1]["payload"], ensure_ascii=False)
     assert secret not in sent and "********" in sent, "记忆是新增的送出面，别只给老字段脱敏"
+
+
+# ---------------- 接口：入口投影体检（对标 std-agent 的 `status`） ----------------
+# 写入路径对"已存在的入口文件"是默认跳过的，于是"仓库里那份入口早跟看板对不上了"
+# 从来没人体检过。这组用例钉住体检本身，外加两条容易被写错的口径（行尾、没给目录）。
+
+def test_entry_drift_check_reports_missing_then_ok(ai, tmp_path):
+    """体检：磁盘上什么都没有时全是「未写入」；写完之后全是「一致」。"""
+    pid = ai.get("/api/projects")[1]["projects"][0]["id"]
+    repo = tmp_path / "drift-repo"
+    repo.mkdir()
+
+    status, res = ai.post(f"/api/export/agent-files/{pid}",
+                          {"dir": str(repo), "content": CONTENT, "check_only": True})
+    assert status == 200
+    assert res["check_summary"]["missing"] == len(EXPECTED_PATHS), res["check_summary"]
+    assert res["check_summary"]["ok"] == 0
+    assert not list(repo.rglob("AGENTS.md")), "体检是只读的，一个字节都不该落盘"
+
+    ai.post(f"/api/export/agent-files/{pid}", {"dir": str(repo), "content": CONTENT})
+    status, res = ai.post(f"/api/export/agent-files/{pid}",
+                          {"dir": str(repo), "content": CONTENT, "check_only": True})
+    assert res["check_summary"]["ok"] == len(EXPECTED_PATHS), res["check_summary"]
+    assert res["check_summary"]["drift"] == 0
+
+
+def test_entry_drift_check_catches_hand_edited_entry(ai, tmp_path):
+    """核心用例：入口被手工改过（或看板变了没重写）→ 必须报「已漂移」。
+    这正是写入路径"已存在就跳过"所看不见的那一类问题。"""
+    pid = ai.get("/api/projects")[1]["projects"][0]["id"]
+    repo = tmp_path / "drift-repo2"
+    repo.mkdir()
+    ai.post(f"/api/export/agent-files/{pid}", {"dir": str(repo), "content": CONTENT})
+
+    (repo / "AGENTS.md").write_text("# 手改过的入口\n", encoding="utf-8")
+
+    status, res = ai.post(f"/api/export/agent-files/{pid}",
+                          {"dir": str(repo), "content": CONTENT, "check_only": True})
+    assert res["check_summary"]["drift"] == 1, res["check_summary"]
+    assert res["check_summary"]["ok"] == len(EXPECTED_PATHS) - 1
+    hit = next(c for c in res["checks"] if c["path"] == "AGENTS.md")
+    assert hit["state"] == "drift"
+
+
+def test_entry_drift_check_ignores_line_ending_differences(ai, tmp_path):
+    """行尾不算漂移：Windows 上写盘会落成 CRLF 而生成的是 LF ——
+    把 CRLF/LF 当漂移会让这个体检在 Windows 上永远报红（等于没有）。"""
+    pid = ai.get("/api/projects")[1]["projects"][0]["id"]
+    repo = tmp_path / "drift-repo3"
+    repo.mkdir()
+    ai.post(f"/api/export/agent-files/{pid}", {"dir": str(repo), "content": CONTENT})
+
+    f = repo / "GEMINI.md"
+    f.write_bytes(f.read_text(encoding="utf-8").replace("\n", "\r\n").encode("utf-8"))
+
+    status, res = ai.post(f"/api/export/agent-files/{pid}",
+                          {"dir": str(repo), "content": CONTENT, "check_only": True})
+    assert res["check_summary"]["drift"] == 0, res["check_summary"]
+    assert next(c for c in res["checks"] if c["path"] == "GEMINI.md")["state"] == "ok"
+
+
+def test_entry_drift_check_without_dir_stays_preview(ai):
+    """没给目录是"没法体检"，不是"全都没写过" —— 别把前者报成后者。"""
+    pid = ai.get("/api/projects")[1]["projects"][0]["id"]
+    status, res = ai.post(f"/api/export/agent-files/{pid}",
+                          {"dir": "", "content": CONTENT, "check_only": True})
+    assert status == 200
+    assert "checks" not in res and res["preview"] is True
