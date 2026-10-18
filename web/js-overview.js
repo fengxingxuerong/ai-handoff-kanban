@@ -396,6 +396,7 @@ async function loadRepoWatchOverview() {
 function ensureRepoWatchOverviewPolling() {
   if (_repoOverviewTimer) return;
   _repoOverviewTimer = setInterval(() => {
+    if (document.hidden) return;                 // 窗口最小化/隐藏时不打全板 git 巡检
     if (document.getElementById("view-overview").style.display !== "none") loadRepoWatchOverview();
   }, 30000);
 }

@@ -23,7 +23,7 @@
 | `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note`，以及**条目级尺寸估算** `text_size` / `size_note` / `estimate_tokens`（2026-10-11 对标 claude-mem 的渐进式披露最小落地：给记忆检索输出报每条成本，HTTP / MCP / 前端记忆面板三处同一口径；口径与纪律见硬性约定 29） |
 | `app/sessions.py` | 会话扫描与文本提取（目录遍历有界、只读文件尾部、源内外校验） |
 | `app/gitinfo.py` | git 集成（2026-10-06 从 main 搬出）：`git_snapshot` / `_run_git` / `_git_cache`。只读、列表传参、绝不拼 shell。**`_run_git`/`_git_cache`/`GIT_TIMEOUT` 的 monkeypatch 点在这里**（main 里是转发别名） |
-| `app/repo_watch.py` | 仓库变化雷达（2026-10-18）：按 `repo_path` 扫描 git，检测未提交/新提交，按任务完成度给建议进度；`repo_watch.json` 基线 + `repo_audit.jsonl` 确认审计。**只有用户显式确认才写 progress** |
+| `app/repo_watch.py` | 仓库变化雷达（2026-10-18）：按 `repo_path` 扫描 git，检测未提交/新提交，按任务完成度给建议进度；`repo_watch.json` 基线 + `repo_audit.jsonl` 确认审计（**第三条追加型存储，有上限**：超 `MAX_AUDIT_LINES=2000` 裁到 `KEEP_AUDIT_ON_TRIM=1000`，`ack` 的追加+裁剪共用跨进程锁；删项目走 `forget(pids)` 清孤儿基线，单个/批量两处都调）。**只有用户显式确认才写 progress**；总览巡检吃 `_git_cache` 60s 快照、点名单个项目绕过缓存要现值（2026-10-18 实测：8 真仓库冷扫 1.58s / 40 次子进程，缓存命中 2ms / 0 次）。**备份/恢复带上基线**（与项目数据同拍同回滚，来源里没有 = 不动现状；last-good 等与线上同目录的来源靠 `same_as_live` 跳过）；**导出/导入有意不带**（跨机后 repo_path 指不到同一仓库，与 `_client_refs` 同理）；`repo_audit.jsonl` 不随备份（与 `usage.jsonl` 同为本地操作记录） |
 | `app/agentfiles.py` | 多智能体入口文件投影（`AGENT_ENTRY_TARGETS` 白名单 → 各工具要求的相对路径，含第 9 个 `.claude/skills` 投影） |
 | `app/llm.py` | LLM 网关：端点排序、多 Key 轮询、失败降级、配置读写（含锁）、掩码找 Key `merge_keys`（2026-10-07 从 main 迁入，与 `mask_matches` 同域） |
 | `app/filelock.py` | 跨进程文件锁（msvcrt/fcntl 一份实现，`main` 与 `llm` 共用）。两边不能互相 import，所以锁不放在任何一边里 |
@@ -51,7 +51,7 @@
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复" |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 55 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"）；2026-10-14 拆出 `app/security.py` 时把四条安全探针的 `file` 串同步改到新家（不改就是哑火），并按用户拍板收紧 fail-closed 边界，新增 `forbidden_target_fails_open` 与 `forbidden_root_unresolvable_allowed` 增至 55 条。**2026-10-18**：还原时**连 mtime 一起拨回**（`_restore_mtime`，用例 `tests/test_mutation_probe.py`）—— 探针每跑一次会把探过的文件改写两遍，只还原内容就会把它们全刷成"刚刚改过"，而 `frozen_smoke` 判断"exe 是否落后于源码"靠的正是 mtime，于是那条门禁在**每次跑完探针之后稳定假红**（实测 2026-10-18：10 通过 / 1 失败，点名一串刚改过的文件，而同一次里"内嵌前端就是仓库这一份"是过的 —— 产物其实不旧）。一条本该只报"忘重打包"的门禁被噪音盖住，人很快就对它脱敏 |
+| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 64 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"）；2026-10-14 拆出 `app/security.py` 时把四条安全探针的 `file` 串同步改到新家（不改就是哑火），并按用户拍板收紧 fail-closed 边界，新增 `forbidden_target_fails_open` 与 `forbidden_root_unresolvable_allowed` 增至 55 条。**2026-10-18**：还原时**连 mtime 一起拨回**（`_restore_mtime`，用例 `tests/test_mutation_probe.py`）—— 探针每跑一次会把探过的文件改写两遍，只还原内容就会把它们全刷成"刚刚改过"，而 `frozen_smoke` 判断"exe 是否落后于源码"靠的正是 mtime，于是那条门禁在**每次跑完探针之后稳定假红**（实测 2026-10-18：10 通过 / 1 失败，点名一串刚改过的文件，而同一次里"内嵌前端就是仓库这一份"是过的 —— 产物其实不旧）。一条本该只报"忘重打包"的门禁被噪音盖住，人很快就对它脱敏。2026-10-18 晚随雷达收口（v1.7.3）再加 9 条（55→64）：首扫脏仓库静默、建议把进度往回拽、审计无上限、总览绕过缓存、删项目留孤儿基线、备注无长度上限；备份/恢复同拍同回滚的三条（备份丢基线、坏来源清基线、同目录假回滚）—— 每条先 `--only` 单跑确认被杀、再随全量复跑 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
 
@@ -376,6 +376,8 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
   6 秒超时，任何失败都转成 `{ok: False, error}` 而不是抛异常。
 - **缓存只给批量场景用**：`_git_cache` TTL 60 秒，服务 AI 监管（逐项目取摘要，避免每条一次子进程）。
   `GET /api/projects/{pid}/git` 必须 `use_cache=False` —— 用户刚提交完点开却看到旧状态最容易被坑。
+  总览雷达巡检（`/api/repo-watch` 不带 pid，30s 轮询）也吃这份快照缓存，点名单项目 `?pid=` 绕过要现值
+  （2026-10-18 实测：8 真仓库冷扫 1.58s / 40 次子进程，缓存命中 2ms / 0 次）。
 - 解析 `git status --porcelain` 时用 **rstrip 不能用 strip**：输出形如 `" M 文件"`，
   状态列前面的空格有意义，strip 掉会把文件名截错（曾经解析出 `ile0.txt`）。
 - 读不到仓库时降级：接口 400 带可行动提示；交接包省略该节（不要塞空标题）。
@@ -867,11 +869,12 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 当前进度与下一步
 
-**状态：v1.7.2（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
+**状态：v1.7.3（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 里写的版本号与 `app/version.py` 同数 ——
 2026-10-18 之前这一条**没有门禁**，1.5.0 落地后两份文档里都还是 1.4.0（`1.5.0` 字样出现 0 次）。
 1.2.0 → 1.2.1（2026-10-07）只带一个用户可见修复（`/api/inbox` 补「依赖没满足的不算」过滤，见提交 317a239）与 journal.py 拆分重构（32b2b32）。
+**1.7.2 → 1.7.3（2026-10-18）：仓库变化雷达收口轮（外部评审发现，修复为主）。** ① `repo_audit.jsonl` 补滚动裁剪（2000/1000，`ack` 的追加+裁剪共用跨进程锁，与 `usage.jsonl` 同套）—— 它是第三条无上限的追加型存储，违反硬性约定 11；备注字段同步补 500 字上限（一次请求不能再把一行撑成任意长）。② 删项目（单个/批量）连 `repo_watch.json` 孤儿基线一起清（`forget`，记忆层同款纪律）。③ 总览 30s 巡检改吃 60s 快照缓存、点名 `?pid=` 仍绕过要现值（实测 8 真仓库冷扫 1.58s / 40 次 git 子进程 vs 命中 2ms / 0 次）；前端两处轮询补 `document.hidden` 守卫。④ 补 7 条雷达用例与 6 条变异探针（55→61）：新增业务规则此前既无测试也无探针（首扫脏仓库静默、建议把进度往回拽都在其中）。⑤ 备份带上 `repo_watch.json`、恢复随之回滚（来源里没有/坏掉 = 不动现状，与 memories 同语义；导出/导入有意不带，跨机基线无意义）；顺手清掉 `main.py` 两处死代码（`_ABBR` / `APP_NAME`）。新增 3 条恢复链路用例 + 3 条探针（→64）。
 **1.7.1 → 1.7.2（2026-10-18）：可用性收口轮。** ①详情页「更多」菜单补齐收起路径 —— 它是个原生 `<details>`，此前只有「再点一次标题」能收，点别处 / 按 Esc / 选完菜单项都不关（实测最别扭的一幕：点「🗑 删除」走完确认门、项目都没了，那个菜单还开着）；现在三条路都收，Esc 还把焦点还给触发它的标题。②新增零依赖的可访问名门禁（不引 axe、不加 CDN）：总览 + 详情里每个可见控件的可访问名不能为空，它当场抓出 `#search` 只靠 placeholder 表达含义（placeholder 不算可访问名，且一输入就消失），已补 `aria-label`。两条判据都是真实浏览器用例，且都做过 A/B（不打补丁必红）。
 **1.7.0 → 1.7.1（2026-10-18）：总览雷达标记。** 总览项目卡对 `changed` 项目加「代码变化」标记，列表标题显示变化项目数；总览 30s 轮询 `/api/repo-watch`，详情页 15s 轮询当前项目；仍不自动写进度。
 **1.6.2 → 1.7.0（2026-10-18）：仓库变化雷达。** 新增 `app/repo_watch.py` 与 `GET /api/repo-watch` / `POST /api/projects/{pid}/repo-ack`；检测未提交/新提交，按任务完成度给建议进度；只有用户确认后才写 `progress`，并追加 `repo_audit.jsonl`。详情页 15s 轮询提示，不自动改进度。
@@ -921,10 +924,17 @@ AI 简报，de1dfe2）；随后第四轮对标 claude-mem（99k★）深挖并�
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-10-18 v1.7.2 可用性收口轮：详情「更多」菜单三路收起 + 可访问名门禁 + 全门禁 7/7；
-上一次文档对账轮 2026-10-18）**：
-`pytest` 740 收集（735 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
-35 个测试文件、694 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+**验证基线（2026-10-18 v1.7.3 雷达收口轮：审计上限 + 孤儿基线清理 + 缓存/守卫生效 + 基线随备份
+同拍同回滚 + 10 条新用例与 9 条探针全被杀；上一次可用性收口轮 2026-10-18）**：
+`pytest` 750 收集（745 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
+35 个测试文件、704 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+2026-10-18（v1.7.3）雷达收口：`repo_audit.jsonl` 滚动裁剪（2000/1000、与 usage 同套跨进程锁）、
+`RepoAckIn.note` 500 字上限、删项目清 `repo_watch.json` 孤儿基线（单个/批量）、总览巡检吃 60s
+快照缓存（8 真仓库冷扫 1.58s / 40 次子进程 vs 命中 2ms / 0 次，PID 点名仍要现值）、
+前端两处轮询 `document.hidden` 守卫；`repo_watch.json` 随备份/恢复同拍同回滚（来源里没有/坏掉 =
+不动现状，同目录来源靠 `same_as_live` 跳过；导出/导入有意不带）；`tests/test_repo_watch.py` 1→8、
+`tests/test_restore.py` +3；探针 55→64（9 条先 `--only` 单跑确认被杀、再随全量复跑）；
+`app/repo_watch.py` 行覆盖 80%→88%。
 2026-10-18（v1.7.2）新增 2 条真实浏览器用例：`test_detail_more_menu_closes_on_outside_click_escape_and_pick`
 （点别处 / Esc / 选完菜单项三条收起路径，做过 A/B —— 不打补丁必红）与
 `test_visible_controls_have_accessible_names`（零依赖的 a11y 子集：总览 + 详情里每个可见控件的

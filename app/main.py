@@ -152,10 +152,10 @@ from .journal import (  # noqa: F401  —— 这些名字仍可从 app.main 取�
 )
 from .version import APP_VERSION, BUILD_TIME
 
-APP_NAME = "ai-kanban"
 # 交接包里打印的直链端口。桌面壳用同一个环境变量起服务，两边口径一致；
 # 用户没设时两边都落回 18320。服务没开时链接取不到，交接包正文仍可用（它是快照）。
 SERVICE_PORT = os.environ.get("KANBAN_PORT", "18320")
+# 合法值白名单：状态/优先级会被前端拼进 class 与文本，必须收口
 DEFAULT_STATUS = ["规划中", "进行中", "已暂停", "已完成"]
 DEFAULT_TASK_STATUS = ["待办", "进行中", "待审查", "已完成", "阻塞"]
 DEFAULT_PRIORITY = ["高", "中", "低"]
@@ -179,9 +179,6 @@ from .security import (  # noqa: F401
     forbidden_roots as _forbidden_roots,
     is_forbidden_target as _is_forbidden_target,
 )
-
-# 合法值白名单：状态/优先级会被前端拼进 class 与文本，必须收口
-_ABBR = {"规划中": "gray", "进行中": "blue", "已暂停": "orange", "已完成": "green"}
 
 
 def _resource_path(rel: str) -> Path:
@@ -738,10 +735,15 @@ class BulkDeleteIn(BaseModel):
     confirm: bool = False
 
 
+# 备注被原样写进审计行：不设上限时，一次请求就能把一行撑成任意长
+# （行数上限挡不住行内膨胀）。与 journal 同一条纪律：超限在边界被拒，不是被静默裁。
+MAX_REPO_ACK_NOTE = 500
+
+
 class RepoAckIn(BaseModel):
     """确认仓库已读；progress 为空时只清变化标记，不改百分比。"""
     progress: int | None = Field(None, ge=0, le=100)
-    note: str = ""
+    note: str = Field("", max_length=MAX_REPO_ACK_NOTE)
 
 
 # ---------------- 应用 ----------------
@@ -1348,6 +1350,8 @@ def delete_project(pid: str):
         return True, len(keep)
 
     _mutate_memories(drop_orphans)
+    # 雷达基线在第三个文件里，清理同款（审计历史不删，它记的是"当时确认过什么"）
+    repo_metrics.forget(pid)
     return {"ok": True}
 
 
@@ -1387,6 +1391,7 @@ def bulk_delete_projects(body: BulkDeleteIn):
         return changed, len(keep)
 
     _mutate_memories(drop_orphans)
+    repo_metrics.forget(ids)
     return {"ok": True, "deleted": ids, "backup": backup.get("folder", "")}
 
 
@@ -2069,7 +2074,7 @@ def create_backup():
         n += 1
     folder.mkdir(parents=True, exist_ok=True)
     copied = []
-    for name in ("projects.json", "config.json", "memories.json"):
+    for name in ("projects.json", "config.json", "memories.json", "repo_watch.json"):
         src = data_dir() / name
         if src.exists():
             shutil.copy2(src, folder / name)
@@ -2687,6 +2692,24 @@ def restore_data(body: RestoreBody):
             _mutate_memories(wm)
             memory_count = len(payload)
 
+    # 雷达基线与项目数据是同一时刻的对子（备份时一起拍），恢复就一起回滚；
+    # 老备份里没有这份文件时保持现状（与 memories 的"缺键 = 不动"同一语义）。
+    # last-good / bak / before-restore 这些来源与线上同目录，靠 same_as_live 跳过 ——
+    # 否则等于"把现值盖回现值"，还会误报一个没发生过的回滚。
+    watch_count = -1
+    watch_src = src.parent / "repo_watch.json"
+    try:
+        same_watch_as_live = watch_src.resolve() == (data_dir() / "repo_watch.json").resolve()
+    except Exception:
+        same_watch_as_live = False
+    if not same_watch_as_live and watch_src.exists():
+        try:
+            loaded_watch = json.loads(watch_src.read_text(encoding="utf-8"))
+        except Exception:
+            loaded_watch = None
+        if isinstance(loaded_watch, dict):
+            watch_count = repo_metrics.replace_state(loaded_watch)
+
     out = {"ok": True, "source": body.source,
            "project_count": len(restored["projects"]),
            "task_count": sum(len(p.get("tasks") or []) for p in restored["projects"])}
@@ -2698,6 +2721,8 @@ def restore_data(body: RestoreBody):
         out["idem_table_reset"] = revived_refs
     if memory_count >= 0:
         out["memory_count"] = memory_count
+    if watch_count >= 0:
+        out["watch_state_count"] = watch_count
     return out
 
 
@@ -2792,7 +2817,10 @@ def repo_watch_events(pid: str = ""):
         projects = [p for p in projects if p.get("id") == pid]
         if not projects:
             raise HTTPException(404, "项目不存在")
-    events = repo_metrics.scan_projects([p for p in projects if p.get("repo_path")], use_cache=False)
+    # 点名看某个项目 = 要现值（与 /api/.../git 同一口径，绕过 60s 快照缓存）；
+    # 全量巡检 = 允许吃缓存：总览每 30s 轮询全板，而冷扫实测 198ms/仓库、
+    # 5 个 git 子进程/仓库（2026-10-18，8 个真仓库），缓存命中 2ms、0 个子进程。
+    events = repo_metrics.scan_projects([p for p in projects if p.get("repo_path")], use_cache=not pid)
     return {"ok": True, "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "changes": events, "audit": repo_metrics.recent_audit(10) if not pid else []}
 
@@ -2815,7 +2843,7 @@ def repo_ack(pid: str, body: RepoAckIn):
         b = p.get("progress")
         if body.progress is not None:
             p["progress"] = body.progress
-            p["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            p["updated_at"] = now_str()
         return True, {"before": b, "after": p.get("progress")}
 
     changed, result = mutate(worker)

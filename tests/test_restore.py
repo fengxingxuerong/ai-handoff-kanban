@@ -276,3 +276,72 @@ def test_import_says_what_it_dropped(app_client):
     assert st == 200, body
     assert body["imported"] == 1
     assert body["dropped_invalid"] and "缺 id" in body["dropped_note"], body
+
+
+def test_backup_carries_repo_watch_state_and_restore_rolls_it_back(app_client):
+    """雷达基线（repo_watch.json）此前不在备份里：恢复回滚的是那一刻的项目数据，
+    而基线只剩"恢复当时"的现场，两者不是同一时刻的对子。现在同拍同回滚。"""
+    api = app_client
+    seed_projects(api, "带仓库的项目")
+    baseline = {"p1": {"last_seen_signature": "abcd1234", "last_seen_at": "2026-10-18 10:00:00"},
+                "bad": "不是字典的条目"}
+    (api.data_dir / "repo_watch.json").write_text(json.dumps(baseline), encoding="utf-8")
+
+    assert api.post("/api/backup")[0] == 200
+    folder = api.get("/api/backups")[1]["backups"][0]["name"]
+    assert (api.data_dir / "backups" / folder / "repo_watch.json").exists(), "备份没有带上雷达基线"
+
+    # 快照之后基线又动了（比如新确认了一次），回滚要把它一起带回去
+    (api.data_dir / "repo_watch.json").write_text(
+        json.dumps({"p2": {"last_seen_signature": "later"}}), encoding="utf-8")
+    st, body = api.post("/api/restore", {"source": folder})
+    assert st == 200, body
+    assert body.get("watch_state_count") == 1, body
+    now = json.loads((api.data_dir / "repo_watch.json").read_text(encoding="utf-8"))
+    assert now == {"p1": baseline["p1"]}, f"基线没有随备份一起回滚，或坏形状没被滤掉：{now}"
+
+
+def test_restore_from_old_backup_without_watch_state_keeps_current(app_client):
+    """"来源里没有这份文件 = 不动现状"（与老导出没有 memories 键的语义一致）：
+    老备份没有 repo_watch.json 时不许清空现有基线；
+    last-good / bak / before-restore 与线上同目录，同样不许"把现值盖回现值"并报一个假回滚。"""
+    api = app_client
+    seed_projects(api, "甲")
+    (api.data_dir / "repo_watch.json").write_text(
+        json.dumps({"old": {"last_seen_signature": "x"}}), encoding="utf-8")
+    assert api.post("/api/backup")[0] == 200
+    folder = api.get("/api/backups")[1]["backups"][0]["name"]
+    (api.data_dir / "backups" / folder / "repo_watch.json").unlink()  # 老版本备份没有这份文件
+
+    current = {"keep": {"last_seen_signature": "keepme"}}
+    (api.data_dir / "repo_watch.json").write_text(json.dumps(current), encoding="utf-8")
+
+    st, body = api.post("/api/restore", {"source": folder})
+    assert st == 200, body
+    assert "watch_state_count" not in body, body
+    now = json.loads((api.data_dir / "repo_watch.json").read_text(encoding="utf-8"))
+    assert now == current, "老备份没有这份文件时不该动现有基线"
+
+    st2, body2 = api.post("/api/restore", {"source": "last-good"})
+    assert st2 == 200, body2
+    assert "watch_state_count" not in body2, body2
+    now2 = json.loads((api.data_dir / "repo_watch.json").read_text(encoding="utf-8"))
+    assert now2 == current, "同目录来源不该碰基线"
+
+
+def test_restore_from_a_corrupt_watch_state_keeps_current(app_client):
+    """备份里的基线坏了（手改过/被截断）：不许拿它覆盖好状态，更不许当"空状态"清空。"""
+    api = app_client
+    seed_projects(api, "甲")
+    assert api.post("/api/backup")[0] == 200
+    folder = api.get("/api/backups")[1]["backups"][0]["name"]
+    (api.data_dir / "backups" / folder / "repo_watch.json").write_text("{ 不是 JSON", encoding="utf-8")
+
+    current = {"keep": {"last_seen_signature": "safe"}}
+    (api.data_dir / "repo_watch.json").write_text(json.dumps(current), encoding="utf-8")
+
+    st, body = api.post("/api/restore", {"source": folder})
+    assert st == 200, body
+    assert "watch_state_count" not in body, body
+    now = json.loads((api.data_dir / "repo_watch.json").read_text(encoding="utf-8"))
+    assert now == current, "坏基线不该覆盖现有状态"

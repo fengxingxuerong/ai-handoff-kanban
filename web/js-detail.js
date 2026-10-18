@@ -282,6 +282,7 @@ function startRepoWatch(pid) {
   if (!pid) return;
   loadRepoWatch(pid);
   _repoWatchTimer = setInterval(() => {
+    if (document.hidden) return;                 // 窗口不可见时不跑 git 扫描
     if (document.getElementById("view-detail").classList.contains("active") && currentPid === pid) {
       loadRepoWatch(pid);
     }

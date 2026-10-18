@@ -4,7 +4,9 @@
 设计边界：
 - git 只能证明“代码变了”，不能证明“完成了多少”；
 - progress 是人工承诺值，必须由用户/代理显式确认后才写入；
-- 基线持久化在 data_dir/repo_watch.json，确认事件追加到 repo_audit.jsonl。
+- 基线持久化在 data_dir/repo_watch.json（项目删除时用 forget() 清对应条目），
+  确认事件追加到 repo_audit.jsonl —— 追加型存储，行数有上限
+  （超 MAX_AUDIT_LINES 裁到 KEEP_AUDIT_ON_TRIM，硬性约定 11）。
 """
 from __future__ import annotations
 
@@ -15,10 +17,18 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+from .filelock import blocking_lock
 from .gitinfo import git_snapshot
 from .paths import data_dir
 
 _LOCK = threading.RLock()
+
+# 确认审计（repo_audit.jsonl）是追加型存储：用户每点一次「确认并同步/标记已读」落一行，
+# 不设上限就会一直涨，而 `recent_audit` 在每次巡检时都**整读**它（硬性约定 11）。
+# 一行约几百字节，2000 行 ≈ 1MB 以内；触及上限前需要用户确认 2000 次。
+# 语义说明：裁剪丢的是最老的确认记录 —— 这是"最近发生了什么"的窗口，不是不可删的账本。
+MAX_AUDIT_LINES = 2000
+KEEP_AUDIT_ON_TRIM = 1000
 
 
 def _now() -> str:
@@ -51,6 +61,22 @@ def _save_state(state: dict) -> None:
         with open(tmp, "w", encoding="utf-8") as fp:
             json.dump(state, fp, ensure_ascii=False, indent=2)
         os.replace(tmp, f)
+
+
+def _trim_audit(f: Path) -> None:
+    """滚动裁剪 repo_audit.jsonl，只保留最近 KEEP_AUDIT_ON_TRIM 条。
+
+    只在**超过**上限时才改写文件：常态是纯追加，白读一遍 + replace 是写放大。
+    """
+    try:
+        lines = f.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return
+    if len(lines) <= MAX_AUDIT_LINES:
+        return
+    tmp = f.with_suffix(".jsonl.tmp")
+    tmp.write_text("\n".join(lines[-KEEP_AUDIT_ON_TRIM:]) + "\n", encoding="utf-8")
+    os.replace(tmp, f)
 
 
 def _signature(snap: dict) -> str:
@@ -153,9 +179,44 @@ def ack(pid: str, evidence: dict, before: int | None, after: int | None, note: s
             "task_completion": evidence.get("task_completion"),
             "note": note,
         }
-        with open(_audit_file(), "a", encoding="utf-8") as fp:
-            fp.write(json.dumps(audit, ensure_ascii=False) + "\n")
+        # 与 usage.jsonl 同一套：线程锁挡同进程，侧车文件锁挡第二条进程写同一份账。
+        # 追加与裁剪必须在同一把锁里 —— 不然裁剪的「整读→重写」会吞掉并发追加的行。
+        f = _audit_file()
+        with blocking_lock(f.with_suffix(".lock"), timeout=10.0, what="仓库审计"):
+            with open(f, "a", encoding="utf-8") as fp:
+                fp.write(json.dumps(audit, ensure_ascii=False) + "\n")
+            _trim_audit(f)
         return audit
+
+
+def forget(pids: str | list[str]) -> int:
+    """清掉这些项目的基线条目（删除项目时调用），返回清掉的条数。
+
+    与记忆层同一条纪律：孤儿条目既不显示，又会永久留在 repo_watch.json 里。
+    **审计历史保留** —— repo_audit.jsonl 记的是"当时确认过什么"，属于历史事实，
+    不随项目消失（它自带行数上限，不会无界增长）。
+    """
+    ids = {pids} if isinstance(pids, str) else {str(p) for p in pids}
+    with _LOCK:
+        state = _load_state()
+        removed = sum(1 for p in ids if state.pop(p, None) is not None)
+        if removed:
+            _save_state(state)
+        return removed
+
+
+def replace_state(state: dict) -> int:
+    """整份替换基线文件（恢复备份时调用），返回写入的条目数。
+
+    备份是"项目数据 + 雷达基线"同一时刻的对子，恢复要一起回滚才对得上；
+    非字典条目直接丢弃（读路径按 `prev.get(...)` 取值，坏形状留着没有意义）。
+    调用方保证**只在来源里真有这份文件时**才调 —— 老备份没有这份文件时保持现状，
+    与记忆层"来源里没有 memories.json = 不动现有记忆"同一语义。
+    """
+    clean = {str(k): v for k, v in state.items() if isinstance(v, dict)}
+    with _LOCK:
+        _save_state(clean)
+    return len(clean)
 
 
 def recent_audit(limit: int = 20) -> list[dict]:

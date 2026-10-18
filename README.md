@@ -2,7 +2,7 @@
 
 多项目任务中枢桌面应用，专为「切换 AI 智能体做项目」设计：每个项目带交接说明与下一步行动，一键复制交接摘要，新智能体接手零成本。内置 **AI 自我监管**（多 LLM 端点自动分析健康度、生成建议、维护任务），并有 **可视化仪表盘** 与 **一键完整交接包** 提升交付效率。
 
-> 当前版本 **v1.7.2**。`app/version.py` 是唯一事实来源 —— 界面版本条、`/api/health`、
+> 当前版本 **v1.7.3**。`app/version.py` 是唯一事实来源 —— 界面版本条、`/api/health`、
 > MCP `serverInfo`、exe 的 PE 版本资源都读它，`tests/test_docs.py` 会核对本文档与 AGENTS.md 写的是同一个数。
 
 ## 界面
@@ -257,7 +257,7 @@ rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 32 条用�
 rem （CI 里也有这一步：.github/workflows/ci.yml 跑的 ci_local 全门禁，改坏了会红）
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 
-rem 变异探针：往源码注入 55 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
+rem 变异探针：往源码注入 64 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
 rem （覆盖率只证明"这行跑过"，不证明"这行错了会被发现"——这一步量的是后者）
 .venv\Scripts\python.exe scripts/mutation_probe.py
 .venv\Scripts\python.exe scripts/mutation_probe.py --only due_soon_window   rem 只跑一条
