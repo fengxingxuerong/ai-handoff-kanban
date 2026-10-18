@@ -822,6 +822,16 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    无代理配置 —— 定性为主站线路被干扰。本地提交全程安全（一个字节没动），恢复后探针第 1 轮
    即通、`git push` 一次成功 —— 印证"探针只用来挑时机，权威确认看推送输出"。
    **教训：线路中断时不要反复重试刷屏**，收手等恢复（一轮有界重试够定性）。
+   随后 `882c8cf`（CI 记录本身，纯文档）的 run `39129537093` **红在一条前端 E2E**
+   （`test_settings_and_recover_panel_open`）：本地与上一次 run 都是绿的，runner 上
+   `#recover-list` 一可见就 `inner_text()`，读到的是占位文本「加载中…」—— 与上午
+   `fa9bfac` 那次同型（赌"本机 fetch 比断言快"）。确定性复现：`page.evaluate` 把
+   `/api/recoverable` 的 fetch 推迟 1.5s，旧断言必红、且报错输出与 CI fragment 逐字同型；
+   修法同惯例 —— `wait_for_function` 等正文出现 + 明确断言给失败消息（`e5b1192`）。
+   同轮再次实测"探针只挑时机"：探针连通 3 轮，而 `git push` 还连超时（21s）两次才过。
+   `e5b1192` run `39131162803` `gates` **success**（13:21:11 → 13:32:13 UTC，约 11 分钟）。
+   （另注：本轮自己又踩了一次"短 SHA 查 run 静默返回空"—— 见下方那条已有记录，
+   改用 `git rev-parse HEAD` 全长后立刻查到。）
    推送这一跳本身也会抖（2026-10-15 首遇，**2026-10-16 更正了探法**）：一次 `git push` 报
   `Failed to connect to github.com:443 after 21070 ms`，而**同一时刻 `api.github.com` 返回 200** ——
   分端点探测（含一个无关对照站点）定性为"主站线路被干扰、不是断网"。处置：本地提交一个都不动、
