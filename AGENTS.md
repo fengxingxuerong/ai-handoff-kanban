@@ -982,7 +982,7 @@ A/B 时发现直接比"改前/改后"会被 Windows 文件时间 15.6ms 粒度�
 `/mutation-probe-*.json` —— 2026-10-17 的交付目录里躺着 38MB（两个 19MB 的 exe），
 一次 `git add -A` 就会连同"18MB 产物不进版本库"的约定一起被推翻。
 2026-10-17 真实模型验证：`KANBAN_LIVE=1 tests/test_ai.py` 5/5；`scripts/real_ai_test.py` 7/0（含 kimi-k3→AMD、NVIDIA→SenseNova 的失败回退）。
-2026-10-18 接口轮复跑 live 5/5（19.5s，隔离实例 + 真实 Key 注入，跑完 `~/.ai-kanban` 零改动）。
+2026-10-18 接口轮复跑 live 5/5（19.5s，隔离实例 + 真实 Key 注入，跑完 `~/.ai-kanban` 零改动）；`scripts/real_ai_test.py` 9/0（同隔离口径；含 kimi-k3 温度自适应、NVIDIA 趋势预警 70→60 down、AMD 生成 AGENTS.md source=ai；`deepseek-v4-pro` 降级提示为脚本有意设计）。
 2026-10-17 本地全跑 `scripts/mutation_probe.py`：55/55 被杀（0 存活 / 0 未生效）。
 **文档对账在 `tests/test_docs.py`**（2026-10-14 新增）：README/AGENTS.md 里写死的
 工具数、模块数、探针数、测试文件数与**版本号**与代码事实对账 —— 这类"只出现在散文里的数字"
