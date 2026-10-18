@@ -26,6 +26,11 @@
   --border-soft: #1e2942;
   --line: #1e2942;              /* JS 里在用，此前未定义（无形分隔线因此失效） */
 
+  /* —— 字体 —— */
+  /* .repo-watch .rw-head / .repo-flag 在用（v1.7.x 雷达加的，此前没定义：
+     前者等宽失效、后者 font 简写整体作废，9px 字号也被吞掉） */
+  --mono: Consolas, "Cascadia Mono", monospace;
+
   /* —— 文本 —— */
   --text: #e9eefb;
   --text-dim: #96a7c6;
@@ -93,7 +98,8 @@
   --text-faint: #65728e;
 
   --accent: #1679bd;
-  --accent2: #6f5fe6;
+  /* 与深色主题同源（单一强调色）：浅色这里漏改过，进度条会退回紫色渐变 */
+  --accent2: var(--accent);
   --purple: #7c5cf0;
   --green: #0d9e63;
   --orange: #c26a02;
@@ -102,7 +108,7 @@
   --gray: #64748b;
 
   --accent-soft: rgba(26, 134, 207, .10);
-  --accent2-soft: rgba(111, 95, 230, .10);
+  --accent2-soft: var(--accent-soft);
   --accent-line: rgba(22, 121, 189, .34);
   --ring: rgba(22, 121, 189, .5);
 
@@ -484,10 +490,15 @@ header {
   background: var(--bg-soft); border: 1px solid var(--border);
   border-radius: var(--r-xl); width: min(560px, 100%);
   box-shadow: var(--shadow); animation: pop .18s var(--ease);
+  /* 2026-10-18：滚动容器从遮罩挪进 .mbody（弹窗整框不超视口，内容在框内滚）。
+     此前遮罩上滚，sticky 页脚会被钉在遮罩「内容盒底」（视口底部再往上 50px 的遮罩内边距），
+     正文还会从按钮条下面透出来 —— 长弹窗的观感就是页脚浮在半空。 */
+  display: flex; flex-direction: column;
+  max-height: calc(100vh - 100px);
 }
 @keyframes pop { from { transform: scale(.96) translateY(-6px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
-/* 遮罩才是滚动容器（.modal-mask 有 overflow-y），长弹窗里标题和按钮条会滚出视野，
-   所以两头钉住；背景必须给实色，否则内容会从下面透过来 */
+/* 标题与按钮条是弹窗框的固定两端（sticky 声明保留：静态契约钉着它们，且在新布局下无害）；
+   背景必须给实色，否则内容会从下面透过来 */
 .modal .mhead {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 20px; border-bottom: 1px solid var(--border);
@@ -495,7 +506,7 @@ header {
   background: var(--bg-soft); border-radius: var(--r-xl) var(--r-xl) 0 0;
 }
 .modal .mhead h2 { font-size: 15px; letter-spacing: .01em; }
-.modal .mbody { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.modal .mbody { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; min-height: 0; }
 .modal .mfoot {
   padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px;
   position: sticky; bottom: 0; z-index: 2;
@@ -1309,6 +1320,9 @@ header { padding: 10px 20px; gap: 12px; }
   background: var(--accent-soft);
   border-color: var(--accent);
 }
+/* 浅色主题：`.btn.primary` 的白字规则（pass 1）特异性压过上面的“退后一步”样式，
+   不管的话「＋ 新建项目」就是白字 + 透明底（实测对比度 ≈1.1:1，几乎看不见） */
+:root[data-theme="light"] .header-actions .header-cta { color: var(--accent); }
 .pcard .next-action { min-height: 48px; }
 .pcard .card-foot { min-height: 18px; }
 .handoff-box .btns .btn:not(:first-child) {

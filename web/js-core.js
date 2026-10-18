@@ -79,12 +79,18 @@ function closeModal(id) {
   document.getElementById(id).querySelector(".modal").style.animation = "none";
 }
 
+// 长弹窗的滚动容器是 .mbody（弹窗框定高、内容在框内滚，见 style.css 的 .modal）。
+// 滚动记忆记的必须是它：以前记的是遮罩的 scrollTop，而遮罩只在旧布局下才滚。
+function modalScroller(el) {
+  return el.querySelector(".mbody") || el;
+}
+
 // 关闭只留这一条路径：右上角 ✕、底部「完成」、点遮罩、按 Esc 都走它。
 // 以前遮罩与 Esc 各自直接摘 .show，跳过了上面那个动画复位（于是弹窗只有第一次
 // 打开有 pop 动画），Esc 也既不关右侧的 AI 监管面板、也不清已解析出的待确认操作。
 function closeOneModal(id) {
   const m = document.getElementById(id);
-  modalScroll.set(id, m.scrollTop);          // 长弹窗重开时回到上次看到的位置
+  modalScroll.set(id, modalScroller(m).scrollTop);   // 长弹窗重开时回到上次看到的位置
   closeModal(id);
   if (id === "ai-cmd-modal") {
     // 关掉指令窗口就等于放弃这一批操作，否则下次打开时「确认执行」还指着上次的解析结果
@@ -152,7 +158,7 @@ function openModal(id) {
   if (box) box.style.animation = "";
   if (!m.classList.contains("show")) modalOpener = document.activeElement;
   m.classList.add("show");
-  m.scrollTop = modalScroll.get(id) || 0;
+  modalScroller(m).scrollTop = modalScroll.get(id) || 0;
   focusInto(m);
 }
 

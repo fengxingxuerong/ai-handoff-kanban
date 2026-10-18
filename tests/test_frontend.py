@@ -297,6 +297,16 @@ def test_modal_head_and_foot_are_sticky():
         assert "background: var(--bg-soft)" in rule, f"{sel} 透明背景会让滚过的内容透出来"
 
 
+def test_modal_body_is_the_scroll_container():
+    """2026-10-18：滚动容器从遮罩挪进 .mbody —— 遮罩上滚时 sticky 页脚会被钉在
+    遮罩「内容盒底」（视口底部再往上 50px 的遮罩内边距），正文从按钮条下面透出来，
+    长弹窗的观感就是页脚浮在半空。弹窗整框定高 + 内容在框内滚才治本。"""
+    modal = re.search(r"\.modal \{[^}]*\}", HTML).group(0)
+    assert "max-height: calc(100vh - 100px)" in modal, "弹窗没框定高，长内容会整页滚"
+    mbody = re.search(r"\.modal \.mbody \{[^}]*\}", HTML).group(0)
+    assert "overflow-y: auto" in mbody and "min-height: 0" in mbody, ".mbody 不是滚动容器"
+
+
 def test_focus_is_trapped_and_returned():
     assert "function trapTab(" in HTML and "trapTab(e)" in HTML
     assert "function focusInto(" in HTML and "backToOpener()" in HTML, "缺焦点进出管理"

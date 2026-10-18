@@ -1256,22 +1256,37 @@ def test_long_modal_reopens_at_its_previous_scroll(ui):
     page.click("header [data-act='openAISettings']")
     page.wait_for_selector("#ai-settings-modal.show", timeout=10000)
     mask = page.locator("#ai-settings-modal")
-    page.evaluate("() => { const m = document.getElementById('ai-settings-modal');"
-                  "m.scrollTop = m.scrollHeight; }")
-    scrolled = mask.evaluate("e => e.scrollTop")
+    # 2026-10-18 起滚动容器是 .mbody（弹窗框定高、内容在框内滚）。此前遮罩上滚，
+    # sticky 页脚会被钉在遮罩内容盒底（视口底部再往上 50px），正文从按钮条下面透出来。
+    body = page.locator("#ai-settings-modal .mbody")
+    page.evaluate("() => { const b = document.querySelector('#ai-settings-modal .mbody');"
+                  "b.scrollTop = b.scrollHeight; }")
+    scrolled = body.evaluate("e => e.scrollTop")
     assert scrolled > 40, f"这个弹窗不够长，测不出滚动记忆（scrollTop={scrolled}）"
 
     page.keyboard.press("Escape")
     page.wait_for_selector("#ai-settings-modal", state="hidden", timeout=10000)
     page.click("header [data-act='openAISettings']")
     page.wait_for_selector("#ai-settings-modal.show", timeout=10000)
-    assert mask.evaluate("e => e.scrollTop") >= scrolled - 5, "重开回到了顶部，滚动位置没记住"
+    assert body.evaluate("e => e.scrollTop") >= scrolled - 5, "重开回到了顶部，滚动位置没记住"
 
-    # 钉住的标题在滚到底时仍然在视口里
-    head_top = page.locator("#ai-settings-modal .mhead").bounding_box()["y"]
+    # 钉住的标题在滚到底时仍然在视口里，且按钮条贴在弹窗框底部、整框不出视口
+    # 先等 pop 动画收场：动画的 scale/translate 会让这一刻的包围盒偏 4px 左右（竞态）
+    page.wait_for_function(
+        "() => { const m = document.querySelector('#ai-settings-modal .modal');"
+        " return m && m.getAnimations().length === 0; }",
+        timeout=5000)
     mask_box = mask.bounding_box()
+    modal_box = page.locator("#ai-settings-modal .modal").bounding_box()
+    head_top = page.locator("#ai-settings-modal .mhead").bounding_box()["y"]
+    foot_box = page.locator("#ai-settings-modal .mfoot").bounding_box()
     assert head_top >= mask_box["y"] - 1 and head_top <= mask_box["y"] + 60, \
         f"标题滚出视野了（head y={head_top}, mask y={mask_box['y']}）"
+    vh = page.evaluate("window.innerHeight")
+    assert modal_box["y"] + modal_box["height"] <= vh + 1, \
+        f"弹窗整框超出视口（bottom={modal_box['y'] + modal_box['height']}, vh={vh}）"
+    assert abs(foot_box["y"] + foot_box["height"] - (modal_box["y"] + modal_box["height"])) <= 2, \
+        "按钮条没贴在弹窗框底部（页脚又在半空飘了）"
 
 
 # ---------------- 2026-10-06 竞品吸取轮：验收标准 / 待拍板 / 记忆时效 / journal 折叠 ----------------

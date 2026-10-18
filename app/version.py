@@ -69,7 +69,21 @@ from pathlib import Path
 # ⑤ 备份带上 repo_watch.json、恢复随之回滚（老备份没有/坏掉 = 不动现状，与 memories
 #    同语义；导出/导入有意不带 —— 跨机后 repo_path 指不到同一仓库，与 _client_refs 同理）。
 #    同轮清掉 main.py 两处死代码（_ABBR / APP_NAME）。恢复链路 3 条用例 + 3 条探针（→64）。
-__version__ = "1.7.3"
+# 1.7.4（2026-10-18）：桌面端 UI 收口轮（外部审计发现，五处缺陷/残留逐条修复）。
+# ① --mono 从未定义：.repo-watch .rw-head 的 font-family 整条失效、.repo-flag 的
+#    font: 9px var(--mono) 简写整条作废（字体停在继承值）——「代码变化」标记一直没按
+#    设计渲染，还把卡片中段的行高悄悄撑高了约 4px；现已定义 --mono。
+# ② 弹窗滚动架构：遮罩滚动时 sticky 页脚被钉在遮罩内容盒底、正文从按钮条下透出。
+#    .modal 改 flex 列 + max-height: calc(100vh - 100px) 定框，.mbody 成为滚动容器
+#    （mhead/mfoot 的 sticky 声明保留但惰性），JS modalScroll 保存/恢复改指 .mbody。
+# ③ 浅色主题 --accent2 未随「单一强调色」归并（1.6.0 只改了深色）：进度条/统计数字/
+#    下一步底色残留紫调；现别名归并到 --accent / --accent-soft。
+# ④ 浅色顶栏「新建项目」白字白底（对比度约 1.1:1，等同看不见）：补 color: var(--accent)。
+# ⑤ 交接说明 h3 折行出孤字（nowrap 对 CJK 无效）：flex-wrap: wrap + row-gap + 右侧
+#    工具行 margin-left: auto。
+# 新增 1 条静态钉子（.mbody 是滚动容器）与 1 条 E2E 重写（弹窗几何：页脚贴框底、
+# 整框不出视口）；README 总览深浅两张截图随之重拍。
+__version__ = "1.7.4"
 
 ROOT = Path(__file__).resolve().parent.parent
 
