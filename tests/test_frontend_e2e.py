@@ -362,7 +362,18 @@ def test_settings_and_recover_panel_open(ui):
     page.wait_for_selector("[data-act='showRecoverable']", timeout=10000)
     page.click("[data-act='showRecoverable']")
     page.wait_for_selector("#recover-list", timeout=10000)
-    assert re.search(r"当前：\d+ 个项目", page.locator("#recover-list").inner_text())
+    # 面板是异步填充的：点击后先显示「加载中…」，等一次 /api/recoverable 回来才换成正文。
+    # 以前这里"可见后立刻读 inner_text"，等于赌"本机 fetch 比断言快" —— 2026-10-18 的 CI run
+    # （push 882c8cf）就这么红的：本地全绿、runner 上读到「加载中…」（复现：把 fetch 推迟 1.5s）。
+    # 判据改成"等到正文真的出现"，与机器快慢无关；没等到就让下面那条断言给出读到的东西。
+    try:
+        page.wait_for_function(
+            "() => /当前：\\d+ 个项目/.test(document.getElementById('recover-list').textContent)",
+            timeout=15000)
+    except Exception:                                          # noqa: BLE001
+        pass
+    text = page.locator("#recover-list").inner_text()
+    assert re.search(r"当前：\d+ 个项目", text), f"恢复面板没等到正文：{text!r}"
 
 
 # ---------------- AI 交互（起一个配了假端点的真服务） ----------------
