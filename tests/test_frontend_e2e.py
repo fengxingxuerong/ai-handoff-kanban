@@ -245,6 +245,47 @@ def test_delete_project_asks_confirmation(ui):
     assert api.get("/api/projects")[1]["projects"] == []
 
 
+def test_detail_more_menu_closes_on_outside_click_escape_and_pick(ui):
+    """详情页「更多」是原生 <details>：只有"再点标题"一条收起路径。
+
+    实测最别扭的一幕：点「🗑 删除」走完二次确认、项目都没了，菜单还开着。
+    这里钉住补齐的三条路 —— 点别处 / Esc / 选完菜单项都要收。
+    """
+    page, api, _ = ui
+    make_project(api, "菜单收起项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.locator(".pcard").first.click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+
+    def menu_open() -> bool:
+        return page.evaluate("() => document.querySelector('details.d-more').open === true")
+
+    # 点标题能展开（原生行为不能被我们的收起逻辑打断）
+    page.click(".d-more > summary")
+    page.wait_for_function("() => document.querySelector('details.d-more').open === true")
+    assert menu_open()
+
+    # ① 点别处收起
+    page.click("#d-name")
+    page.wait_for_function("() => document.querySelector('details.d-more').open === false")
+
+    # ② Esc 收起
+    page.click(".d-more > summary")
+    page.wait_for_function("() => document.querySelector('details.d-more').open === true")
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => document.querySelector('details.d-more').open === false")
+
+    # ③ 选完菜单项收起（以前它会挂在原地，看着像刚才那一下没生效）
+    page.click(".d-more > summary")
+    page.wait_for_selector(".d-more-pop", timeout=10000)
+    page.click("[data-act='openAssignModal']")
+    page.wait_for_function("() => document.querySelector('details.d-more').open === false")
+    page.wait_for_selector("#assign-modal.show", timeout=10000)
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => !document.querySelector('#assign-modal.show')")
+
+
 def test_theme_toggle_switches_and_persists(ui):
     page, api, _ = ui
     before = page.evaluate("document.documentElement.dataset.theme || document.body.className")

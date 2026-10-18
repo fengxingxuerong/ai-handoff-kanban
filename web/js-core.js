@@ -295,9 +295,26 @@ function toggleHeaderMenu(el) {
   }
 }
 
+// 详情页「更多」菜单是个原生 <details>：点开只有一条路，收起也只有一条路
+// （再点一次它自己）。于是点别处、按 Esc、选完菜单项它都挂在那儿 ——
+// 实测最别扭的一幕是：点「🗑 删除」走完确认门、项目都没了，那个菜单还开着。
+// 这里补齐另外三条收起路径，与顶栏那套（.hmenu）保持同一手感。
+function closeDetailMenu(restoreFocus) {
+  const open = document.querySelector("details.d-more[open]");
+  if (!open) return false;
+  open.open = false;
+  if (restoreFocus) {
+    const summary = open.querySelector("summary");
+    if (summary) summary.focus({ preventScroll: true });
+  }
+  return true;
+}
+
 document.addEventListener("click", e => {
   // 点到菜单外面就收起
   if (!e.target.closest(".hmenu-wrap")) closeHeaderMenus();
+  // 点标题本身不算"外面"，否则原生展开/收起会跟这里打架
+  if (!e.target.closest(".d-more")) closeDetailMenu();
   const el = e.target.closest("[data-act]");
   if (!el) return;
   // 卡片内的点击一律交给 bindCardEvents（它要拿 pid）。这里必须写 closest(".pcard")，
@@ -308,9 +325,15 @@ document.addEventListener("click", e => {
   if (el.closest(".pcard")) return;
   runAction(el.dataset.act, e, el);
   if (e.target.closest(".hmenu-item")) closeHeaderMenus();   // 菜单项在 wrap 内，选完要显式收
+  if (e.target.closest(".d-more-pop")) closeDetailMenu();    // 同上：详情「更多」选完也要收
 });
 
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") closeHeaderMenus();
+  if (e.key === "Escape") {
+    closeHeaderMenus();
+    // 弹窗/监管面板开着时 Esc 归它们（js-edit 里的 closeTopModal）；
+    // 没有上层时才收详情菜单，并把它上面的焦点还给触发它的标题 —— 键盘用户不然就掉回 body。
+    if (!topLayer()) closeDetailMenu(true);
+  }
 });
 
