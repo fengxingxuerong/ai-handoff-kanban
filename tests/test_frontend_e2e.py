@@ -286,6 +286,61 @@ def test_detail_more_menu_closes_on_outside_click_escape_and_pick(ui):
     page.wait_for_function("() => !document.querySelector('#assign-modal.show')")
 
 
+# 读屏用户按 Tab 时听到的东西：可交互元素至少得有一个能读出来的名字。
+# 不引 axe（不加重依赖、也不引 CDN）—— 我们只钉最容易造成"完全没法用"的那一类：
+# 没有名字的按钮/输入框在读屏里只会念成"按钮"，用户根本不知道它会干什么。
+_NAMES_PROBE = """
+() => {
+  const SEL = 'a[href],button,input,select,textarea,summary,[role=button],[role=menuitem],'
+            + '[tabindex]:not([tabindex="-1"])';
+  const out = [];
+  for (const el of document.querySelectorAll(SEL)) {
+    // 折叠（closed <details>）里的控件用户 Tab 不到 —— 但 Chrome 给它们的 offsetParent
+    // 不是 null、innerText 又是空串，只靠下面那条过滤会把「更多」菜单里那些
+    // 明明写着字的按钮报成"没有名字"（实测踩到）。
+    if (el.closest('details:not([open])')) continue;
+    if (el.offsetParent === null) continue;                  // 隐藏的不算：用户也 Tab 不到
+    if (el.getAttribute('aria-hidden') === 'true') continue;  // 显式声明是装饰
+    const label = el.getAttribute('aria-label')
+      || (el.getAttribute('aria-labelledby')
+            ? (document.getElementById(el.getAttribute('aria-labelledby')) || {}).textContent
+            : '')
+      || el.getAttribute('title')
+      || el.textContent                                       // 不用 innerText：它按渲染取字
+      || el.value
+      || '';
+    if (!String(label).trim()) {
+      out.push(el.tagName + (el.id ? '#' + el.id : '') + (el.className ? '.' + el.className : '')
+               + ' :: ' + el.outerHTML.replace(/\\s+/g, ' ').slice(0, 90));
+    }
+  }
+  return out;
+}
+"""
+
+
+def test_visible_controls_have_accessible_names(ui):
+    """总览 + 详情两屏里每个可见控件的可访问名都不能为空。
+
+    这一类缺陷用眼睛看不出来（图标按钮看着挺清楚），只有读屏用户会撞上 ——
+    而它一旦漏，就是"这个按钮没法用"，不是"不好用"。
+    """
+    page, api, _ = ui
+    pid = make_project(api, "可访问性项目", next_action="把可访问性补齐")["id"]
+    api.post(f"/api/projects/{pid}/tasks", {"title": "可访问性任务", "status": "待办"})
+    api.post(f"/api/projects/{pid}/tasks", {"title": "已完成任务", "status": "已完成"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+
+    assert page.evaluate(_NAMES_PROBE) == [], \
+        "总览上有可见控件没有可访问名：" + str(page.evaluate(_NAMES_PROBE))
+
+    page.locator(".pcard").first.click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    assert page.evaluate(_NAMES_PROBE) == [], \
+        "详情页上有可见控件没有可访问名：" + str(page.evaluate(_NAMES_PROBE))
+
+
 def test_theme_toggle_switches_and_persists(ui):
     page, api, _ = ui
     before = page.evaluate("document.documentElement.dataset.theme || document.body.className")
