@@ -355,6 +355,11 @@
       <div class="field"><label for="t-milestone">里程碑（可选）</label><select id="t-milestone"></select>
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">把任务归进某个发布节点，详情页会按里程碑分组显示进度</div>
       </div>
+      <div class="field" id="t-blocked-row" style="display:none">
+        <label for="t-blocked">阻塞原因（为什么卡着）</label>
+        <input id="t-blocked" maxlength="300" placeholder="例如：在等上游接口文档；环境装不上依赖" data-enter="saveTask">
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">只在「阻塞」状态下保留：恢复其他状态会自动清空（历史留在过程日志里）</div>
+      </div>
       <div class="field" id="t-journal-field" style="display:none">
         <label>过程日志（自动记录状态流转，也可手动追加）</label>
         <div class="journal-list" id="t-journal-list"></div>
@@ -365,9 +370,28 @@
       </div>
     </div>
 <div class="mfoot">
-      <button class="btn danger" id="t-delete" style="display:none;margin-right:auto" data-act="deleteTask">🗑 删除任务</button>
+      <button class="btn danger" id="t-delete" style="display:none" data-act="deleteTask">🗑 删除任务</button>
+      <button class="btn" id="t-copy-id" style="display:none;margin-right:auto" data-act="copyTaskId" title="复制任务编号（给智能体或别的工具引用这条任务用）">📋 复制编号</button>
       <button class="btn" data-act="closeModal" data-arg="task-modal">取消</button>
       <button class="btn primary" data-act="saveTask">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 拖到「阻塞」先问一句原因（可跳过）：接手的第一个问题就是"卡在哪、为什么" -->
+<div class="modal-mask" id="blocked-modal">
+  <div class="modal" style="width:min(460px,100%)" role="dialog" aria-modal="true" aria-labelledby="blocked-title">
+    <div class="mhead"><h2 id="blocked-title">⛔ 为什么被卡住？</h2><button class="btn icon" data-act="closeModal" data-arg="blocked-modal" aria-label="关闭">✕</button></div>
+    <div class="mbody">
+      <div class="field">
+        <label for="blocked-reason">原因（留空跳过也行）</label>
+        <input id="blocked-reason" maxlength="300" placeholder="例如：在等上游接口文档；环境装不上依赖">
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">写进任务后，详情卡、接手包与交接包都会带着它</div>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" data-act="skipBlockedReason">跳过</button>
+      <button class="btn primary" data-act="saveBlockedReason">记录原因</button>
     </div>
   </div>
 </div>

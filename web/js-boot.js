@@ -74,6 +74,7 @@ async function openInbox() {
         <div class="tcard" data-act="gotoTask" data-arg="${esc(t.project_id)}" style="margin-bottom:8px;cursor:pointer">
           <div class="tt">${esc(t.title)}${t.due_date ? ` <span class="due-badge">📅 ${esc(t.due_date)}</span>` : ""}</div>
           <div class="td">${esc(t.project_name)}</div>
+          ${t.blocked_reason ? `<div class="td blocked-reason" title="${esc(t.blocked_reason)}">⛔ ${esc(t.blocked_reason)}</div>` : ""}
           <div class="tfoot"><span class="tag2 pri-${priCls(t.priority)}">${esc(priCls(t.priority))}</span></div>
         </div>`).join("");
       return `<div class="inbox-group ${meta.cls}">

@@ -595,6 +595,39 @@ MUTATIONS: list[dict] = [
         "why": "last-good 等与线上同目录的来源也被当成“备份”：把现值盖回现值，还报出一个假回滚",
         "tests": ["tests/test_restore.py"],
     },
+    {
+        # 2026-10-19 第六轮吸取：blocked_reason 与状态同生共死（离开阻塞必须清）。
+        "id": "blocked_reason_survives_unblock",
+        "file": "app/main.py",
+        "old": '    else:\n        t.pop("blocked_reason", None)\n    if body.status == "已完成":',
+        "new": '    else:\n        pass\n    if body.status == "已完成":',
+        "why": "离开阻塞后原因字段留在盘上：字段语义不闭合（卡片虽按状态门控，交接导出与将来新增的读路径未必）",
+        "tests": ["tests/test_api.py"],
+    },
+    {
+        "id": "stale_done_never_flags",
+        "file": "app/repo_watch.py",
+        "old": "        dd = _as_dt(str(t.get(\"done_at\") or \"\"))\n        if dd is None or dd >= hd:\n            continue",
+        "new": "        dd = _as_dt(str(t.get(\"done_at\") or \"\"))\n        if False:\n            continue",
+        "why": "「验收后代码又变了」判定失效：没时间戳/与提交同分钟的完成全被报成待复核（噪声淹掉真问题）",
+        "tests": ["tests/test_repo_watch.py"],
+    },
+    {
+        "id": "memory_dedupe_returns_fresh_entry",
+        "file": "app/main.py",
+        "old": '                return False, {"ok": True, "deduped": True, "memory": m}',
+        "new": '                return False, {"ok": True, "deduped": True, "memory": entry}',
+        "why": "去重命中却返回盘上不存在的 id：调用方拿它删除/引用会 404（2026-10-19 修的旧缺陷）",
+        "tests": ["tests/test_api.py", "tests/test_v110_features.py"],
+    },
+    {
+        "id": "refs_url_flagged_missing",
+        "file": "app/gitinfo.py",
+        "old": '            if "://" in sref:\n                continue',
+        "new": "            if False:\n                continue",
+        "why": "带 :// 的 URL 引用被当本机坐标检查：外部文档/PR 链接全进 missing（真问题被噪音淹）",
+        "tests": ["tests/test_git.py"],
+    },
 ]
 
 

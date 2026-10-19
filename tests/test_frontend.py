@@ -277,16 +277,25 @@ def test_detail_view_has_loading_and_error_state():
 # ---------------- 弹窗语义、焦点与滚动 ----------------
 
 def test_every_modal_is_a_labeled_dialog():
-    """14 个弹窗都要能被读屏认出来；有标题 id 的用 aria-labelledby，没有的用 aria-label
-    （2026-10-06 新增第 14 个：inbox-modal 待拍板）"""
+    """15 个弹窗都要能被读屏认出来；有标题 id 的用 aria-labelledby，没有的用 aria-label
+    （2026-10-06 新增第 14 个：inbox-modal 待拍板；2026-10-19 新增第 15 个：blocked-modal
+    —— 拖到「阻塞」时问一句原因）"""
     masks = re.findall(r'<div class="modal-mask" id="([^"]+)">\s*<div class="modal"[^>]*>', HTML)
-    assert len(masks) == 14, f"弹窗数量变了（{len(masks)}），确认是否有新弹窗漏加语义"
+    assert len(masks) == 15, f"弹窗数量变了（{len(masks)}），确认是否有新弹窗漏加语义"
     for mid in masks:
         block = HTML[HTML.index(f'<div class="modal-mask" id="{mid}">'):]
         tag = block.split("\n", 2)[1] if 'id="%s">' % mid in block else ""
         modal_tag = re.search(r'<div class="modal"[^>]*>', block).group(0)
         assert 'role="dialog"' in modal_tag and 'aria-modal="true"' in modal_tag, mid
         assert "aria-labelledby=" in modal_tag or re.search(r'aria-label="[^"]+"', modal_tag), mid
+
+
+def test_blocked_reason_limit_is_one_number_everywhere():
+    """阻塞原因的上限只有一个数（`MAX_BLOCKED_REASON`）：界面两处 maxlength（任务弹窗 +
+    拖动弹窗）必须与后端同数 —— 两处各写一遍必然漂（对账钉子，模式同验收标准提示数字）。"""
+    import app.main as kanban
+    n = kanban.MAX_BLOCKED_REASON
+    assert HTML.count(f'maxlength="{n}"') >= 2, "任务弹窗与阻塞原因弹窗的 maxlength 与后端不同数"
 
 
 def test_modal_head_and_foot_are_sticky():

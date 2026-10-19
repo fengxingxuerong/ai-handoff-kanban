@@ -454,6 +454,94 @@ def test_task_journal_and_status_transition(server):
     assert t["journal"][0]["text"] == "完成了接口设计评审"
 
 
+def test_blocked_reason_lives_and_dies_with_the_blocked_status(server):
+    """阻塞原因与验收时间戳是一对「只在该状态里存在」的字段（2026-10-19 第六轮竞品吸取）：
+    进入阻塞记录、离开自动清（历史留在 journal 的状态流转条目里）；done_at 同理。
+    不清的话，改回进行中的卡片仍会带着过时原因到处跑。"""
+    _, proj = server.create_project("阻塞语义")
+    pid = proj["id"]
+    _, t = server.post(f"/api/projects/{pid}/tasks",
+                       {"title": "卡住的活", "status": "阻塞", "blocked_reason": "  在等上游接口文档  "})
+    assert t["blocked_reason"] == "在等上游接口文档", "首尾空白没清"
+    assert "done_at" not in t
+    tid = t["id"]
+
+    # PATCH 改别的字段：原因保留（部分更新语义）
+    _, t2 = server.patch(f"/api/tasks/{tid}", {"priority": "高"})
+    assert t2["blocked_reason"] == "在等上游接口文档"
+
+    # PATCH 换原因
+    _, t3 = server.patch(f"/api/tasks/{tid}", {"blocked_reason": "换成在等部署窗口"})
+    assert t3["blocked_reason"] == "换成在等部署窗口"
+
+    # 离开阻塞：字段清掉，但「为什么卡过」留在 journal（交接材料）
+    _, t4 = server.patch(f"/api/tasks/{tid}", {"status": "进行中"})
+    assert "blocked_reason" not in t4
+    assert "换成在等部署窗口" in " ".join(e["text"] for e in t4["journal"])
+
+    # 进入阻塞但没给原因：允许（不拒绝），字段保持不存在
+    _, t5 = server.patch(f"/api/tasks/{tid}", {"status": "阻塞"})
+    assert "blocked_reason" not in t5
+
+    # 阻塞中补原因
+    _, t6 = server.patch(f"/api/tasks/{tid}", {"blocked_reason": "卡在证书"})
+    assert t6["blocked_reason"] == "卡在证书"
+
+    # 流转到已完成：原因随状态清、done_at 落上
+    _, t7 = server.patch(f"/api/tasks/{tid}", {"status": "已完成"})
+    assert "blocked_reason" not in t7
+    assert t7["done_at"]
+
+    # 反复保存已完成的其它字段：done_at 不被刷新（首次完成时间才是验收时刻）
+    _, t8 = server.patch(f"/api/tasks/{tid}", {"priority": "中"})
+    assert t8["done_at"] == t7["done_at"]
+
+    # 重开再做完：done_at 换成第二次的完成时间
+    server.patch(f"/api/tasks/{tid}", {"status": "进行中"})
+    _, t9 = server.patch(f"/api/tasks/{tid}", {"status": "已完成"})
+    assert t9["done_at"] >= t7["done_at"]
+
+    # PUT 整体覆盖同样受这套语义管辖：编辑弹窗把状态改回去，无论带了什么都清
+    _, t10 = server.put(f"/api/tasks/{tid}", {"title": "卡住的活", "status": "待办",
+                                              "blocked_reason": "过时的原因"})
+    assert "blocked_reason" not in t10 and "done_at" not in t10
+
+
+def test_blocked_reason_travels_with_handoff_surfaces(app_client):
+    """原因要跟着交接出口走：inbox（决定怎么办）、接手包 slim、交接包小节；
+    `?redact=1` 时必须盖掉 —— 它是自由文本，和 desc/journal 同一档。"""
+    import app.main as kanban
+    _, p = app_client.create_project("卡点出口", status="进行中")
+    pid = p["id"]
+    app_client.post(f"/api/projects/{pid}/tasks",
+                    {"title": "等接口文档", "status": "阻塞",
+                     "blocked_reason": "在等上游 key=sk-live-abc1234567890 的接口文档"})
+
+    _, inbox = app_client.get("/api/inbox")
+    item = next(x for x in inbox["items"] if x["kind"] == "blocked")
+    assert item["blocked_reason"] == "在等上游 key=sk-live-abc1234567890 的接口文档", \
+        "Inbox 用途就是决定怎么办，原因就是决策材料"
+
+    _, ctx = app_client.get(f"/api/context/{pid}")
+    bt = next(t for t in ctx["tasks"]["blocked"] if t["title"] == "等接口文档")
+    assert bt["blocked_reason"] == "在等上游 key=sk-live-abc1234567890 的接口文档"
+
+    _, ctx_r = app_client.get(f"/api/context/{pid}?redact=1")
+    btr = next(t for t in ctx_r["tasks"]["blocked"] if t["title"] == "等接口文档")
+    assert "sk-live-abc" not in btr["blocked_reason"], "自由文本没走脱敏"
+    assert kanban.MASK_MARK in btr["blocked_reason"]
+
+    _, md = app_client.get(f"/api/export/{pid}")
+    assert "阻塞中的任务（为什么卡着）" in md and "在等上游" in md, "交接包没带卡点原因"
+
+    # 非阻塞任务不进这一节（字段随状态存在）
+    app_client.post(f"/api/projects/{pid}/tasks", {"title": "没卡的活", "status": "待办"})
+    _, md2 = app_client.get(f"/api/export/{pid}")
+    assert "没卡的活" in md2, "任务清单该照常带上它"
+    block_sec = md2.split("阻塞中的任务（为什么卡着）")[1].split("###")[0]
+    assert "没卡的活" not in block_sec
+
+
 # ---------------- 项目记忆层 ----------------
 
 def test_memories_crud_and_recall(server):
@@ -461,9 +549,12 @@ def test_memories_crud_and_recall(server):
     pid = proj["id"]
     s, m1 = server.post("/api/memories", {"pid": pid, "type": "坑", "text": "并发写必须加锁"})
     assert s == 201 and m1["ok"] is True
-    # 去重
+    # 去重：命中时返回的必须是**盘上已有那条**（它的 id 真实可删）。
+    # 以前返回的是刚构造的新 entry —— id 是盘上不存在的，拿去 DELETE 会 404，
+    # 调用方拿着一个假身份还以为记住了。
     s, m2 = server.post("/api/memories", {"pid": pid, "type": "坑", "text": "并发写必须加锁"})
     assert m2.get("deduped") is True
+    assert m2["memory"]["id"] == m1["memory"]["id"], "去重返回了新造的假 id，不是盘上那条"
     # 列表与过滤
     _, lst = server.get("/api/memories?pid=" + pid)
     assert len(lst["memories"]) == 1

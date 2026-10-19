@@ -112,6 +112,62 @@ def test_scan_never_suggests_lowering_progress(app_client, tmp_path):
     assert ev["suggested_progress"] is None, ev
 
 
+def test_stale_done_tasks_flags_completions_older_than_last_commit():
+    """纯函数口径（第六轮吸取）：done_at 早于最近提交才算「验收后代码又变了」。
+    没有 done_at、非已完成、仓库没提交时间，一律不报；截断要留痕（count 是全部）。"""
+    from app.repo_watch import stale_done_tasks
+    tasks = [
+        {"id": "a", "title": "旧验收", "status": "已完成", "done_at": "2026-10-01 10:00"},
+        {"id": "b", "title": "新验收", "status": "已完成", "done_at": "2026-10-19 12:00"},
+        {"id": "c", "title": "同分钟", "status": "已完成", "done_at": "2026-10-18 16:00"},
+        {"id": "d", "title": "没时间戳", "status": "已完成"},
+        {"id": "e", "title": "没完成", "status": "进行中", "done_at": "2026-01-01 00:00"},
+    ]
+    res = stale_done_tasks(tasks, {"date": "2026-10-18 16:00"})
+    assert res["count"] == 1 and [s["id"] for s in res["items"]] == ["a"], res
+    # 同分钟不算旧（验收与提交谁先谁后说不清，宁可不报）；无提交时间 → 空
+    assert stale_done_tasks(tasks, {})["count"] == 0
+
+    many = [{"id": f"x{i}", "title": f"t{i}", "status": "已完成",
+             "done_at": "2026-01-01 00:00"} for i in range(15)]
+    res2 = stale_done_tasks(many, {"date": "2026-10-18 16:00"}, limit=10)
+    assert res2["count"] == 15 and len(res2["items"]) == 10, "截断必须留痕：count 是全部条数"
+
+
+def test_stale_done_reaches_both_exits_without_touching_status(app_client, tmp_path):
+    """两个出口都要带「验收后代码又变了」：/api/projects/{pid}/git 与 /api/repo-watch。
+    而且它只是提示 —— 不允许因此改动任何状态或进度。"""
+    import app.main as kanban
+    repo = tmp_path / "repo-stale"
+    _make_repo(repo)
+    _, project = app_client.post("/api/projects", {
+        "name": "验收后变化", "progress": 50, "repo_path": str(repo),
+    })
+    pid = project["id"]
+    _, task = app_client.post(f"/api/projects/{pid}/tasks",
+                              {"title": "已完成任务", "status": "已完成"})
+    assert task["done_at"], "状态=已完成却没记 done_at"
+    # 回拨验收时间：新提交的时间戳是"现在"，不回拨两边同分钟、按宁可不报的口径不算旧
+    kanban.mutate_task(task["id"], lambda t, p: t.__setitem__("done_at", "2026-01-01 09:00"))
+
+    (repo / "app.py").write_text("def main():\n    return 4\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.name=RepoTest", "-c", "user.email=repo@example.test",
+         "commit", "-qm", "later commit")
+
+    status, snap = app_client.get(f"/api/projects/{pid}/git")
+    assert status == 200, snap
+    assert snap["stale_done"]["count"] == 1, snap["stale_done"]
+    assert snap["stale_done"]["items"][0]["id"] == task["id"]
+
+    _, watch = app_client.get(f"/api/repo-watch?pid={pid}")
+    assert watch["changes"][0]["stale_done"]["count"] == 1
+
+    _, cur = app_client.get(f"/api/projects/{pid}")
+    assert cur["tasks"][0]["status"] == "已完成" and cur["progress"] == 50, \
+        "提示不许自动改任何状态 —— 复核只能由人/代理显式写回"
+
+
 def test_scan_reports_unreadable_repo_without_raising(app_client, tmp_path):
     """代码路径不存在时如实回报（ok=False + 原因），不抛异常、不影响其它字段。"""
     status, project = app_client.post("/api/projects", {

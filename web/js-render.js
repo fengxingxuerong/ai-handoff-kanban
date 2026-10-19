@@ -19,19 +19,49 @@ function dueInfo(t) {
   return { cls: "due-ok", text: due.slice(5) };
 }
 
-async function moveTaskTo(tid, status) {
+async function moveTaskTo(tid, status, blockedReason) {
   // 拖一次卡片只意味着"改一个 status"。以前这里从页面缓存 `current` 里挑出整条任务
   // 再 PUT 回去，而 `current` 是打开详情时取的（页面不轮询）—— 中间智能体经 MCP 补的
   // refs / depends_on / desc 会被手里这份旧快照整体抹掉，界面上还提示"已移至进行中 ✓"。
   const t = (current.tasks || []).find(x => x.id === tid);
   if (!t || t.status === status) return;
+  const body = { status };
+  if (status === "阻塞" && blockedReason) body.blocked_reason = blockedReason;
   try {
-    await api("/api/tasks/" + tid, { method: "PATCH", body: JSON.stringify({ status }) });
-    toast(`任务已移至「${status}」✓`);
+    await api("/api/tasks/" + tid, { method: "PATCH", body: JSON.stringify(body) });
+    toast(status === "阻塞" && blockedReason
+      ? "已移至「阻塞」并记下原因 ✓" : `任务已移至「${status}」✓`);
     current = await api("/api/projects/" + currentPid);
     renderDetail();
     loadOverview();
   } catch (e) { toast("移动失败：" + e.message); }
+}
+
+// 拖进「阻塞」列先问一句原因（可跳过）。模态而不是原生 prompt()：
+// prompt 会阻塞页面且不可样式化（契约测试明令禁止），模态还顺带能承载说明文案。
+let pendingBlockedTid = null;
+function askBlockedReason(tid) {
+  if (!tid) return;
+  pendingBlockedTid = tid;
+  const input = document.getElementById("blocked-reason");
+  if (input) input.value = "";
+  openModal("blocked-modal");
+}
+
+function saveBlockedReason() {
+  const tid = pendingBlockedTid;
+  const input = document.getElementById("blocked-reason");
+  const reason = input ? input.value.trim() : "";
+  pendingBlockedTid = null;
+  closeModal("blocked-modal");
+  if (tid) moveTaskTo(tid, "阻塞", reason);
+}
+
+function skipBlockedReason() {
+  const tid = pendingBlockedTid;
+  pendingBlockedTid = null;
+  closeModal("blocked-modal");
+  if (tid) moveTaskTo(tid, "阻塞", "");
 }
 
 (function bindKanbanDnD() {
@@ -57,7 +87,13 @@ async function moveTaskTo(tid, status) {
     const tid = e.dataTransfer.getData("text/plain");
     if (!tid) return;
     for (const [cls, st] of Object.entries(COL_MAP)) {
-      if (col.classList.contains(cls)) { moveTaskTo(tid, st); break; }
+      if (col.classList.contains(cls)) {
+        const t = (current.tasks || []).find(x => x.id === tid);
+        // 已经是阻塞的直接走 moveTaskTo（它会 no-op），别无谓弹一次问原因的窗
+        if (st === "阻塞" && (!t || t.status !== "阻塞")) askBlockedReason(tid);
+        else moveTaskTo(tid, st);
+        break;
+      }
     }
   });
 })();

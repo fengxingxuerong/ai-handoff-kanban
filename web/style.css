@@ -464,6 +464,8 @@ header {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .tcard .tfoot { display: flex; align-items: center; gap: 6px; }
+/* 阻塞原因：给到三行（决策材料不该被两行钳断）并上色，完整文本在 title */
+.tcard .blocked-reason { color: var(--red); -webkit-line-clamp: 3; }
 .tcard .tag2 { font-size: 10px; padding: 1px 7px; border-radius: var(--r-xs); }
 .tcard .tag2.pri-高 { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
 .tcard .tag2.pri-中 { color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, transparent); }

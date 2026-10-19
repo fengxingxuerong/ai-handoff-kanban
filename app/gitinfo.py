@@ -163,6 +163,9 @@ def check_refs_exist(repo_path: str, tasks: list[dict]) -> dict:
 
     ref 的形态：`app/main.py:120` / `app/main.py` / `tests/`（目录也算）。
     **冒号后的行号不校验**：行号漂移太常见，报出来只会变成噪音、把真问题淹掉。
+    两类引用有意跳过、还不计入 total（2026-10-19 第六轮竞品吸取的硬化）：
+    - 带 `://` 的 URL（外部文档/PR 链接不是本机坐标，以前会被误报成 missing）；
+    - `#片段`（`app/main.py#L10` 是编辑器常用的跳转记法，剥掉片段后按文件判在不在）。
     """
     base = Path(repo_path or "")
     if not repo_path or not base.is_dir():
@@ -171,7 +174,10 @@ def check_refs_exist(repo_path: str, tasks: list[dict]) -> dict:
     missing: list[dict] = []
     for t in tasks:
         for ref in (t.get("refs") or []):
-            raw = str(ref).split(":")[0].strip().replace("\\", "/")
+            sref = str(ref)
+            if "://" in sref:
+                continue
+            raw = sref.split(":")[0].split("#")[0].strip().replace("\\", "/")
             if not raw:
                 continue
             total += 1

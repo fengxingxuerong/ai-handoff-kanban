@@ -596,6 +596,10 @@ def _clean_views(v) -> list[dict]:
 MAX_MILESTONES = 20
 MAX_MILESTONE_NAME = 40   # 也用于任务的 milestone 归属字段（与名称同一截断口径）
 
+# 阻塞原因上限（第六轮竞品吸取：tsk/plandeck 的"阻塞必须带原因"最小切片）。
+# 上限只有一个数：TaskIn 清洗、MCP schema maxLength、界面 maxlength 共用（对账钉子）。
+MAX_BLOCKED_REASON = 300
+
 
 def _clean_milestones(v) -> list[dict]:
     """清洗项目的里程碑数组：`[{name, done?}]`。
@@ -664,6 +668,13 @@ class TaskIn(BaseModel):
     milestone: str = ""           # 归入的项目里程碑名（空=未归入）；普通字符串校验，非 Literal
     acceptance: list[str] = []    # 验收标准（对标 Backlog.md 的 DoD）：逐条"怎么算完成"，
                                   # 交接包与接手页带着走，待审查→已完成时照着验
+    blocked_reason: str = ""      # 为什么被卡住：**只在状态=阻塞时保留**，离开阻塞自动清空
+                                  # （历史留在 journal 的状态流转条目里）。见 _apply_task。
+    @field_validator("blocked_reason", mode="before")
+    @classmethod
+    def _clean_blocked_reason(cls, v):
+        v = (v or "").strip()
+        return v[:MAX_BLOCKED_REASON] if v else ""
     @field_validator("due_date", mode="before")
     @classmethod
     def _clean_due(cls, v):
@@ -844,6 +855,10 @@ def project_context(pid: str, redact: int = 0):
         }
         if t.get("due_date"):
             d["due_date"] = t["due_date"]
+        if t.get("status") == "阻塞" and t.get("blocked_reason"):
+            # 卡点原因随包走：接手方第一个问题就是"卡在哪、为什么"。
+            # 自由文本，走 mask（手动指定"接手包"?redact=1"时盖掉）。
+            d["blocked_reason"] = mask(t["blocked_reason"])
         if t.get("agent"):
             d["agent"] = t["agent"]
         if t.get("refs"):
@@ -1412,6 +1427,11 @@ def create_task(pid: str, body: TaskIn, client_ref: str = ""):
         "acceptance": clean_acceptance(body.acceptance),
         "depends_on": [],          # 依赖在锁内算，见 apply
     }
+    # 与 _apply_task 同一套"状态自带字段"语义：原因只在阻塞里、验收时间只在已完成里
+    if body.status == "阻塞" and body.blocked_reason:
+        task["blocked_reason"] = body.blocked_reason
+    if body.status == "已完成":
+        task["done_at"] = now
     replay: dict = {}
 
     def apply(p: dict, data: dict):
@@ -1459,6 +1479,7 @@ def _apply_task(t: dict, p: dict, tid: str, body: TaskIn) -> None:
         raise HTTPException(400, "依赖会形成循环，已放弃更新")
 
     old_status = t.get("status", "")
+    old_reason = (t.get("blocked_reason") or "").strip()
     t.update({
         "title": body.title.strip(), "desc": body.desc,
         "status": body.status, "priority": body.priority,
@@ -1468,9 +1489,33 @@ def _apply_task(t: dict, p: dict, tid: str, body: TaskIn) -> None:
         "acceptance": clean_acceptance(body.acceptance),
         "depends_on": deps,
     })
-    # 状态流转自动沉淀过程轨迹
+    # 状态流转自动沉淀过程轨迹；阻塞原因随这一条一起记进历史（字段离开阻塞会清，
+    # 但"为什么卡过"留在 journal 里 —— 进阻塞记"原因"，离开阻塞记"原阻塞原因"）。
     if body.status != old_status:
-        _append_journal(t, f"状态：{old_status} → {body.status}", now)
+        note = f"状态：{old_status} → {body.status}"
+        why = body.blocked_reason if body.status == "阻塞" else old_reason
+        if why:
+            label = "原因" if body.status == "阻塞" else "原阻塞原因"
+            note += f"（{label}：{why}）"
+        _append_journal(t, note, now)
+    elif body.status == "阻塞" and body.blocked_reason != old_reason:
+        # 停留在阻塞里换原因/清原因也是决策变化，历史要说得清
+        _append_journal(t, "阻塞原因更新："
+                        f"{old_reason or '（空）'} → {body.blocked_reason or '（清空）'}", now)
+    # 两个"只在该状态里存在"的字段，离开就清（老任务没有这些键，pop 是空操作）。
+    # 不清的话：改回进行中的卡片仍带着过时原因到处跑（卡片/接手包/交接包全都按
+    # 状态门控展示，但字段本身的语义应当自己闭合）。
+    if body.status == "阻塞":
+        if body.blocked_reason:
+            t["blocked_reason"] = body.blocked_reason
+        else:
+            t.pop("blocked_reason", None)
+    else:
+        t.pop("blocked_reason", None)
+    if body.status == "已完成":
+        t.setdefault("done_at", now)   # 反复保存已完成不清掉首次完成时间
+    else:
+        t.pop("done_at", None)
     p["updated_at"] = now
 
 
@@ -1867,6 +1912,8 @@ def inbox():
                     "task_id": t.get("id"), "title": t.get("title", ""),
                     "priority": t.get("priority", "中"),
                     "due_date": t.get("due_date") or "",
+                    # 阻塞类带原因：Inbox 的用途就是"决定怎么办"，原因就是决策材料
+                    "blocked_reason": (t.get("blocked_reason") or "") if kind == "blocked" else "",
                 })
     order = {"review": 0, "blocked": 1, "overdue": 2}
     items.sort(key=lambda x: (order[x["kind"]], x["priority"] == "低",
@@ -2439,9 +2486,13 @@ def add_memory(body: MemoryIn):
         entry["expires"] = body.expires
 
     def worker(items: list[dict]):
-        # 去重：同项目同文本不重复入
-        if any(m.get("pid") == entry["pid"] and m.get("text") == entry["text"] for m in items):
-            return False, {"ok": True, "deduped": True, "memory": entry}
+        # 去重：同项目 + 同类型 + 同文本不重复入（对齐 AKB 的"同一件事记两遍是噪音"）。
+        # 命中时返回**盘上已有那条** —— 以前返回的是刚构造的 entry，它带着一个
+        # 盘上不存在的全新 id，调用方拿它去删会 404、拿去引用会找不到。
+        for m in items:
+            if (m.get("pid") == entry["pid"] and m.get("type") == entry["type"]
+                    and m.get("text") == entry["text"]):
+                return False, {"ok": True, "deduped": True, "memory": m}
         items.append(entry)
         _trim_memories(items)
         return True, {"ok": True, "memory": entry}
@@ -2805,6 +2856,10 @@ def project_git(pid: str, limit: int = 10):
     # 顺手把任务 refs 的"还在不在"也查了：同一个「代码现状」出口，前端不必再发一次请求。
     # 放在这里而不是新端点，也因为这个检查只在"仓库读得到"时才有意义。
     snap["refs"] = check_refs_exist(found[1].get("repo_path", ""), found[1].get("tasks") or [])
+    # 同理带上「验收后代码又变了」：已完成任务标完成之后仓库又有新提交 → 建议复核
+    # （只提示，不自动改任何状态；见 app/repo_watch.py:stale_done_tasks）
+    snap["stale_done"] = repo_metrics.stale_done_tasks(
+        found[1].get("tasks") or [], snap.get("head") or {})
     return snap
 
 

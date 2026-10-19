@@ -91,6 +91,16 @@ function realityVerdicts(p, g) {
                    + `（${esc(shown)}${refs.missing.length > 3 ? " 等" : ""}）—— 文件多半被改名或挪走了，`
                    + `接手的人照着找会扑空。`]);
   }
+  // 「验收后代码又变了」：已完成任务标完成之后仓库又有新提交 → 当时的验收结论可能过时。
+  // 只提示、不自动改任何状态（判定口径在后端 repo_watch.stale_done_tasks；
+  // 未提交的脏文件没有时间戳，不参与判定；没有 done_at 的老任务静默跳过）。
+  const stale = g && g.stale_done;
+  if (stale && (stale.items || []).length) {
+    const shown = stale.items.slice(0, 2)
+      .map(s => `${esc(s.title)}（${esc(s.done_at)} 验收）`).join("、");
+    out.push(["warn", `有 <b>${stale.count}</b> 条任务标完成后仓库又有新提交`
+                   + `（${shown}${stale.count > 2 ? " 等" : ""}）—— 当时的验收结论可能已经过时，顺手复核一下。`]);
+  }
   return out;
 }
 

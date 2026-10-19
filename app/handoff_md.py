@@ -88,6 +88,16 @@ def build_handoff_markdown(p: dict, memory_rows: list[dict], expired_memory_coun
             lines.append(f"| {title} | {t['status']} | {t['priority']} | {t.get('agent','') or '—'} "
                          f"| {dep_txt} | {desc} |")
         lines.append("")
+        # 阻塞中的任务把"为什么"摆在表后面：接手的第一个问题就是"卡在哪"，
+        # 而表格单元格塞不下一整句原因（第六轮吸取：「阻塞必带原因」）。
+        with_block = [(t, (t.get("blocked_reason") or "").strip()) for t in shown
+                      if t.get("status") == "阻塞" and (t.get("blocked_reason") or "").strip()]
+        if with_block:
+            lines.append("### 阻塞中的任务（为什么卡着）")
+            lines.append("")
+            for t, why in with_block:
+                lines.append(f"- **{t.get('title', '')}**：{why}")
+            lines.append("")
         journaled = [(t, t.get("journal") or []) for t in shown]
         journaled = [(t, j) for t, j in journaled if j]
         if journaled and "journal" not in omit:

@@ -292,6 +292,7 @@ function openTaskModal(taskId) {
   editTaskId = taskId || null;
   document.getElementById("task-modal-title").textContent = taskId ? "编辑任务" : "新建任务";
   document.getElementById("t-delete").style.display = taskId ? "inline-block" : "none";
+  document.getElementById("t-copy-id").style.display = taskId ? "inline-block" : "none";
   document.getElementById("t-title").value = "";
   document.getElementById("t-desc").value = "";
   document.getElementById("t-status").value = "待办";
@@ -300,6 +301,7 @@ function openTaskModal(taskId) {
   document.getElementById("t-refs").value = "";
   document.getElementById("t-acceptance").value = "";
   document.getElementById("t-due").value = "";
+  document.getElementById("t-blocked").value = "";
   const journalField = document.getElementById("t-journal-field");
   if (taskId) {
     const t0 = (current.tasks || []).find(x => x.id === taskId);
@@ -329,16 +331,33 @@ const depsSel = document.getElementById("t-deps");
       document.getElementById("t-status").value = t.status;
       document.getElementById("t-priority").value = t.priority;
       document.getElementById("t-agent").value = t.agent || "";
-document.getElementById("t-refs").value = (t.refs || []).join(", ");
+      document.getElementById("t-refs").value = (t.refs || []).join(", ");
       document.getElementById("t-acceptance").value = (t.acceptance || []).join("\n");
       document.getElementById("t-due").value = t.due_date || "";
+      document.getElementById("t-blocked").value = t.blocked_reason || "";
       document.getElementById("t-milestone").value = t.milestone || "";
       const mine = t.depends_on || [];
       Array.from(depsSel.options).forEach(o => { o.selected = mine.includes(o.value); });
     }
   }
+  syncBlockedRow();
   openModal("task-modal");
 }
+
+// 「阻塞原因」行的显隐跟着状态下拉走：只在状态=阻塞时可填。
+// 后端语义是"字段随状态存在，离开自动清"（见 _apply_task），界面把它明示出来，
+// 不然用户会以为填了就永远在。监听在 openTaskModal 之外绑定一次（无内联事件契约）。
+function syncBlockedRow() {
+  const row = document.getElementById("t-blocked-row");
+  const sel = document.getElementById("t-status");
+  if (row && sel) row.style.display = sel.value === "阻塞" ? "flex" : "none";
+}
+
+(function bindBlockedRowToggle() {
+  const sel = document.getElementById("t-status");
+  if (!sel) return;
+  sel.addEventListener("change", syncBlockedRow);
+})();
 
 async function saveTask() {
   const title = document.getElementById("t-title").value.trim();
@@ -355,6 +374,8 @@ async function saveTask() {
     acceptance: document.getElementById("t-acceptance").value.split("\n").map(s => s.trim()).filter(Boolean),
     depends_on: Array.from(document.getElementById("t-deps").selectedOptions).map(o => o.value),
     milestone: document.getElementById("t-milestone").value,
+    // 阻塞原因：非阻塞状态后端会忽略并清空（字段随状态存在），前端不做状态判断副本
+    blocked_reason: document.getElementById("t-blocked").value.trim(),
   };
   try {
     if (editTaskId) {
@@ -384,6 +405,33 @@ async function deleteTask() {
     renderDetail();
     loadOverview();
   } catch (e) { toast("删除失败：" + e.message); }
+}
+
+// 任务编号一键复制（第六轮吸取：tsk/overclick 的"随时可复制 id"）。
+// 用途：把"让智能体改哪一条"说清楚，或者贴进别的工具里引用 —— 以前只能从
+// 接口响应或交接包里翻。剪贴板 API 不可用（非安全上下文/权限拒绝）时退回 execCommand。
+function copyTaskId() {
+  if (!editTaskId) return;
+  const tid = editTaskId;
+  const ok = () => toast("已复制任务编号 " + tid + " ✓");
+  const fallback = () => {
+    const ta = document.createElement("textarea");
+    ta.value = tid;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    let copied = false;
+    try { copied = document.execCommand("copy"); } catch (e) { copied = false; }
+    document.body.removeChild(ta);
+    return copied;
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(tid).then(ok)
+      .catch(() => { fallback() ? ok() : toast("复制失败，请手动复制"); });
+    return;
+  }
+  fallback() ? ok() : toast("复制失败，请手动复制");
 }
 
 // 键盘：Esc 逐层关最上面的浮层；Enter / 空格 打开被聚焦的卡片

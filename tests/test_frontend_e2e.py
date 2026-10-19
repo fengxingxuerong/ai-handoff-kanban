@@ -1318,6 +1318,89 @@ def test_acceptance_roundtrip_card_badge_and_modal_fill(ui):
     assert "☑ 3" in page.locator(".tcard:has-text('带验收的任务')").inner_text()
 
 
+def test_blocked_reason_roundtrip_and_copy_id(ui):
+    """第六轮吸取的界面闭环：状态改为阻塞才出现原因输入框 → 保存后卡片上看得见、
+    重开弹窗按原值回填；改回进行中原因随之清掉。任务号一键复制（12 位十六进制手抄不现实，
+    代理对齐又全靠它）。"""
+    page, api, _ = ui
+    p = make_project(api, "阻塞原因项目")
+    tid = api.post(f"/api/projects/{p['id']}/tasks", {"title": "卡住的活"})[1]["id"]
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('阻塞原因项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+
+    page.locator(".tcard:has-text('卡住的活')").click()
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    assert not page.locator("#t-blocked-row").is_visible(), "非阻塞状态不该占着原因输入框"
+
+    page.select_option("#t-status", "阻塞")
+    page.wait_for_selector("#t-blocked-row", state="visible", timeout=5000)
+    page.fill("#t-blocked", "在等上游接口文档")
+    page.click("[data-act='saveTask']")
+    page.wait_for_selector("#task-modal", state="hidden", timeout=10000)
+    page.wait_for_function(
+        "() => document.querySelector('.tcard').textContent.includes('在等上游接口文档')",
+        timeout=10000)
+
+    # 重开：回填 + 行可见；顺手复制编号（toast 里要带真 id）
+    page.locator(".tcard:has-text('卡住的活')").click()
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    assert page.locator("#t-blocked").input_value() == "在等上游接口文档", "原因没回填"
+    page.click("#t-copy-id")
+    page.wait_for_function(
+        "() => document.getElementById('toast').textContent.includes('已复制任务编号')",
+        timeout=10000)
+    toast = page.locator("#toast").inner_text()
+    assert tid in toast, f"复制的不是这条任务的编号：{toast}"
+
+    # 改回进行中：输入行收起、盘上原因清掉、卡片不再显示
+    page.select_option("#t-status", "进行中")
+    page.wait_for_selector("#t-blocked-row", state="hidden", timeout=5000)
+    page.click("[data-act='saveTask']")
+    page.wait_for_selector("#task-modal", state="hidden", timeout=10000)
+    page.wait_for_function(
+        "() => !document.querySelector('.tcard').textContent.includes('在等上游接口文档')",
+        timeout=10000)
+    _, data = api.get(f"/api/projects/{p['id']}")
+    assert data["tasks"][0].get("blocked_reason", "") == "", "离开阻塞后原因必须清掉"
+
+
+def test_stale_done_verdict_hinted_in_reality_panel(ui):
+    """「验收后代码又变了」的界面落点：git 数据里有 stale_done 就要在复核建议里说话。
+    打桩 git 端点（真造出"完成之后又有提交"的仓库要控 git 时间戳，对这条**界面**判据
+    不必要 —— 判定口径本身在 repo_watch 有纯函数用例与探针钉着）。"""
+    page, api, _ = ui
+    p = make_project(api, "验收后变化项目", repo_path="D:\\fake\\repo")
+    tid = api.post(f"/api/projects/{p['id']}/tasks",
+                   {"title": "早就验过的活", "status": "已完成"})[1]["id"]
+
+    payload = {
+        "ok": True, "branch": "main", "days_since_commit": 0, "dirty_count": 0,
+        "head": {"hash": "abc1234", "subject": "later commit", "date": "2026-10-19 10:00"},
+        "commits": [], "dirty_files": [],
+        "refs": {"ok": True, "total": 0, "missing": [], "checked_tasks": 0},
+        "stale_done": {"count": 1, "items": [
+            {"id": tid, "title": "早就验过的活", "done_at": "2026-01-01 09:00",
+             "commit_at": "2026-10-19 10:00"}]},
+    }
+    page.route("**/api/projects/*/git*", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(payload, ensure_ascii=False)))
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('验收后变化项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.wait_for_function(
+        "() => { const v = document.querySelectorAll('#reality-verdicts .verdict');"
+        "  return v.length >= 1 && !/正在核对|读取中/.test(v[0].innerText); }", timeout=15000)
+    txt = page.locator("#reality-verdicts").inner_text()
+    assert "验收结论可能已经过时" in txt, f"没提示复核：{txt[:300]}"
+    assert "早就验过的活" in txt and "2026-01-01 09:00" in txt, txt
+    # 只提示、不改状态
+    _, data = api.get(f"/api/projects/{p['id']}")
+    assert data["tasks"][0]["status"] == "已完成"
+
+
 def test_inbox_badge_modal_and_jump(ui):
     """待拍板：徽标计数、弹窗分组列出、点一条跳到项目"""
     from datetime import datetime, timedelta

@@ -347,6 +347,14 @@ def _clean_notes(args: dict, stored: dict) -> list[str]:
     raw_due = args.get("due_date")
     if isinstance(raw_due, str) and raw_due.strip() and not (stored.get("due_date") or ""):
         notes.append(f"截止日期「{raw_due.strip()[:40]}」没认出来，已留空（只接受 YYYY-MM-DD）")
+    raw_blocked = args.get("blocked_reason")
+    if isinstance(raw_blocked, str) and raw_blocked.strip():
+        norm = raw_blocked.strip()[:kanban.MAX_BLOCKED_REASON]
+        # 两种"没落上"：状态不是阻塞（字段随状态存在，离开就清）；或超长被截。
+        if ((stored.get("blocked_reason") or "") != norm
+                or len(raw_blocked.strip()) > kanban.MAX_BLOCKED_REASON):
+            notes.append(f"阻塞原因没落上（只在任务状态为「阻塞」时保留，超 "
+                         f"{kanban.MAX_BLOCKED_REASON} 字会被截断）")
     for key, label, cap, norm in (
             ("refs", "涉及代码位置", kanban.MAX_REFS,
              lambda s: s.strip().strip("`").strip()),
@@ -398,16 +406,18 @@ def t_add_task(args: dict) -> str:
         depends_on=args.get("depends_on") or [],
         acceptance=args.get("acceptance") or [],
         due_date=args.get("due_date") or "",
+        blocked_reason=args.get("blocked_reason") or "",
     )
     task = kanban.create_task(pid, body, client_ref=args.get("client_ref") or "")
     refs = ("；涉及 " + "、".join(task["refs"])) if task.get("refs") else ""
     acc = task.get("acceptance") or []
     acc_txt = (f"；验收标准 {len(acc)} 条已记下" if acc else "")
+    why = ("；阻塞原因：" + task["blocked_reason"]) if task.get("blocked_reason") else ""
     replay = "（幂等重放：这条之前就存在，没有重复创建）" if task.get("client_ref_replayed") else ""
     lost = _clean_notes(args, task)
     tail = ("；" + "；".join(lost)) if lost else ""
     return (f"已在项目 [{pid}] 新增任务 [{task['id']}] {task['title']}"
-            f"（{task['status']}/{task['priority']}）{refs}{acc_txt}{replay}{tail}")
+            f"（{task['status']}/{task['priority']}）{refs}{acc_txt}{why}{replay}{tail}")
 
 
 def t_update_task(args: dict) -> str:
@@ -421,6 +431,10 @@ def t_update_task(args: dict) -> str:
         raise ValueError(f"{e.detail}（task_id={tid}）") from None
     lost = _clean_notes(args, updated)
     tail = ("；" + "；".join(lost)) if lost else ""
+    # 停到阻塞却不给原因 = 下一个接手的人要多问一轮（第六轮吸取的"阻塞必须带原因"）。
+    # 不拒绝（渐进式：轻量场景不该被强制），只提醒一次。
+    if updated.get("status") == "阻塞" and not (updated.get("blocked_reason") or ""):
+        tail += "；未记阻塞原因（blocked_reason）—— 建议补一句「卡在哪、为什么」，接手方会少问一轮"
     un = info.get("unblocked") or []
     # 报"你刚放行了哪几条"：不然代理得再问一遍 kanban_next_task 才知道下一步做什么
     unblock = ("；已解锁 " + "、".join(f"{x['title']} [{x['id']}]" for x in un[:5])
@@ -429,9 +443,10 @@ def t_update_task(args: dict) -> str:
     # 项目名，都是这次调用方没有提供、也不该原样拿到的存量内容 ——
     # 而"轮换 sk-xxx 这把"写在任务标题里是最常见的写法。
     # 分发点那层也会再盖一次（幂等），这里盖是因为**源头就不该出明文**。
+    why = ("；阻塞原因：" + updated["blocked_reason"]) if updated.get("blocked_reason") else ""
     return _agent_text(
         f"任务 [{tid}] 已更新为 {updated['status']}/{updated['priority']}"
-        f"（所属项目 {info.get('project', '')}）{tail}{unblock}", args)
+        f"（所属项目 {info.get('project', '')}）{why}{tail}{unblock}", args)
 
 
 def t_next_task(args: dict) -> str:
@@ -654,8 +669,11 @@ def t_memory_add(args: dict) -> str:
         expires=args.get("expires") or "",
     ))
     mem = res["memory"]
+    # deduped 时 mem 就是**盘上已有那条**（2026-10-19 起 —— 以前返回的是刚构造的新
+    # entry，id 是盘上不存在的，拿去 kanban_delete_memory 会 404）。回执说清 id，
+    # 调用方要撤销/引用这一条都得靠它。
     if res.get("deduped"):
-        return f"这条记忆已存在（同项目同文本不重复入），未写入。"
+        return f"这条记忆已存在（同项目同类型同文本不重复入），未写入；已有 id {mem.get('id')}。"
     where = mem.get("pid") or "（未指定项目）"
     # 清洗丢了东西要说话：expires 格式不对会被留空 = 变成"长期有效"，
     # 调用方以为设了保质期，实际这条会永远被召回（与 due_date="下周三" 同一类说谎的回执）
@@ -666,7 +684,7 @@ def t_memory_add(args: dict) -> str:
         exp_note = f"（expires「{raw_exp[:40]}」没认出来，已按长期有效处理：只接受 YYYY-MM-DD）"
     elif exp:
         exp_note = f"（有效期到 {exp}，过期后不再召回/进交接包）"
-    return f"已记下 [{mem['type']}] 到 {where}：{mem['text']}{exp_note}"
+    return f"已记下 [{mem['type']}] [{mem['id']}] 到 {where}：{mem['text']}{exp_note}"
 
 
 MEMORY_LIST_LIMIT = 50
@@ -852,6 +870,8 @@ TOOLS: list[dict] = [
                                               "最多 10 条、单条 120 字，超出部分会被丢弃并在回执说明"},
                 "due_date": {"type": "string",
                              "description": "截止日期 YYYY-MM-DD，留空表示未设置"},
+                "blocked_reason": {"type": "string", "maxLength": kanban.MAX_BLOCKED_REASON,
+                                   "description": "为什么被卡住（只在状态为「阻塞」时保留；离开阻塞自动清空）"},
                 "client_ref": CLIENT_REF_SCHEMA,
             },
             "required": ["project_id", "title"], "additionalProperties": False,
@@ -880,6 +900,8 @@ TOOLS: list[dict] = [
                 **_add_remove_params("acceptance", "验收标准"),
                 "due_date": {"type": "string",
                              "description": "截止日期 YYYY-MM-DD；不改就省略（传空串等于清掉截止日期）"},
+                "blocked_reason": {"type": "string", "maxLength": kanban.MAX_BLOCKED_REASON,
+                                   "description": "为什么被卡住（改成阻塞时带上；恢复其他状态会自动清空，历史留在过程日志）"},
             },
             "required": ["task_id"], "additionalProperties": False,
         },

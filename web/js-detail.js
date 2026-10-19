@@ -203,9 +203,14 @@ function renderDetail() {
       ? `<span class="review-chip" title="验收时去详情页「代码现实」对照最近提交">🛂 待审查</span>` : "";
     const di = dueInfo(t);
     const dueHtml = di ? `<span class="due-badge ${di.cls}">📅 ${esc(di.text)}</span>` : "";
+    // 阻塞原因放正文（不只藏在编辑弹窗里）：它是"这条为什么停着"的答案，
+    // 也是用户决定"去解决还是放弃"的材料（第六轮吸取：阻塞必带原因）。
+    const blockHtml = (t.status === "阻塞" && t.blocked_reason)
+      ? `<div class="td blocked-reason" title="${esc(t.blocked_reason)}">⛔ ${esc(t.blocked_reason)}</div>` : "";
     el.innerHTML = `
       <div class="tt">${esc(t.title)}${dueHtml}</div>
       ${t.desc ? `<div class="td">${esc(t.desc)}</div>` : ""}
+      ${blockHtml}
       ${refHtml}
       ${depHtml}
       <div class="tfoot">

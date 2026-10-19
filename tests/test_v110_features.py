@@ -106,13 +106,33 @@ def test_memory_crud_and_filters(app_client):
 
 def test_memory_dedupes_same_text_in_same_project(app_client):
     _, p = app_client.create_project("去重项目", status="进行中")
-    st1, _ = app_client.post("/api/memories", {"pid": p["id"], "text": "同一条记忆"})
-    st2, body = app_client.post("/api/memories", {"pid": p["id"], "text": "同一条记忆"})
+    st1, m1 = app_client.post("/api/memories", {"pid": p["id"], "type": "坑", "text": "同一条记忆"})
+    st2, body = app_client.post("/api/memories", {"pid": p["id"], "type": "坑", "text": "同一条记忆"})
     assert st1 == 201 and st2 == 201
-    assert body.get("deduped") is True, "同项目同文本不该重复入库"
+    assert body.get("deduped") is True, "同项目同类型同文本不该重复入库"
+    # 返回的必须是盘上那条（id 一致），不是新构造的假 entry
+    assert body["memory"]["id"] == m1["memory"]["id"]
 
     _, listing = app_client.get(f"/api/memories?pid={p['id']}")
     assert len(listing["memories"]) == 1
+
+    # 文本相同但类型不同 = 两条：去重识别的是"同一条记录"，不是"同一串字符"
+    st3, body3 = app_client.post("/api/memories", {"pid": p["id"], "type": "约定", "text": "同一条记忆"})
+    assert st3 == 201 and not body3.get("deduped")
+    _, listing2 = app_client.get(f"/api/memories?pid={p['id']}")
+    assert len(listing2["memories"]) == 2
+
+
+def test_memory_dedupe_returns_a_really_deletable_id(app_client):
+    """去重回执里的 id 必须是真能用的：拿它 DELETE 要成功，且删的就是那一条。
+    以前回执里是"新建但没落盘"的 entry，id 是假的 —— 删除会 404，用户以为删了。"""
+    _, p = app_client.create_project("去重删除项目", status="进行中")
+    _, m1 = app_client.post("/api/memories", {"pid": p["id"], "type": "事实", "text": "可删除性自查"})
+    _, m2 = app_client.post("/api/memories", {"pid": p["id"], "type": "事实", "text": "可删除性自查"})
+    assert m2.get("deduped") is True
+    assert app_client.delete("/api/memories/" + m2["memory"]["id"])[0] == 200
+    _, lst = app_client.get(f"/api/memories?pid={p['id']}")
+    assert lst["memories"] == []
 
 
 def test_memory_unknown_type_falls_back_to_fact(app_client):

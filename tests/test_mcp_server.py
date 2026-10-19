@@ -1550,3 +1550,67 @@ def test_update_task_acceptance_add_over_cap_is_reported(mcp):
         "project_id": pid, "title": "留位任务", "acceptance": ["甲"]})[0])
     text2, _ = mcp.tool("kanban_update_task", {"task_id": tid2, "acceptance_add": ["甲", "乙"]})
     assert "没落上" not in text2, text2
+
+
+def test_blocked_reason_roundtrip_and_unblock_is_reported(mcp):
+    """「阻塞必带原因」的 MCP 面（2026-10-19 第六轮吸取）：
+    ① add / update 能写、回执带着它；② 停在阻塞但没给原因 → 回执提醒一句（不拒绝）；
+    ③ 离开阻塞同时传原因 = 字段随状态清，必须说破「没落上」（不是静默吞）。"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "阻塞 MCP 项目"})[0])
+    text, is_err = mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "卡住的活", "status": "阻塞",
+        "blocked_reason": "在等上游接口文档"})
+    assert not is_err and "阻塞原因：在等上游接口文档" in text, text
+    tid = last_id(text)
+
+    # 阻塞中换原因：回执带着新原因
+    text2, is_err2 = mcp.tool("kanban_update_task", {"task_id": tid, "blocked_reason": "换成在等部署窗口"})
+    assert not is_err2 and "换成在等部署窗口" in text2, text2
+
+    # 离开阻塞同时传原因：字段不保留，必须说破（回执里不许出现"已更新"就算完）
+    text3, _ = mcp.tool("kanban_update_task", {"task_id": tid, "status": "进行中",
+                                               "blocked_reason": "过时的原因"})
+    assert "没落上" in text3 and "阻塞" in text3, text3
+    detail = mcp.tool("kanban_get_project", {"project_id": pid})[0]
+    assert "过时的原因" not in detail, "离开阻塞后原因不该留在盘上"
+
+    # 停到阻塞却不给原因 → 提醒一轮，不拒绝
+    text4, is_err4 = mcp.tool("kanban_update_task", {"task_id": tid, "status": "阻塞"})
+    assert not is_err4 and "未记阻塞原因" in text4, text4
+
+
+def test_blocked_reason_over_max_length_is_rejected_at_the_boundary(mcp):
+    """schema 里的 maxLength 就是真的那道闸：声明 300、实际收 301 必须报错，
+    而不是收下再被落盘截成 300（代理会以为整句都记上了）。"""
+    import app.main as kanban
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "阻塞上限项目"})[0])
+    over = "卡" * (kanban.MAX_BLOCKED_REASON + 1)
+    text, is_err = mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "超长原因", "status": "阻塞", "blocked_reason": over})
+    assert is_err and f"最长 {kanban.MAX_BLOCKED_REASON} 字" in text, text
+    # 上限之内放行（别把合法的也拒了）
+    ok_text, ok_err = mcp.tool("kanban_add_task", {
+        "project_id": pid, "title": "贴着上限", "status": "阻塞",
+        "blocked_reason": "卡" * kanban.MAX_BLOCKED_REASON})
+    assert not ok_err, ok_text
+
+
+def test_memory_dedupe_receipt_carries_the_real_existing_id(mcp):
+    """去重回执要给出**盘中已有那条**的 id（2026-10-19 修）：
+    以前返回新造的 entry，id 是假的 —— 代理拿它去 kanban_delete_memory 会 404，
+    而回执说"已存在"。现在 id 必须真的能删掉那一条。"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "记忆去重 id 项目"})[0])
+    text1, _ = mcp.tool("kanban_memory_add", {"project_id": pid, "type": "坑", "text": "重复前先查锁"})
+    text2, _ = mcp.tool("kanban_memory_add", {"project_id": pid, "type": "坑", "text": "重复前先查锁"})
+    assert "已存在" in text2 and "同项目同类型同文本" in text2, text2
+    m = re.search(r"已有 id ([0-9a-f]+)", text2)
+    assert m, f"去重回执没给出已有条目 id：{text2}"
+    mid = m.group(1)
+    first = re.search(r"\[([0-9a-f]+)\]", text1)
+    assert first and first.group(1) == mid, f"回执 id 与第一条对不上：{text1} vs {text2}"
+    listed = mcp.tool("kanban_list_memories", {"project_id": pid})[0]
+    assert f"[{mid}]" in listed, f"回执 id 在列表里找不到：{listed[:300]}"
+    del_text, del_err = mcp.tool("kanban_delete_memory", {"memory_id": mid})
+    assert not del_err, f"拿回执 id 删除失败（旧缺陷的复现）：{del_text}"
+    after = mcp.tool("kanban_list_memories", {"project_id": pid})[0]
+    assert "重复前先查锁" not in after, after

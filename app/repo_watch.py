@@ -93,6 +93,49 @@ def task_completion(project: dict) -> int | None:
     return round(done * 100 / len(tasks))
 
 
+STALE_DONE_LIMIT = 10
+
+
+def _as_dt(s: str):
+    """按分钟精度解析时间戳（now_str 与 git log 的日期格式都认）。"""
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def stale_done_tasks(tasks: list[dict], head: dict, limit: int = STALE_DONE_LIMIT) -> dict:
+    """已完成的任务，完成之后仓库又有新提交 → 建议复核（第六轮吸取：riqor 的"证据撤销"最小切片）。
+
+    为什么值得做：任务标完成时是有人**当场验过的**（acceptance 清单就是干这个的），
+    之后仓库每多一次提交，这个结论就旧一分，而界面上完全看不出来 ——
+    "什么时候能信任一次完成"正是 riqor 整条产品线在卖的判定。
+
+    三条纪律（宁可不报，不猜）：
+    - 只认提交时间，不认未提交改动 —— 工作区里的脏文件没有时间戳，无法证明"晚于验收"；
+    - 没有 `done_at` 的老任务直接跳过（本字段 2026-10-19 才落，历史任务无从判定）；
+    - **只提示，绝不自动改任何状态** —— 复核结论只能由人/代理显式写回。
+    返回 `{count, items}`：count 是全部条数，items 截断到 limit（截断必须留痕，硬性约定 24）。
+    """
+    head_date = str((head or {}).get("date") or "")
+    hd = _as_dt(head_date)
+    if hd is None:
+        return {"count": 0, "items": []}
+    stale = []
+    for t in tasks or []:
+        if not isinstance(t, dict) or t.get("status") != "已完成":
+            continue
+        dd = _as_dt(str(t.get("done_at") or ""))
+        if dd is None or dd >= hd:
+            continue
+        stale.append({"id": t.get("id"), "title": t.get("title", ""),
+                      "done_at": t.get("done_at"), "commit_at": head_date})
+    stale.sort(key=lambda x: (x["done_at"] or "", str(x["id"] or "")))
+    return {"count": len(stale), "items": stale[:limit]}
+
+
 def scan_project(project: dict, state: dict | None = None, use_cache: bool = False) -> dict:
     """扫描一个项目；返回变化事件。不写进度。"""
     pid = str(project.get("id") or "")
@@ -128,6 +171,11 @@ def scan_project(project: dict, state: dict | None = None, use_cache: bool = Fal
         "reason": reason,
         "detected_at": detected_at,
         "last_seen_at": prev.get("last_seen_at"),
+        # 「验收后代码又变了」的复核提示：与 changed 正交（提交后又被已读也照报，
+        # 因为它答的是另一个问题：那几条已完成任务的验收结论还新不新）
+        "stale_done": stale_done_tasks([t for t in (project.get("tasks") or [])
+                                        if isinstance(t, dict)],
+                                       snap.get("head") or {}),
     }
 
 

@@ -252,6 +252,26 @@ def test_check_refs_exist_says_why_when_it_cannot_check(tmp_path):
     assert res["ok"] is False and res["total"] == 0 and res["missing"] == []
 
 
+def test_check_refs_exist_skips_urls_and_hash_fragments(tmp_path):
+    """两类引用不是"仓库内坐标"，以前会被误报 missing（2026-10-19 第六轮硬化）：
+    - 带 `://` 的 URL（外部文档 / PR 链接）；
+    - `#片段`（`app/main.py#L10` 是编辑器常用的跳转记法，剥掉片段后按文件判在不在）。
+    它们既不该被报，也不该计入 total —— total 的口径是"查了几处本机坐标"。"""
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "main.py").write_text("x", encoding="utf-8")
+    tasks = [{"id": "t", "title": "看文档", "refs": [
+        "https://github.com/x/y/blob/main/app.py:12",   # URL：跳过
+        "app/main.py#L10",                              # 片段：剥掉后是在的
+        "app/main.py#L10:5",                            # 片段+行号混合写法
+        "app/gone.py#L1",                               # 片段剥掉后确实不在
+    ]}]
+    res = check_refs_exist(str(tmp_path), tasks)
+    assert res["ok"] is True
+    assert res["total"] == 3, "URL 被跳过（不计入「查了几处坐标」），其余三条都算"
+    assert [m["ref"] for m in res["missing"]] == ["app/gone.py#L1"], \
+        "剥掉片段后按文件判在不在：app/main.py 在、app/gone.py 不在"
+
+
 def test_git_endpoint_carries_stale_refs(ai_client, tmp_path):
     """/api/projects/{pid}/git 要顺手带上 refs 检查结果（同一个「代码现状」出口，
     前端不必再为它发一次请求）。"""
