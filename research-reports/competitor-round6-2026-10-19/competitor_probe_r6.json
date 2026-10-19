@@ -1,0 +1,4422 @@
+{
+ "generated": "2026-10-19",
+ "query_count": 10,
+ "total_hits_unique": 258,
+ "kept": {
+  "Ashish6298/CONTINUUM": {
+   "full_name": "Ashish6298/CONTINUUM",
+   "stars": 3,
+   "pushed_at": "2026-10-17T21:49:38Z",
+   "created_at": "2026-09-05T18:49:24Z",
+   "description": "AI Work Continuity & Cross-Model Agent Handoff System. Captures, verifies, and packages deterministic project state across Claude, GPT-4o, Gemini, Cursor, Antigravity & Local LLMs.",
+   "topics": [
+    "agent-handoff",
+    "ai",
+    "ast-parser",
+    "claude",
+    "claude-code",
+    "cli",
+    "cursor",
+    "dag",
+    "developer-tools",
+    "gemini",
+    "gpt",
+    "llm",
+    "llm-agents",
+    "llm-tools",
+    "llms",
+    "offline-first",
+    "python",
+    "state-graph",
+    "work-continuity"
+   ],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "huangyimengzly520/handoff-standard": {
+   "full_name": "huangyimengzly520/handoff-standard",
+   "stars": 2,
+   "pushed_at": "2026-10-18T06:21:52Z",
+   "created_at": "2026-10-09T07:58:28Z",
+   "description": "AI agent migration decisions, trusted state recovery, and reliable project handoffs.",
+   "topics": [],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "Flowershangfromthebranches/memorygraph": {
+   "full_name": "Flowershangfromthebranches/memorygraph",
+   "stars": 1,
+   "pushed_at": "2026-08-28T01:18:39Z",
+   "created_at": "2026-08-20T16:00:33Z",
+   "description": "Evidence-backed shared project state and handoff atlas for any coding agent",
+   "topics": [],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "Vishwas-Srivastav/StateForge": {
+   "full_name": "Vishwas-Srivastav/StateForge",
+   "stars": 1,
+   "pushed_at": "2026-08-21T11:31:40Z",
+   "created_at": "2026-08-21T11:03:55Z",
+   "description": "StateForge - Git-native persistent project state for AI coding agents. Preserve context, decisions, progress, and handoffs across Claude, Codex, Cursor, and other vibe-coding tools without rebuilding ",
+   "topics": [],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "moain2028/agent-workspace-handoff": {
+   "full_name": "moain2028/agent-workspace-handoff",
+   "stars": 0,
+   "pushed_at": "2026-09-22T23:48:03Z",
+   "created_at": "2026-09-22T23:47:57Z",
+   "description": "Genspark OpenClaw agent state handoff — memory, skills, research, project reports",
+   "topics": [],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "shengxia1228/project-handoff": {
+   "full_name": "shengxia1228/project-handoff",
+   "stars": 0,
+   "pushed_at": "2026-09-27T12:25:07Z",
+   "created_at": "2026-09-27T11:38:07Z",
+   "description": "A portable Agent Skill for preserving verified project state across AI sessions.",
+   "topics": [],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "Wwf9w0/wf9-handoff": {
+   "full_name": "Wwf9w0/wf9-handoff",
+   "stars": 0,
+   "pushed_at": "2026-09-15T15:45:41Z",
+   "created_at": "2026-09-15T13:53:34Z",
+   "description": "Local-first project continuity for AI coding agents — preserve repository state, decisions, failures, verification, and active work across agent switches.",
+   "topics": [],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "KanG-ciyuan/kang-agent-collab": {
+   "full_name": "KanG-ciyuan/kang-agent-collab",
+   "stars": 0,
+   "pushed_at": "2026-09-15T04:47:03Z",
+   "created_at": "2026-09-14T11:59:15Z",
+   "description": "Agent-agnostic collaboration and handoff protocol: shared memory explains the project, Git proves the engineering state, and the current task grants permission.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "coding-agents",
+    "developer-tools",
+    "git",
+    "handoff",
+    "multi-agent",
+    "project-memory"
+   ],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "bsaizne/agent-context-manager": {
+   "full_name": "bsaizne/agent-context-manager",
+   "stars": 0,
+   "pushed_at": "2026-10-16T01:55:23Z",
+   "created_at": "2026-10-15T14:27:39Z",
+   "description": "Local-first project handoff for AI coding agents: keeps the minimum useful state in .agent/ Markdown files, with a green/red change-history diff view.",
+   "topics": [
+    "agent",
+    "ai-agents",
+    "cli",
+    "context",
+    "developer-tools",
+    "handoff",
+    "markdown",
+    "pyside6"
+   ],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "corianderK/portable-agent-workspace": {
+   "full_name": "corianderK/portable-agent-workspace",
+   "stars": 0,
+   "pushed_at": "2026-09-16T06:12:41Z",
+   "created_at": "2026-09-16T05:25:52Z",
+   "description": "Make AI coding projects portable across Codex, Claude, DeepSeek, Gemini and other agents using repository-owned state, handoff protocols, and provider-agnostic workflows.",
+   "topics": [],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "Midnight-Kyo/project-continuity": {
+   "full_name": "Midnight-Kyo/project-continuity",
+   "stars": 0,
+   "pushed_at": "2026-09-04T07:48:34Z",
+   "created_at": "2026-09-04T04:00:09Z",
+   "description": "A lightweight on-disk continuity protocol for AI coding agents. Make sessions disposable while keeping project state, decisions, tasks, and handoffs persistent.",
+   "topics": [
+    "agent-skills",
+    "agentic-coding",
+    "agents",
+    "ai",
+    "claude-code",
+    "codex",
+    "coding-agents",
+    "context-engineering",
+    "cursor",
+    "developer-tools",
+    "llm"
+   ],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "louisen0o0/resume-the-scene": {
+   "full_name": "louisen0o0/resume-the-scene",
+   "stars": 0,
+   "pushed_at": "2026-09-18T11:37:18Z",
+   "created_at": "2026-09-17T15:13:37Z",
+   "description": "Model-agnostic project memory for AI agents: resume from verified task state, not chat history.",
+   "topics": [
+    "agent-memory",
+    "ai-agents",
+    "checkpoint",
+    "cli",
+    "handoff",
+    "llm",
+    "model-agnostic",
+    "project-memory",
+    "python",
+    "task-state"
+   ],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "Neuroca-Inc/orchestra": {
+   "full_name": "Neuroca-Inc/orchestra",
+   "stars": 0,
+   "pushed_at": "2026-09-08T02:06:38Z",
+   "created_at": "2026-08-10T20:50:51Z",
+   "description": "Three agent project tracking desktop application for recording Operator, Guardian, and Auditor interactions without losing the project line, source artifacts, or handoff state.",
+   "topics": [
+    "indexing-engine",
+    "indexing-querying",
+    "llm-driven-research",
+    "query-engine",
+    "research-analysis-pipeline",
+    "research-analytics",
+    "research-assistant",
+    "research-management-system"
+   ],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "vk-ai/multi-agent-orchestration-lab": {
+   "full_name": "vk-ai/multi-agent-orchestration-lab",
+   "stars": 0,
+   "pushed_at": "2026-10-13T04:34:45Z",
+   "created_at": "2026-10-13T04:34:38Z",
+   "description": "Learning project: supervisor/worker/critic multi-agent graph with handoffs and shared state on local Qwen2.5 (llama.cpp), step-level trajectory evals, fault injection and recovery with CIs; tool backe",
+   "topics": [
+    "agent-evaluation",
+    "fault-injection",
+    "learning-project",
+    "llama-cpp",
+    "llm-agents",
+    "multi-agent",
+    "tool-calling"
+   ],
+   "found_by": [
+    "handoff project state agent created:>2026-08-01"
+   ]
+  },
+  "smarzban/tsk": {
+   "full_name": "smarzban/tsk",
+   "stars": 214,
+   "pushed_at": "2026-10-18T10:02:22Z",
+   "created_at": "2026-08-19T18:26:28Z",
+   "description": "tsk, a Linear alternative that stays in the terminal: a shared task board for you and your agents. TUI for you, CLI for them.",
+   "topics": [
+    "cli",
+    "herdr",
+    "herdr-plugin",
+    "productivity",
+    "rust",
+    "task-manager",
+    "terminal",
+    "tui"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "ustoppble/overclick": {
+   "full_name": "ustoppble/overclick",
+   "stars": 119,
+   "pushed_at": "2026-09-24T17:10:46Z",
+   "created_at": "2026-08-14T22:10:35Z",
+   "description": "The open source task board where AI agents do the work. Self-hosted, MCP-native, zero data collection.",
+   "topics": [
+    "agents",
+    "ai-agents",
+    "kanban",
+    "mcp",
+    "self-hosted",
+    "task-management"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01",
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "makifbaysal/tasktrooper": {
+   "full_name": "makifbaysal/tasktrooper",
+   "stars": 117,
+   "pushed_at": "2026-10-18T10:52:45Z",
+   "created_at": "2026-09-14T12:45:52Z",
+   "description": "Local-first agent platform: board + role agents + agent CLI runs (Claude Code, Cursor, Antigravity, OpenCode) or local and API models (Ollama, LM Studio), all on your own Mac",
+   "topics": [
+    "agentic-ai",
+    "ai-agents",
+    "autonomous-agents",
+    "claude",
+    "claude-code",
+    "coding-agents",
+    "cursor",
+    "developer-tools",
+    "devops-automation",
+    "electron",
+    "golang",
+    "issue-tracker",
+    "kanban",
+    "llm-agents",
+    "local-first",
+    "macos",
+    "mcp",
+    "multi-agent",
+    "opencode",
+    "software-factory"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "JoxoAI/joxo": {
+   "full_name": "JoxoAI/joxo",
+   "stars": 100,
+   "pushed_at": "2026-10-17T19:35:15Z",
+   "created_at": "2026-09-16T10:21:00Z",
+   "description": "One shared project for your team's Claude Code, Codex, Cursor and OpenCode agents: a task board, decisions and handoffs. Everyone keeps their own plan.",
+   "topics": [
+    "agent-collaboration",
+    "ai-agents",
+    "ai-coding-agents",
+    "anthropic",
+    "claude-code",
+    "codex",
+    "coding-agents",
+    "cursor",
+    "developer-tools",
+    "gemini-cli",
+    "hackathon",
+    "mcp",
+    "multi-agent",
+    "openai-codex",
+    "team-collaboration"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "Ericwong5021/better-codex": {
+   "full_name": "Ericwong5021/better-codex",
+   "stars": 90,
+   "pushed_at": "2026-10-16T20:15:40Z",
+   "created_at": "2026-08-04T12:22:44Z",
+   "description": "A task board and Agent system inside Codex Desktop. Local-first, open source, macOS and Windows.",
+   "topics": [
+    "ai-agents",
+    "codex",
+    "developer-tools",
+    "local-first",
+    "macos",
+    "openai-codex",
+    "productivity",
+    "task-management",
+    "windows"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "DnzzL/herdr-automations": {
+   "full_name": "DnzzL/herdr-automations",
+   "stars": 16,
+   "pushed_at": "2026-10-08T15:39:03Z",
+   "created_at": "2026-08-07T20:22:51Z",
+   "description": "Scheduled tasks for your coding agents, in the terminal. A prompt, a cron line, and a fresh git worktree per run — on Herdr. One YAML file, no store, prebuilt binaries, per-automation model, catch-up ",
+   "topics": [
+    "ai-agents",
+    "automation",
+    "claude-code",
+    "coding-agents",
+    "cron",
+    "developer-tools",
+    "golang",
+    "herdr",
+    "herdr-plugin",
+    "scheduler"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "theboringhumane/theboringfloor": {
+   "full_name": "theboringhumane/theboringfloor",
+   "stars": 13,
+   "pushed_at": "2026-09-13T17:07:26Z",
+   "created_at": "2026-08-20T18:44:31Z",
+   "description": "The terminal office — an Ink TUI where a real agent manager (oikonomos) runs sub-agent employees: animated floor, mail, task board, chat with the boss.",
+   "topics": [
+    "agent-memory",
+    "agent-orchestration",
+    "agent-skills",
+    "agentic",
+    "agentic-ai",
+    "agentic-workflow",
+    "claude-code",
+    "coding-agent",
+    "opencode"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "andrewgolovanov/agent-os": {
+   "full_name": "andrewgolovanov/agent-os",
+   "stars": 7,
+   "pushed_at": "2026-08-26T20:13:26Z",
+   "created_at": "2026-08-15T12:23:51Z",
+   "description": "Open-source local-first task board and macOS control plane for OpenAI Codex, with MCP plugins, durable tasks, and multi-project workflows.",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "codex",
+    "developer-tools",
+    "mcp",
+    "skills",
+    "task-board"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "keviccz/AgentKanban": {
+   "full_name": "keviccz/AgentKanban",
+   "stars": 7,
+   "pushed_at": "2026-10-11T09:54:31Z",
+   "created_at": "2026-09-22T08:21:30Z",
+   "description": "让 Coding Agent 自己记待办的 Windows 桌面任务浮窗 · A desktop task board your coding agents keep up to date via local MCP",
+   "topics": [
+    "claude-code",
+    "codex",
+    "coding-agents",
+    "cursor",
+    "desktop-app",
+    "desktop-pet",
+    "kanban",
+    "mcp",
+    "model-context-protocol",
+    "rust",
+    "tauri",
+    "windows"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "riazrahaman/agent-kanban-board": {
+   "full_name": "riazrahaman/agent-kanban-board",
+   "stars": 6,
+   "pushed_at": "2026-10-18T12:47:14Z",
+   "created_at": "2026-09-05T09:16:25Z",
+   "description": "A local-only Kanban state dashboard for AI agent swarms - real-time task tracking via HTTP API and SSE",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "thomasvvugt/dsh-kanban-flow": {
+   "full_name": "thomasvvugt/dsh-kanban-flow",
+   "stars": 6,
+   "pushed_at": "2026-09-26T17:17:58Z",
+   "created_at": "2026-08-25T07:32:21Z",
+   "description": "Agent-driven kanban board for DeepSeek Harness: one board per workspace, per-task agent sessions, guarded human/agent workflow",
+   "topics": [
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "kanban"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "azimov777/casefile": {
+   "full_name": "azimov777/casefile",
+   "stars": 6,
+   "pushed_at": "2026-10-16T02:05:41Z",
+   "created_at": "2026-09-11T10:20:27Z",
+   "description": "AI agents forget between sessions. Casefile gives every task a case file — decisions, dead ends, open questions — so the next agent picks up where the last one stopped. Self-hosted MCP server + live b",
+   "topics": [
+    "agent-memory",
+    "agentic-ai",
+    "ai-agents",
+    "claude",
+    "claude-code",
+    "codex",
+    "coding-agents",
+    "cursor",
+    "developer-tools",
+    "gemini-cli-extension",
+    "issue-tracker",
+    "kanban",
+    "llm",
+    "llm-agents",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "multi-agent",
+    "self-hosted",
+    "task-manager"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "Parv17k/tasktracker": {
+   "full_name": "Parv17k/tasktracker",
+   "stars": 5,
+   "pushed_at": "2026-10-13T07:14:58Z",
+   "created_at": "2026-10-03T22:37:33Z",
+   "description": "The local-first task board for you and your AI agents. Claude & Cursor work on it over MCP, the built-in assistant asks before changing anything, and it all stays on your machine.",
+   "topics": [
+    "ai-agents",
+    "claude",
+    "gantt",
+    "kanban",
+    "local-first",
+    "mcp",
+    "model-context-protocol",
+    "nodejs",
+    "ollama",
+    "productivity",
+    "pwa",
+    "react",
+    "self-hosted",
+    "sqlite",
+    "task-manager"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "nika110/openhuddle": {
+   "full_name": "nika110/openhuddle",
+   "stars": 5,
+   "pushed_at": "2026-10-18T13:28:51Z",
+   "created_at": "2026-10-18T08:34:15Z",
+   "description": "Multiplayer mode for AI coding agents. Your team's Claude Code, Codex and Cursor agents huddle up: live status, one master prompt, a shared task board, and no stepping on each other's files.",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "collaboration",
+    "cursor",
+    "developer-tools",
+    "mcp",
+    "multiplayer",
+    "vibe-coding"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "zheyu-Julie-Liu/zcode-agent-board": {
+   "full_name": "zheyu-Julie-Liu/zcode-agent-board",
+   "stars": 4,
+   "pushed_at": "2026-10-08T16:14:49Z",
+   "created_at": "2026-09-05T13:26:03Z",
+   "description": "ZCode 插件：跨对话多 Agent 任务看板。ZCode plugin — a file-based multi-agent task board: agents in different conversations claim/submit tasks via atomic file locks, with MCP server, boss channel and handover prot",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "jlu-lujing/TaskHunter": {
+   "full_name": "jlu-lujing/TaskHunter",
+   "stars": 4,
+   "pushed_at": "2026-09-19T05:48:24Z",
+   "created_at": "2026-08-30T19:19:02Z",
+   "description": "AI task board that runs coding agents for you — claim a task, an OpenCode agent codes, tests, and opens a PR. Desktop, web, VS Code, and mobile.",
+   "topics": [
+    "agent-orchestration",
+    "ai-agents",
+    "ai-coding",
+    "automation",
+    "autonomous-agents",
+    "coding-agents",
+    "developer-tools",
+    "electron",
+    "kanban-board",
+    "llm",
+    "mobile-app",
+    "opencode",
+    "react",
+    "self-hosted",
+    "task-management",
+    "typescript",
+    "vscode-extension"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "TheAnarchoX/breakaway": {
+   "full_name": "TheAnarchoX/breakaway",
+   "stars": 4,
+   "pushed_at": "2026-10-18T13:13:31Z",
+   "created_at": "2026-10-03T21:10:21Z",
+   "description": "A task board for you and your coding agents: they claim the work, you merge it.",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "simnJS/hangar-ai": {
+   "full_name": "simnJS/hangar-ai",
+   "stars": 4,
+   "pushed_at": "2026-10-07T11:31:56Z",
+   "created_at": "2026-08-05T00:23:17Z",
+   "description": "Terminal multiplexer for CLI coding agents, with a shared task board they can drive over MCP",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "husniadil/herdr-tasks": {
+   "full_name": "husniadil/herdr-tasks",
+   "stars": 3,
+   "pushed_at": "2026-08-30T08:02:40Z",
+   "created_at": "2026-08-21T01:06:01Z",
+   "description": "Task backlog and notes board for coding agents on Herdr - claims with leases, evidence-backed review, and a human decision gate, in one Go binary.",
+   "topics": [
+    "ai-agents",
+    "herdr",
+    "herdr-plugin",
+    "mcp-server",
+    "notes",
+    "sqlite",
+    "task-management",
+    "tui"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "xiechimon/pacman": {
+   "full_name": "xiechimon/pacman",
+   "stars": 3,
+   "pushed_at": "2026-10-18T16:48:27Z",
+   "created_at": "2026-09-08T10:19:18Z",
+   "description": "Self-hosted, open-source agent workspace — file tasks on a kanban board, let AI agents build them on your own machines.",
+   "topics": [
+    "agent",
+    "ai-agents",
+    "hono",
+    "kanban",
+    "mcp",
+    "react",
+    "self-hosted",
+    "sqlite",
+    "task-management",
+    "typescript",
+    "workspace"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "JosssphZhou/azir-dispatch": {
+   "full_name": "JosssphZhou/azir-dispatch",
+   "stars": 3,
+   "pushed_at": "2026-10-10T05:18:07Z",
+   "created_at": "2026-10-04T04:48:08Z",
+   "description": "Route tasks across coding agents in herdr. JEV picks the agent and model, and a live terminal board tracks every dispatch, completion and hand-off.",
+   "topics": [
+    "agent-orchestration",
+    "claude-code",
+    "codex",
+    "herdr",
+    "llm-routing",
+    "multi-agent",
+    "terminal-ui"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "xz-dev/pi-jev-todo-audit": {
+   "full_name": "xz-dev/pi-jev-todo-audit",
+   "stars": 3,
+   "pushed_at": "2026-10-08T10:43:44Z",
+   "created_at": "2026-09-24T09:09:02Z",
+   "description": "Pi extension that audits rpiv-todo board drift every 10 agent loops using TypeSafe's jev model, injecting corrective nudges when the agent wanders off-task",
+   "topics": [
+    "agent-audit",
+    "pi",
+    "pi-extension",
+    "task-drift",
+    "todo",
+    "typesafe",
+    "typescript"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "Pandusss/conus": {
+   "full_name": "Pandusss/conus",
+   "stars": 3,
+   "pushed_at": "2026-10-12T22:17:24Z",
+   "created_at": "2026-10-09T11:35:40Z",
+   "description": "A task manager your AI agents keep themselves. Claude Code, Codex and Gemini CLI create, start and close their own tasks over MCP; hooks keep the board honest. Self-hosted, English and Russian.",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "developer-tools",
+    "gemini-cli",
+    "mcp",
+    "model-context-protocol",
+    "self-hosted",
+    "task-manager",
+    "typescript"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "masquermax/TaskBoard": {
+   "full_name": "masquermax/TaskBoard",
+   "stars": 2,
+   "pushed_at": "2026-10-06T19:14:13Z",
+   "created_at": "2026-08-12T14:19:11Z",
+   "description": "TaskBoard - multi-agent task management system",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "Zaida-3dO/agent-standup": {
+   "full_name": "Zaida-3dO/agent-standup",
+   "stars": 2,
+   "pushed_at": "2026-10-18T16:35:09Z",
+   "created_at": "2026-08-10T07:41:08Z",
+   "description": "A task tracker for AI coding agents — a database, a rules engine, MCP, and a board, replacing folders-of-markdown.",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "eventh0riz0n/hermes-board": {
+   "full_name": "eventh0riz0n/hermes-board",
+   "stars": 2,
+   "pushed_at": "2026-09-15T08:45:42Z",
+   "created_at": "2026-09-11T14:32:24Z",
+   "description": "Human-in-the-loop project board for Hermes Agent: ideas, feedback and tasks needing human input, with instant card context pre-fill in chat.",
+   "topics": [
+    "ai-agents",
+    "context-injection",
+    "hermes-agent",
+    "kanban",
+    "python",
+    "self-hosted",
+    "sqlite",
+    "task-management"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "zoe1nan/dsh-cockpit": {
+   "full_name": "zoe1nan/dsh-cockpit",
+   "stars": 2,
+   "pushed_at": "2026-10-18T14:34:18Z",
+   "created_at": "2026-10-18T14:26:58Z",
+   "description": "Live command deck for DeepSeek Harness agent teams: roster telemetry, task board, approvals, write actions, built-in Windows desktop capsule, and phone access.",
+   "topics": [
+    "agent",
+    "agent-team",
+    "dashboard",
+    "deepseek-harness",
+    "dsh-plugin",
+    "hud",
+    "pwa",
+    "windows",
+    "wpf"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "navid-kianfar/dsh-tasks-manager": {
+   "full_name": "navid-kianfar/dsh-tasks-manager",
+   "stars": 2,
+   "pushed_at": "2026-09-15T19:46:04Z",
+   "created_at": "2026-08-26T02:04:47Z",
+   "description": "DeepSeek Harness plugin: a project task board kept with the project as a queryable SQLite file, with a kanban/list view in the Web Client, model-facing task tools, and cards you can dispatch to the ag",
+   "topics": [
+    "ai-agent",
+    "background-jobs",
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "kanban",
+    "project-management",
+    "react",
+    "sqlite",
+    "task-management",
+    "todo",
+    "typescript"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "matiaswilliams/dev-room": {
+   "full_name": "matiaswilliams/dev-room",
+   "stars": 2,
+   "pushed_at": "2026-10-14T15:55:14Z",
+   "created_at": "2026-10-14T15:49:33Z",
+   "description": "A local board where coding agents from any vendor join, take tasks, and check each other's work. Done means pushed.",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "coding-agents",
+    "developer-tools",
+    "mcp",
+    "multi-agent",
+    "python"
+   ],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "yunusemrealpak/claude-factory": {
+   "full_name": "yunusemrealpak/claude-factory",
+   "stars": 2,
+   "pushed_at": "2026-10-13T08:18:03Z",
+   "created_at": "2026-09-13T18:22:57Z",
+   "description": "An agentic production line for Claude Code: a task board, a gate nothing reaches done without, one local commit per task, and a live dashboard of what the team is doing.",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-08-01"
+   ]
+  },
+  "gviiisen/repo-context-ledger": {
+   "full_name": "gviiisen/repo-context-ledger",
+   "stars": 105,
+   "pushed_at": "2026-09-07T16:51:27Z",
+   "created_at": "2026-08-11T10:14:00Z",
+   "description": "面向 AI 上下文管理的 Agent Skill：为 Codex 上下文管理、Cursor 上下文切换和 Claude 上下文管理提供跨窗口续接，用 Git 保存可验证的功能说明与变更记录。AI coding context management and agent handoffs.",
+   "topics": [
+    "agent-handoff",
+    "agent-skills",
+    "ai-agents",
+    "ai-coding",
+    "ai-context-management",
+    "claude-code",
+    "claude-context",
+    "codex",
+    "codex-context",
+    "coding-agents",
+    "context-management",
+    "context-switching",
+    "cross-session-context",
+    "cursor",
+    "cursor-context",
+    "developer-tools",
+    "documentation",
+    "repository-context"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "valzav/valcraft": {
+   "full_name": "valzav/valcraft",
+   "stars": 22,
+   "pushed_at": "2026-10-17T20:10:55Z",
+   "created_at": "2026-08-11T00:23:46Z",
+   "description": "Agent skills for spec-driven development. An automated agentic delivery loop coordinates planning, implementation, and cross-agent code reviews. Requirements, plans, and decisions live in ordinary pro",
+   "topics": [
+    "agent-skills",
+    "claude-code",
+    "codex",
+    "prompt-engineering",
+    "spec-driven-development"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01",
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "handyutils/sctxx": {
+   "full_name": "handyutils/sctxx",
+   "stars": 19,
+   "pushed_at": "2026-09-11T23:29:22Z",
+   "created_at": "2026-09-10T19:38:53Z",
+   "description": "sctxx — coding agent Session Context Extractor. standalone, agent-agnostic CLI (plus a thin Agent Skill wrapper) that reads a coding-agent session transcript from disk — Claude Code, Codex CLI, or Pi ",
+   "topics": [
+    "agent",
+    "cl",
+    "coding",
+    "compactio",
+    "context",
+    "context-extractio",
+    "context-folding",
+    "handof",
+    "relay"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "Alpha-Park/genpark-agent-context-handoff-state-packer-skill": {
+   "full_name": "Alpha-Park/genpark-agent-context-handoff-state-packer-skill",
+   "stars": 8,
+   "pushed_at": "2026-09-04T08:54:39Z",
+   "created_at": "2026-09-04T08:54:19Z",
+   "description": "Lossless context packaging and state handoff protocol between autonomous subagents (OpenAI Swarm / LangGraph)",
+   "topics": [
+    "agentic-consensus",
+    "ai-agents",
+    "autogen",
+    "byzantine-consensus",
+    "crewai",
+    "dag-scheduler",
+    "genpark",
+    "langgraph",
+    "mcp",
+    "model-context-protocol",
+    "multi-agent",
+    "swarm-intelligence"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "alphaparkinc/genpark-agent-context-handoff-state-packer-skill": {
+   "full_name": "alphaparkinc/genpark-agent-context-handoff-state-packer-skill",
+   "stars": 8,
+   "pushed_at": "2026-09-04T08:54:00Z",
+   "created_at": "2026-09-04T08:53:37Z",
+   "description": "Lossless context packaging and state handoff protocol between autonomous subagents (OpenAI Swarm / LangGraph)",
+   "topics": [
+    "agentic-consensus",
+    "ai-agents",
+    "autogen",
+    "byzantine-consensus",
+    "crewai",
+    "dag-scheduler",
+    "genpark",
+    "langgraph",
+    "mcp",
+    "model-context-protocol",
+    "multi-agent",
+    "swarm-intelligence"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "Ste2027/ContextMeld": {
+   "full_name": "Ste2027/ContextMeld",
+   "stars": 4,
+   "pushed_at": "2026-09-06T19:40:42Z",
+   "created_at": "2026-09-05T11:15:59Z",
+   "description": "A local-first desktop workspace for coding-agent sessions, search, memories, skills, MCP and context handoffs.",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "coding-agents",
+    "developer-tools",
+    "local-first",
+    "mcp",
+    "react",
+    "rust",
+    "skills",
+    "tauri",
+    "typescript"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "qiusuo0226/session-handoff-skill": {
+   "full_name": "qiusuo0226/session-handoff-skill",
+   "stars": 2,
+   "pushed_at": "2026-09-27T08:07:36Z",
+   "created_at": "2026-09-04T09:50:21Z",
+   "description": "Seamless AI session handoff: preserve context across conversations so agents pick up where they left off — zero context loss, one command",
+   "topics": [
+    "agent-skill",
+    "agent-skills",
+    "ai-agents",
+    "ai-skills",
+    "claude",
+    "claude-code",
+    "claude-code-skill",
+    "claude-code-skills",
+    "claude-plugins",
+    "claude-skill",
+    "claude-skills",
+    "codex",
+    "context-engineering",
+    "cursor",
+    "grok",
+    "productivity",
+    "skill",
+    "skill-md",
+    "skills-sh",
+    "skillsmp"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "jugugug/AgentHandoff": {
+   "full_name": "jugugug/AgentHandoff",
+   "stars": 1,
+   "pushed_at": "2026-09-21T15:23:39Z",
+   "created_at": "2026-09-21T15:23:06Z",
+   "description": "Export Codex conversations as portable context skills with a summary, index, and original text.",
+   "topics": [],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "n0an/handoff-skill": {
+   "full_name": "n0an/handoff-skill",
+   "stars": 1,
+   "pushed_at": "2026-09-26T10:57:47Z",
+   "created_at": "2026-09-18T18:43:00Z",
+   "description": "Agent skill: end a session on a step file the human controls, not on context compaction",
+   "topics": [],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "felmoreno1726/agent-context": {
+   "full_name": "felmoreno1726/agent-context",
+   "stars": 1,
+   "pushed_at": "2026-09-14T07:26:59Z",
+   "created_at": "2026-09-08T23:25:51Z",
+   "description": "Instructions and skills shared between Claude Code and Codex: cross-agent review, PR shipping, cmux control, shared memory and handoffs.",
+   "topics": [],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "RandyNorthrup/teamwork-skill": {
+   "full_name": "RandyNorthrup/teamwork-skill",
+   "stars": 1,
+   "pushed_at": "2026-09-24T22:33:21Z",
+   "created_at": "2026-08-17T13:51:28Z",
+   "description": "Agent-agnostic teamwork handoff and resume skills with deterministic, secure project context payloads.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "collaboration",
+    "context-management",
+    "developer-tools",
+    "gemini-cli",
+    "project-continuity",
+    "project-handoff",
+    "python",
+    "security"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "SergVina/Handoff-pack-skill": {
+   "full_name": "SergVina/Handoff-pack-skill",
+   "stars": 1,
+   "pushed_at": "2026-10-02T22:01:04Z",
+   "created_at": "2026-10-01T11:31:47Z",
+   "description": "Agent Skill that interviews you until every detail is settled, then writes a validated Markdown handoff pack so Claude Code, GitHub Copilot or Cursor can build your idea without losing context.",
+   "topics": [
+    "agent-skill",
+    "agent-skills",
+    "agents-md-alternative",
+    "agents-md-template",
+    "agents-md-validator",
+    "ai-agents",
+    "claude",
+    "claude-code",
+    "claude-skills",
+    "developer-tools",
+    "github-copilot",
+    "handoff-dev",
+    "handoffs",
+    "prds",
+    "spec-driven-development"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "DBinK/dbk-handoff": {
+   "full_name": "DBinK/dbk-handoff",
+   "stars": 1,
+   "pushed_at": "2026-10-18T16:42:28Z",
+   "created_at": "2026-10-18T04:54:32Z",
+   "description": "轻量级、基于文件的上下文交接协议与 Agent Skills，在 Claude Code、Cursor、Windsurf、pi 等任意 Agent 间实现任务无缝接力。 | A lightweight, file-based context handoff protocol and Agent Skills for seamless task continuity across Claude Co",
+   "topics": [
+    "agent-skills",
+    "agents",
+    "ai",
+    "antigravity",
+    "claude",
+    "claude-code",
+    "codex",
+    "cursor",
+    "dsh-plugin",
+    "handoff",
+    "llm",
+    "markdown",
+    "opencode",
+    "skills",
+    "windsurf"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "aaddrick/directing-agent-teams": {
+   "full_name": "aaddrick/directing-agent-teams",
+   "stars": 1,
+   "pushed_at": "2026-10-01T19:47:06Z",
+   "created_at": "2026-10-01T00:49:25Z",
+   "description": "Claude Code skill and agents for running a large build with a team of subagents: one Director, builder/verifier slices, adversarial QA, resource locks, and handoffs that survive context deaths.",
+   "topics": [],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "franmelx/que-paso-ayer": {
+   "full_name": "franmelx/que-paso-ayer",
+   "stars": 1,
+   "pushed_at": "2026-08-24T03:21:50Z",
+   "created_at": "2026-08-13T01:53:07Z",
+   "description": "Open-source MCP server and AI skill for technical debt, recurring issues, project knowledge graphs, cross-project dependencies, real-time agent handoffs, change context, and collaborative software eng",
+   "topics": [
+    "ai-agents",
+    "developer-tools",
+    "devops",
+    "incident-management",
+    "knowledge-graph",
+    "mcp",
+    "model-context-protocol",
+    "software-architecture",
+    "team-collaboration",
+    "technical-debt"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "Hanyun-L/handoff-skill": {
+   "full_name": "Hanyun-L/handoff-skill",
+   "stars": 0,
+   "pushed_at": "2026-08-31T15:40:56Z",
+   "created_at": "2026-08-31T15:40:52Z",
+   "description": "Claude Skill: transfer agent context between sessions via a handoff doc",
+   "topics": [],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "Gersom/agent-context-skill": {
+   "full_name": "Gersom/agent-context-skill",
+   "stars": 0,
+   "pushed_at": "2026-10-11T04:57:57Z",
+   "created_at": "2026-10-10T09:30:26Z",
+   "description": "Skill que genera la documentación de contexto de un proyecto para agentes de IA (reglas, handoff, backlog, historial, arquitectura).",
+   "topics": [],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "SebastienElet/agent-handoff": {
+   "full_name": "SebastienElet/agent-handoff",
+   "stars": 0,
+   "pushed_at": "2026-10-18T17:13:44Z",
+   "created_at": "2026-10-18T13:17:37Z",
+   "description": "Reads a Stop event and its transcript, then requests the companion handoff skill when the context threshold is reached.",
+   "topics": [],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "S78937/context-anchor": {
+   "full_name": "S78937/context-anchor",
+   "stars": 0,
+   "pushed_at": "2026-10-16T04:24:10Z",
+   "created_at": "2026-10-16T03:43:37Z",
+   "description": "Portable Agent Skill for preserving requirements, decisions, and task handoffs across AI conversations.",
+   "topics": [],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "baekyx/context-anchor": {
+   "full_name": "baekyx/context-anchor",
+   "stars": 0,
+   "pushed_at": "2026-10-16T03:36:28Z",
+   "created_at": "2026-10-16T03:36:22Z",
+   "description": "Portable Agent Skill for preserving requirements, decisions, and task handoffs across AI conversations.",
+   "topics": [],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "Zrtt727/project-context-orchestration": {
+   "full_name": "Zrtt727/project-context-orchestration",
+   "stars": 0,
+   "pushed_at": "2026-08-27T04:07:05Z",
+   "created_at": "2026-08-27T04:06:24Z",
+   "description": "A Codex skill for durable project memory, compact agent handoffs, checkpoints, and fast session rotation.",
+   "topics": [],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "alapha888/session-handoff-kit": {
+   "full_name": "alapha888/session-handoff-kit",
+   "stars": 0,
+   "pushed_at": "2026-10-16T19:44:03Z",
+   "created_at": "2026-10-05T05:48:36Z",
+   "description": "Free kit for AI coding agent users: end sessions with a structured handoff (skill + context hygiene checklist + template)",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "claude",
+    "claude-code",
+    "claude-code-skill",
+    "claude-skills",
+    "codex",
+    "context-management",
+    "developer-tools",
+    "session-management"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "wangxiaohuiboy/lean-agent-skills": {
+   "full_name": "wangxiaohuiboy/lean-agent-skills",
+   "stars": 0,
+   "pushed_at": "2026-09-10T05:24:44Z",
+   "created_at": "2026-09-10T05:20:59Z",
+   "description": "Seven agent skills for token-lean coding and front-end craft: context, diffs, answers, handoffs, UI design, performance, accessibility.",
+   "topics": [
+    "accessibility",
+    "agent-skills",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "frontend",
+    "prompt-engineering",
+    "token-efficiency",
+    "web-performance"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "chentaymane/handOff": {
+   "full_name": "chentaymane/handOff",
+   "stars": 0,
+   "pushed_at": "2026-10-15T15:10:58Z",
+   "created_at": "2026-09-15T22:42:53Z",
+   "description": "Agent Skill that keeps HANDOFF.md current, so another coding agent can continue when the context fills up, credits run out or a session dies. Works in Claude Code, Codex, Cursor, Gemini CLI, Copilot C",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "ai-coding-assistant",
+    "aider",
+    "claude-code",
+    "claude-skills",
+    "cli",
+    "codex",
+    "coding-agent",
+    "context-management",
+    "context-window",
+    "copilot-cli",
+    "cursor",
+    "developer-tools",
+    "gemini-cli",
+    "github-copilot",
+    "llm",
+    "opencode",
+    "qwen-code",
+    "windsurf"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "arthurglaizal/ai-handoff": {
+   "full_name": "arthurglaizal/ai-handoff",
+   "stars": 0,
+   "pushed_at": "2026-10-13T20:57:23Z",
+   "created_at": "2026-09-12T19:43:33Z",
+   "description": "Package your working context so another AI agent can pick up the work. Portable skills for Claude Code, Codex, and any AI assistant.",
+   "topics": [
+    "ai-skills",
+    "ai-workflow",
+    "claude-code",
+    "claude-code-skill",
+    "codex",
+    "codex-skill",
+    "prompt-engineering"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "cambridgetcg/agenttool-local-starter": {
+   "full_name": "cambridgetcg/agenttool-local-starter",
+   "stars": 0,
+   "pushed_at": "2026-10-12T15:52:42Z",
+   "created_at": "2026-09-28T07:47:47Z",
+   "description": "Optional local context, handoffs and memory for agent hosts — standalone preview and Codex/Claude skill plugins",
+   "topics": [
+    "agenttool",
+    "ai-agents",
+    "local-first"
+   ],
+   "found_by": [
+    "context handoff skill agent created:>2026-08-01"
+   ]
+  },
+  "vanessagoya/ai-project-status-agent": {
+   "full_name": "vanessagoya/ai-project-status-agent",
+   "stars": 0,
+   "pushed_at": "2026-09-21T22:42:42Z",
+   "created_at": "2026-09-21T21:52:22Z",
+   "description": "Case de IA aplicada ao acompanhamento de projetos com agente inteligente e dashboard executivo.",
+   "topics": [],
+   "found_by": [
+    "project status dashboard AI agent created:>2026-08-01"
+   ]
+  },
+  "PKTiwariOffice/eScan-Technical-Support-AI-Agent": {
+   "full_name": "PKTiwariOffice/eScan-Technical-Support-AI-Agent",
+   "stars": 0,
+   "pushed_at": "2026-08-23T06:09:37Z",
+   "created_at": "2026-08-19T13:46:26Z",
+   "description": "Streamlit-based web dashboard for eScan project monitoring. Features real-time status updates, project analytics, task tracking metrics, and interactive visualizations.",
+   "topics": [],
+   "found_by": [
+    "project status dashboard AI agent created:>2026-08-01"
+   ]
+  },
+  "ob27/ai-hive": {
+   "full_name": "ob27/ai-hive",
+   "stars": 0,
+   "pushed_at": "2026-10-07T12:17:58Z",
+   "created_at": "2026-10-04T13:04:15Z",
+   "description": "A shared wall where every AI agent and service on your team takes a seat: live status, a chat the host moderates, and a persistent cast per project. Zero dependencies. MIT.",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "dashboard",
+    "multi-agent",
+    "qwen"
+   ],
+   "found_by": [
+    "project status dashboard AI agent created:>2026-08-01"
+   ]
+  },
+  "AadiEnd/ParkLyzer": {
+   "full_name": "AadiEnd/ParkLyzer",
+   "stars": 0,
+   "pushed_at": "2026-08-25T16:16:38Z",
+   "created_at": "2026-08-05T14:03:14Z",
+   "description": "An AI-powered parking assistant that lets users check real-time slot availability and make reservations through natural conversation. Built with FastAPI, MySQL, LangGraph, and Google Gemini for agenti",
+   "topics": [],
+   "found_by": [
+    "project status dashboard AI agent created:>2026-08-01"
+   ]
+  },
+  "dicapriomarcos/md-sdd-hub": {
+   "full_name": "dicapriomarcos/md-sdd-hub",
+   "stars": 0,
+   "pushed_at": "2026-10-06T21:10:02Z",
+   "created_at": "2026-10-02T17:54:48Z",
+   "description": "Local dashboard to track spec-driven development (SDD) across all your projects. See every spec, its status and progress, browse and edit the .md files AI agents write (CLAUDE.md, AGENTS.md, GEMINI.md",
+   "topics": [],
+   "found_by": [
+    "project status dashboard AI agent created:>2026-08-01"
+   ]
+  },
+  "SsssssSynqa/tether-agent-runtime": {
+   "full_name": "SsssssSynqa/tether-agent-runtime",
+   "stars": 12,
+   "pushed_at": "2026-08-10T16:38:52Z",
+   "created_at": "2026-08-03T17:28:53Z",
+   "description": "Give an API-only agent real continuity: live on Telegram and your terminal in one session, with built-in layered memory (auto-folding + day/week cards) and a local memory console. The astronaut's teth",
+   "topics": [
+    "agent-runtime",
+    "append-only",
+    "conversation-memory",
+    "crash-recovery",
+    "durable-queue",
+    "llm",
+    "local-first",
+    "long-term-memory",
+    "nodejs",
+    "openai-compatible-api",
+    "semantic-memory",
+    "telegram-bot"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "yangbobo2021/relay-dsh-plugin-claude": {
+   "full_name": "yangbobo2021/relay-dsh-plugin-claude",
+   "stars": 6,
+   "pushed_at": "2026-09-19T22:50:16Z",
+   "created_at": "2026-08-23T08:15:05Z",
+   "description": "Claude Code integration plugin for DeepSeek Harness, providing native Claude conversations powered by the Claude Agent SDK, with approvals, session continuity, and DSH tool support.",
+   "topics": [
+    "ai-agent",
+    "anthropic",
+    "claude-code",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "plugin",
+    "typescript"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "imMamdouhaboammar/riqor": {
+   "full_name": "imMamdouhaboammar/riqor",
+   "stars": 5,
+   "pushed_at": "2026-09-06T14:58:00Z",
+   "created_at": "2026-08-06T10:09:00Z",
+   "description": "Evidence gates and session continuity for AI coding agents",
+   "topics": [
+    "agent-hooks",
+    "ai-agents",
+    "codex",
+    "coding-agents",
+    "developer-tools",
+    "terminal",
+    "verification"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "glaydsonboa/traceweave": {
+   "full_name": "glaydsonboa/traceweave",
+   "stars": 4,
+   "pushed_at": "2026-10-18T04:17:16Z",
+   "created_at": "2026-08-21T19:50:25Z",
+   "description": "Verifiable session continuity, provenance and Git-aware checkpoints for AI coding agents.",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "biaobiao2233/project-continuity": {
+   "full_name": "biaobiao2233/project-continuity",
+   "stars": 2,
+   "pushed_at": "2026-10-11T12:37:04Z",
+   "created_at": "2026-08-27T11:53:07Z",
+   "description": "Cross-session, cross-agent project continuity protocol with Work Nodes, Handoff, Closure Memory, authority boundaries, and Project Workbench.",
+   "topics": [
+    "agent-memory",
+    "ai-agents",
+    "chatgpt",
+    "claude-code",
+    "codex",
+    "context-management",
+    "everos",
+    "long-term-memory",
+    "multi-agent",
+    "project-management"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "aliasunder/vault-onboarding": {
+   "full_name": "aliasunder/vault-onboarding",
+   "stars": 2,
+   "pushed_at": "2026-10-15T13:14:16Z",
+   "created_at": "2026-08-04T22:31:46Z",
+   "description": "Give your AI agents persistent memory and session continuity in your Obsidian vault — a conversational interview scaffolds the memory files, session protocols, task boards, and per-client instructions",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "ai-memory-system",
+    "claude",
+    "claude-code",
+    "claude-skills",
+    "memory-system",
+    "npx-skills",
+    "obsidian",
+    "obsidian-vault",
+    "onboarding",
+    "personal-knowledge-management",
+    "pkm",
+    "session-protocol"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "kingju1c3/continuity": {
+   "full_name": "kingju1c3/continuity",
+   "stars": 1,
+   "pushed_at": "2026-10-16T19:25:10Z",
+   "created_at": "2026-09-18T18:50:59Z",
+   "description": "Never lose the thread. Persistent memory, verified handoffs, and automatic pre-compaction session continuity for Claude Code, Codex, and AI coding agents.",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "ZinkDifferent/hermes-plugin-continuum": {
+   "full_name": "ZinkDifferent/hermes-plugin-continuum",
+   "stars": 1,
+   "pushed_at": "2026-09-06T21:13:50Z",
+   "created_at": "2026-08-23T04:49:00Z",
+   "description": "Session continuity engine + enforcement harness for Hermes Agent",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "HarryHeYu/sessionFlow": {
+   "full_name": "HarryHeYu/sessionFlow",
+   "stars": 1,
+   "pushed_at": "2026-10-18T16:37:29Z",
+   "created_at": "2026-09-13T08:16:42Z",
+   "description": "Local session indexing and cross-agent work continuity for AI coding assistants. One local index over Codex, Claude Code, ZCode, DSH, Grok, Cursor, Antigravity and Kiro — search, cross-agent timelines",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "claude-code",
+    "cli",
+    "codex",
+    "coding-agents",
+    "cursor",
+    "developer-tools",
+    "local-first",
+    "mcp",
+    "session-search"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "tianchengc/handoff": {
+   "full_name": "tianchengc/handoff",
+   "stars": 1,
+   "pushed_at": "2026-09-13T01:51:13Z",
+   "created_at": "2026-09-13T01:31:45Z",
+   "description": "Zero Context Drift, Lossless Multi-Session Continuity for AI Coding Agents",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "akufikri/memosaver": {
+   "full_name": "akufikri/memosaver",
+   "stars": 1,
+   "pushed_at": "2026-10-01T10:53:59Z",
+   "created_at": "2026-08-08T16:43:04Z",
+   "description": "MCP server giving AI agents durable, searchable project memory with session resume, checkpoints & cross-agent continuity.",
+   "topics": [
+    "agentic-ai",
+    "ai",
+    "claude-code",
+    "mcp",
+    "mcp-server",
+    "mcp-tools",
+    "opencode",
+    "opencode-plugin"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "shttty/pi-hermes-compat-todolist": {
+   "full_name": "shttty/pi-hermes-compat-todolist",
+   "stars": 1,
+   "pushed_at": "2026-09-30T08:31:25Z",
+   "created_at": "2026-08-10T08:14:59Z",
+   "description": "Pi extension packaging Hermes Agent's Todo contract, session recovery, compaction continuity, and persistent TUI widget.",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "prisant-labs/prisant-utilities": {
+   "full_name": "prisant-labs/prisant-utilities",
+   "stars": 1,
+   "pushed_at": "2026-10-17T06:19:09Z",
+   "created_at": "2026-08-15T06:05:17Z",
+   "description": "General-purpose agent skills for session continuity, structured analysis, guide authoring, and cross-LLM peer review.",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "ccy123abcd/changsheng-agent-memory": {
+   "full_name": "ccy123abcd/changsheng-agent-memory",
+   "stars": 1,
+   "pushed_at": "2026-09-20T22:42:55Z",
+   "created_at": "2026-09-03T06:19:49Z",
+   "description": "ChangShen - cross-session memory recovery for AI agents: never cold-start again. Hash-indexed conditional reads cut recovery cost ~70% (~55-75% with host-injected memory). Pure local, zero deps.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "claude-code",
+    "context",
+    "continuity",
+    "hermes",
+    "llm",
+    "memory",
+    "session-recovery",
+    "token-saving"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "Fraser-Grant/opencode-jobs": {
+   "full_name": "Fraser-Grant/opencode-jobs",
+   "stars": 1,
+   "pushed_at": "2026-09-03T07:03:02Z",
+   "created_at": "2026-08-31T01:55:13Z",
+   "description": "opencode plugin that schedules recurring agent jobs as systemd user timers, with git-committable job definitions, run history, and session continuity",
+   "topics": [
+    "agent",
+    "automation",
+    "cron",
+    "opencode",
+    "opencode-plugin",
+    "scheduler",
+    "systemd"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "lakofsth/quintessence": {
+   "full_name": "lakofsth/quintessence",
+   "stars": 1,
+   "pushed_at": "2026-10-08T13:01:00Z",
+   "created_at": "2026-08-02T19:16:42Z",
+   "description": "Session-continuity store for AI coding agents: durable per-topic HEADs + journal, semantic recall, and a consistency checker.",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "h-swathi-shenoy/langgraph-agentcore-apple-bot": {
+   "full_name": "h-swathi-shenoy/langgraph-agentcore-apple-bot",
+   "stars": 1,
+   "pushed_at": "2026-09-06T14:21:44Z",
+   "created_at": "2026-09-06T13:50:01Z",
+   "description": "This agents has **tools**, **multi-turn conversation continuity within a session**, and **long-term memory that persists across separate sessions/days**, powered by Amazon Bedrock AgentCore's native M",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "AiToByte/Banyan": {
+   "full_name": "AiToByte/Banyan",
+   "stars": 1,
+   "pushed_at": "2026-09-17T11:10:37Z",
+   "created_at": "2026-09-16T09:42:07Z",
+   "description": "A cross-session task-continuity skill suite for coding agents: persist plans and execution context to local Markdown, so switching models/agents/windows resumes in seconds.",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "revenue007/Kemory": {
+   "full_name": "revenue007/Kemory",
+   "stars": 1,
+   "pushed_at": "2026-09-12T15:14:35Z",
+   "created_at": "2026-08-21T13:36:04Z",
+   "description": "Use Kemory as a durable continuity layer across sessions, agents, and platforms. Retrieves authorized context, maintains namespace/session continuity, handles uploaded documents as artifacts, checkpoi",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "yuzilan/dnd-replay": {
+   "full_name": "yuzilan/dnd-replay",
+   "stars": 1,
+   "pushed_at": "2026-09-15T16:10:19Z",
+   "created_at": "2026-08-25T13:48:47Z",
+   "description": "A Codex Agent Skill that turns D&D/TTRPG session transcripts into accurate, persistent campaign chronicles—with speaker recovery, continuity tracking, and multi-format exports.",
+   "topics": [
+    "agent-skills",
+    "campaign-journal",
+    "campaign-management",
+    "codex",
+    "codex-skill",
+    "dnd",
+    "dnd5e",
+    "dungeons-and-dragons",
+    "openai-codex",
+    "rpg-tools",
+    "session-recap",
+    "transcript-summarization",
+    "trpg",
+    "ttrpg"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "gaoptimize/Agent-Session-Continuity": {
+   "full_name": "gaoptimize/Agent-Session-Continuity",
+   "stars": 0,
+   "pushed_at": "2026-09-27T17:40:53Z",
+   "created_at": "2026-09-27T17:40:08Z",
+   "description": "Windows coordinator that inventories, updates, and resumes local AI coding CLI sessions.",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "eliferres/session-continuity": {
+   "full_name": "eliferres/session-continuity",
+   "stars": 0,
+   "pushed_at": "2026-10-12T13:56:05Z",
+   "created_at": "2026-08-31T00:33:42Z",
+   "description": "Checkpoint and rehydrate for AI agents: keep the decisions, paths, and dead ends a context-limit summary drops.",
+   "topics": [
+    "agent-memory",
+    "ai-agents",
+    "checkpointing",
+    "claude-code",
+    "context-management",
+    "context-window",
+    "llm"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "minoltaMF/AgentVault": {
+   "full_name": "minoltaMF/AgentVault",
+   "stars": 0,
+   "pushed_at": "2026-10-18T13:27:15Z",
+   "created_at": "2026-09-08T04:58:28Z",
+   "description": "Local-first Agent session continuity and recovery vault.",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "Aryuan026/HermesContinuity": {
+   "full_name": "Aryuan026/HermesContinuity",
+   "stars": 0,
+   "pushed_at": "2026-10-10T16:01:18Z",
+   "created_at": "2026-08-29T14:46:20Z",
+   "description": "Bounded exact cross-session retrieval and settlement receipts for Hermes Agent",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "coreyfloyd/continuity": {
+   "full_name": "coreyfloyd/continuity",
+   "stars": 0,
+   "pushed_at": "2026-10-18T05:19:34Z",
+   "created_at": "2026-10-08T20:31:19Z",
+   "description": "Session continuity for coding agents: handoffs, checkpoints, wrap-up checklists, and resume across Claude Code and Codex.",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "bahadirarda/rebinder": {
+   "full_name": "bahadirarda/rebinder",
+   "stars": 0,
+   "pushed_at": "2026-09-28T01:14:43Z",
+   "created_at": "2026-08-17T14:57:57Z",
+   "description": "Cross-harness session continuity for coding agents",
+   "topics": [
+    "cli",
+    "coding-agents",
+    "developer-tools",
+    "rust",
+    "session-continuity"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "zhixingchenQAQ/project-continuity": {
+   "full_name": "zhixingchenQAQ/project-continuity",
+   "stars": 0,
+   "pushed_at": "2026-08-30T21:18:45Z",
+   "created_at": "2026-08-30T21:12:38Z",
+   "description": "Durable project rules and cross-session handoff for coding agents, usable as a Codex Skill or standalone CLI.",
+   "topics": [],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "mayunlei/AgenTail": {
+   "full_name": "mayunlei/AgenTail",
+   "stars": 0,
+   "pushed_at": "2026-09-26T08:28:18Z",
+   "created_at": "2026-09-19T15:27:16Z",
+   "description": "Agentail — local-first session continuity for Codex, Claude Code, OpenCode, and Qoder.",
+   "topics": [
+    "claude-code",
+    "codex",
+    "coding-agent",
+    "developer-tools",
+    "session-sync"
+   ],
+   "found_by": [
+    "session continuity agent created:>2026-08-01"
+   ]
+  },
+  "seropaski/lets-build": {
+   "full_name": "seropaski/lets-build",
+   "stars": 31,
+   "pushed_at": "2026-10-18T11:36:36Z",
+   "created_at": "2026-09-06T13:09:59Z",
+   "description": "Spec-driven development skills for AI coding agents - plan, implement, review, ship. Task state lives in the repo.",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "sdd",
+    "skills",
+    "spec-driven-development"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "renzrollon/interlock": {
+   "full_name": "renzrollon/interlock",
+   "stars": 23,
+   "pushed_at": "2026-10-14T14:39:25Z",
+   "created_at": "2026-08-12T03:00:28Z",
+   "description": "Spec-driven development for Claude Code, layered on OpenSpec. You read one spec; parallel agents ship it to a tested commit.",
+   "topics": [
+    "agentic-ai",
+    "agentic-workflow",
+    "ai-agents",
+    "claude",
+    "claude-code",
+    "claude-code-plugin",
+    "harness",
+    "harness-engineering",
+    "multi-agent",
+    "openspec",
+    "spec-driven-development"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "khangpqvn/SDDADD": {
+   "full_name": "khangpqvn/SDDADD",
+   "stars": 13,
+   "pushed_at": "2026-09-29T17:36:14Z",
+   "created_at": "2026-08-21T06:32:20Z",
+   "description": "🚀 SDD + ADD Starter Template — AI Coding Assistant Governance Framework. Turn your AI coding assistant into a disciplined, spec-driven development partner. This is the definitive starter template for ",
+   "topics": [
+    "add",
+    "agent",
+    "agent-driven-development",
+    "agent-framework",
+    "agentic-ai",
+    "agentic-workflow",
+    "claude",
+    "claude-ai",
+    "claude-code-skills",
+    "sdd",
+    "spec-driven-development"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "afonsoft/skills": {
+   "full_name": "afonsoft/skills",
+   "stars": 12,
+   "pushed_at": "2026-10-15T18:08:54Z",
+   "created_at": "2026-08-24T17:39:55Z",
+   "description": "Spec Driven — orchestrator-first Agent Skills for spec-driven development. The orchestrator skill turns a PRD or idea into approved SPECs, tracked GitHub Issues, TDD-implemented slices, QA gates, and ",
+   "topics": [
+    "agent-harness",
+    "agent-skills",
+    "ai-agent",
+    "claude-code",
+    "claude-skills",
+    "codex",
+    "cursor",
+    "devin",
+    "mcp",
+    "mcp-server",
+    "opencode",
+    "skill-md"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "raunakkathuria/adlc": {
+   "full_name": "raunakkathuria/adlc",
+   "stars": 12,
+   "pushed_at": "2026-10-02T14:56:55Z",
+   "created_at": "2026-08-08T15:46:56Z",
+   "description": "ADLC — the agentic development life cycle. A spec-driven automated delivery where agents carry the work between two human gates. ",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "mathaix/claramap-builder": {
+   "full_name": "mathaix/claramap-builder",
+   "stars": 11,
+   "pushed_at": "2026-09-23T14:36:37Z",
+   "created_at": "2026-09-16T22:34:04Z",
+   "description": "Open-source agent skill for orchestrating Claude Code and Codex workers, with spec-driven development, validation, independent review, and workflow improvement.",
+   "topics": [
+    "agent-orchestration",
+    "agent-skills",
+    "ai-agents",
+    "claude-code",
+    "code-review",
+    "codex",
+    "developer-tools",
+    "spec-driven-development",
+    "specflow",
+    "specstory"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "using-system/oddyssey": {
+   "full_name": "using-system/oddyssey",
+   "stars": 10,
+   "pushed_at": "2026-10-15T17:41:53Z",
+   "created_at": "2026-08-16T15:27:25Z",
+   "description": "CLI toolbox for Observability-Driven Development (ODD): coding agents observe local runs on an OpenTelemetry/Grafana stack - or remote ones on any OpenTelemetry backend - and feed the next spec-driven",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "claude-code",
+    "claude-code-plugin",
+    "claude-skills",
+    "coding-agents",
+    "developer-tools",
+    "grafana",
+    "harness",
+    "harness-engineering",
+    "mcp",
+    "observability",
+    "opentelemetry"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "zekiriabd/SDD-Agents": {
+   "full_name": "zekiriabd/SDD-Agents",
+   "stars": 9,
+   "pushed_at": "2026-10-15T10:44:19Z",
+   "created_at": "2026-09-22T14:42:01Z",
+   "description": "Spec-Driven Development for Agentic App",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "reforma-ai/agentflow": {
+   "full_name": "reforma-ai/agentflow",
+   "stars": 9,
+   "pushed_at": "2026-09-17T14:42:57Z",
+   "created_at": "2026-08-29T18:54:37Z",
+   "description": "A coding-agent workflow with Grill at its core: challenge assumptions and settle decisions before coding. Just describe your task and AgentFlow automatically guides the work from research to reviewabl",
+   "topics": [
+    "agent-skills",
+    "code-review",
+    "coding-agents",
+    "grill-me",
+    "openspec",
+    "spec-driven-development",
+    "superpowers",
+    "tdd"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "BRYANN2K/stipulate-skills": {
+   "full_name": "BRYANN2K/stipulate-skills",
+   "stars": 7,
+   "pushed_at": "2026-10-11T20:40:09Z",
+   "created_at": "2026-08-12T16:51:28Z",
+   "description": "Spec-driven development for AI coding agents. Seven core skills and optional domain extensions, from exploration to verified delivery.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "codex",
+    "developer-tools",
+    "documentation",
+    "spec-driven-development",
+    "workflow"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "Linhndm/SDD-ADD": {
+   "full_name": "Linhndm/SDD-ADD",
+   "stars": 6,
+   "pushed_at": "2026-08-10T03:37:36Z",
+   "created_at": "2026-08-09T09:24:23Z",
+   "description": "spec-driven-&-agent-driven-development",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "HyperZx2O/agentic-development-workflow": {
+   "full_name": "HyperZx2O/agentic-development-workflow",
+   "stars": 6,
+   "pushed_at": "2026-10-04T11:29:41Z",
+   "created_at": "2026-08-02T18:50:07Z",
+   "description": "A prompt-driven, phase-locked workflow for AI-assisted hackathon and software development — spec it, plan it, code it, review it, repeat.",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "Frankfurt-shrimp/Rota": {
+   "full_name": "Frankfurt-shrimp/Rota",
+   "stars": 6,
+   "pushed_at": "2026-10-14T19:53:44Z",
+   "created_at": "2026-10-13T21:56:00Z",
+   "description": "A macOS multi-agent board built around Spec-Driven Development: Claude Code and Codex take turns through spec, build and your review.   以規格驅動開發（SDD）為核心的多 Agent 協作看板。",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "jsobolewski1/fondue": {
+   "full_name": "jsobolewski1/fondue",
+   "stars": 6,
+   "pushed_at": "2026-10-16T21:21:53Z",
+   "created_at": "2026-09-29T20:31:27Z",
+   "description": "🫕 One pot, everyone brings a fork, no double-dipping. A team of AI agents that plan, build and review each other's work, with you as the team lead. Spec-driven development and bug hunting for Claude C",
+   "topics": [
+    "agent-skills",
+    "ai",
+    "ai-agents",
+    "ai-code-review",
+    "claude-code",
+    "claude-code-plugin",
+    "claude-skills",
+    "code-review",
+    "developer-tools",
+    "development",
+    "llm",
+    "llms",
+    "multi-agent",
+    "software-architecture",
+    "software-design",
+    "software-development",
+    "software-engineering",
+    "spec-driven-development"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "giantswarm/spec-driven-development": {
+   "full_name": "giantswarm/spec-driven-development",
+   "stars": 5,
+   "pushed_at": "2026-10-17T22:09:08Z",
+   "created_at": "2026-09-29T12:13:10Z",
+   "description": "Spec-driven development: review plans instead of pull requests. A forkable template with the grill-me, to-spec, ground-truth, contrarian and to-website agent skills.",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "Poom5741/ai-sdlc-playbook": {
+   "full_name": "Poom5741/ai-sdlc-playbook",
+   "stars": 5,
+   "pushed_at": "2026-09-14T06:25:09Z",
+   "created_at": "2026-09-14T06:25:05Z",
+   "description": "Multi-agent software development playbook: 8-phase SDLC, spec-driven workflows, and battle-tested lessons",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "harrypotter48/rigorkit": {
+   "full_name": "harrypotter48/rigorkit",
+   "stars": 5,
+   "pushed_at": "2026-10-13T22:58:07Z",
+   "created_at": "2026-10-06T20:19:24Z",
+   "description": "Skills y agentes para trabajar con agentes de IA con rigor: Spec-Driven Development por etapas, gates de aprobación humana y Definition of Done. Funciona con Claude Code, Codex, Cursor y OpenCode.",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "vguleaev/one-plan-skills": {
+   "full_name": "vguleaev/one-plan-skills",
+   "stars": 4,
+   "pushed_at": "2026-10-04T18:30:59Z",
+   "created_at": "2026-10-03T20:49:05Z",
+   "description": "OnePlan - Agent Skills for lightweight spec-driven development workflow. ",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "JoinIn-AI/clojure-agent-starter": {
+   "full_name": "JoinIn-AI/clojure-agent-starter",
+   "stars": 4,
+   "pushed_at": "2026-10-08T03:57:12Z",
+   "created_at": "2026-09-28T14:47:19Z",
+   "description": "Companion repo for \"What Tipped the Scales for Clojure\" (Clojure/conj 2026): hooks, skills, spec patterns, and agent doctrine for AI-driven Clojure development",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "DmitryDF/Q": {
+   "full_name": "DmitryDF/Q",
+   "stars": 4,
+   "pushed_at": "2026-10-03T00:24:12Z",
+   "created_at": "2026-09-29T22:36:28Z",
+   "description": "A spec-driven development system: turn an idea into a verified spec — clarification, research, solution-design, plan — then implement it. Built on Claude Code; skills portable to other agents.",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "micaelcf/ef-harness": {
+   "full_name": "micaelcf/ef-harness",
+   "stars": 4,
+   "pushed_at": "2026-10-02T14:27:46Z",
+   "created_at": "2026-09-24T04:13:51Z",
+   "description": "Spec-driven development harness for AI coding agents. Grill the decisions, write the RFC/PRD, check every spec claim against the real code, build against named proofs, then pass one adversarial audit.",
+   "topics": [
+    "agent-skills",
+    "agentic-ai",
+    "agents",
+    "ai-workflows",
+    "claude-code",
+    "claude-code-plugin",
+    "claude-code-skill",
+    "code-quality",
+    "coding-agent",
+    "context-engineering",
+    "omp",
+    "prd",
+    "prompt-engineering",
+    "rfc",
+    "sdd",
+    "skills",
+    "spec-driven-development",
+    "tdd",
+    "vibe-coding"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "opinionated-ts/ai-spec": {
+   "full_name": "opinionated-ts/ai-spec",
+   "stars": 3,
+   "pushed_at": "2026-09-06T01:53:46Z",
+   "created_at": "2026-08-30T21:51:55Z",
+   "description": "An early-stage, community-driven effort to define an open specification for AI-assisted development tools, covering agents, hooks, plugins, and other related concepts.",
+   "topics": [
+    "agents",
+    "ai",
+    "ai-assisted-development-tools",
+    "ai-coding",
+    "hooks",
+    "interoperable",
+    "mcp",
+    "open-specification",
+    "plugins",
+    "skills"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "henilveira/axiom-forge": {
+   "full_name": "henilveira/axiom-forge",
+   "stars": 3,
+   "pushed_at": "2026-10-18T13:34:37Z",
+   "created_at": "2026-08-31T02:02:39Z",
+   "description": "Open source project generator for spec-driven development, reusable AI agents, compatible stacks and local infrastructure.",
+   "topics": [
+    "ai-agents",
+    "boilerplate",
+    "cli",
+    "developer-tools",
+    "npm",
+    "open-source",
+    "scaffolding",
+    "spec-driven-development",
+    "typescript"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "VictorL0pes/speckit": {
+   "full_name": "VictorL0pes/speckit",
+   "stars": 3,
+   "pushed_at": "2026-09-21T12:36:24Z",
+   "created_at": "2026-09-21T12:11:21Z",
+   "description": "Spec-driven development kit for AI coding agents: a constitution, a product spec with a feature map, and a seven-lane card pipeline (specify, spec-review, implement, refactor, architecture, review, ve",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "SEPANU1717/sdd-kit": {
+   "full_name": "SEPANU1717/sdd-kit",
+   "stars": 3,
+   "pushed_at": "2026-10-10T14:22:21Z",
+   "created_at": "2026-09-25T06:31:30Z",
+   "description": "A drop-in kit for spec-driven development (SDD) with AI coding agents (Claude Code, Codex, Cursor, Antigravity, and anything that reads AGENTS.md).",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "skai-in-ai/dev-flow": {
+   "full_name": "skai-in-ai/dev-flow",
+   "stars": 3,
+   "pushed_at": "2026-10-03T02:45:52Z",
+   "created_at": "2026-08-06T14:38:27Z",
+   "description": "Spec-driven development workflow on Pi Coding Agent: isolated implementation, deterministic tests, independent AI review, recoverable human checkpoints, and GitHub Issue-to-Draft-PR automation.",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "AmanKtyr/Tailor": {
+   "full_name": "AmanKtyr/Tailor",
+   "stars": 3,
+   "pushed_at": "2026-09-06T18:12:07Z",
+   "created_at": "2026-08-16T07:28:53Z",
+   "description": "Stop vibe-coding bloat & token waste. Unified AI Coding-Agent & Spec-Driven Development (SDD) framework with AST code reuse, progressive memory (.ai/), and native MCP server for Claude Code, Cursor, W",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "Duaer/duaer-spec": {
+   "full_name": "Duaer/duaer-spec",
+   "stars": 2,
+   "pushed_at": "2026-09-30T08:24:13Z",
+   "created_at": "2026-09-15T00:54:25Z",
+   "description": "Duaer: Spec-Driven Development methodology + agent ops for AI coding agents",
+   "topics": [
+    "agents",
+    "ai-engineering",
+    "cursor",
+    "methodology",
+    "spec-driven"
+   ],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "drewlr/AI-spec-kit": {
+   "full_name": "drewlr/AI-spec-kit",
+   "stars": 2,
+   "pushed_at": "2026-10-04T20:58:35Z",
+   "created_at": "2026-08-13T13:17:46Z",
+   "description": "💫 Toolkit to aid agentic-driven development",
+   "topics": [],
+   "found_by": [
+    "spec driven development agent created:>2026-08-01"
+   ]
+  },
+  "croffasia/itsaplan": {
+   "full_name": "croffasia/itsaplan",
+   "stars": 1333,
+   "pushed_at": "2026-10-18T15:30:20Z",
+   "created_at": "2026-07-14T22:24:55Z",
+   "description": "Open-source, self-hosted alternative to Linear and Plane. Project management and issue tracking where teams and AI agents work side by side to plan and ship products.",
+   "topics": [
+    "agentic",
+    "agile",
+    "ai-agents",
+    "bug-reporting",
+    "bug-tracker",
+    "gantt",
+    "issue-tracker",
+    "jira",
+    "jira-alternative",
+    "kanban",
+    "linear",
+    "linear-alternative",
+    "open-source",
+    "product-management",
+    "project-management",
+    "roadmap",
+    "self-hosted",
+    "sprint-planning",
+    "team-collaboration",
+    "trello-alternative"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "AhmadHassan-BTed/Jantt": {
+   "full_name": "AhmadHassan-BTed/Jantt",
+   "stars": 820,
+   "pushed_at": "2026-10-16T17:25:12Z",
+   "created_at": "2026-08-28T07:32:35Z",
+   "description": "The AI-native JSON Gantt chart engine. Dependency-free interactive timelines with React, script-tag, CLI, topological DAG solver, and formal JSON schema.",
+   "topics": [
+    "ai-tools",
+    "critical-path",
+    "dag",
+    "data-visualization",
+    "gantt",
+    "gantt-chart",
+    "json",
+    "json-schema",
+    "kanban",
+    "project-management",
+    "react",
+    "roadmap",
+    "timeline",
+    "typescript",
+    "zero-dependencies"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01",
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "nelsonPires5/herdr-board": {
+   "full_name": "nelsonPires5/herdr-board",
+   "stars": 180,
+   "pushed_at": "2026-10-18T11:32:26Z",
+   "created_at": "2026-07-14T22:10:31Z",
+   "description": "Kanban board for herdr — cards are prompts dispatched to AI agents in visible panes",
+   "topics": [
+    "board",
+    "herdr",
+    "herdr-plugin",
+    "kanban",
+    "kanban-board",
+    "tui"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "dualface/kander": {
+   "full_name": "dualface/kander",
+   "stars": 157,
+   "pushed_at": "2026-10-16T13:28:38Z",
+   "created_at": "2026-09-05T20:23:17Z",
+   "description": "A kanban board for coordinating multiple AI coding agents, with isolated git worktrees and independent reviewer agents.",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "coding-agents",
+    "developer-tools",
+    "git-worktree",
+    "go",
+    "kanban",
+    "multi-agent",
+    "tui"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "ldbumble/taskuary": {
+   "full_name": "ldbumble/taskuary",
+   "stars": 140,
+   "pushed_at": "2026-10-18T16:58:25Z",
+   "created_at": "2026-08-17T12:53:50Z",
+   "description": "Your work, already underway. A personal AI assistant for your job: mail, chats and tickets become tasks, the agents you already use (Claude Code, Codex, Gemini) do the work, and nothing goes out until",
+   "topics": [
+    "agentic-workflow",
+    "ai",
+    "ai-agents",
+    "automation",
+    "claude",
+    "claude-code",
+    "codex",
+    "email-triage",
+    "fastapi",
+    "kanban",
+    "llm",
+    "local-first",
+    "mcp",
+    "microsoft-teams",
+    "outlook",
+    "productivity",
+    "python",
+    "react",
+    "slack",
+    "task-management"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "JuniorXcoder/hermes-virtual-office": {
+   "full_name": "JuniorXcoder/hermes-virtual-office",
+   "stars": 126,
+   "pushed_at": "2026-10-09T08:54:23Z",
+   "created_at": "2026-09-27T06:34:11Z",
+   "description": "A 3D office for your AI agent fleet: desks per division, meetings with auto-generated minutes where the turns come from real agents over A2A, live screen-peeking, and a Kanban board synced to Hermes. ",
+   "topics": [],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "jklthinking/retinue": {
+   "full_name": "jklthinking/retinue",
+   "stars": 117,
+   "pushed_at": "2026-10-08T10:42:34Z",
+   "created_at": "2026-08-13T01:29:28Z",
+   "description": "Self-hosted coordination for AI workers: per-task graphs, device/model timelines, progress receipts, and source-aware usage. MIT.",
+   "topics": [
+    "agent-orchestration",
+    "agents",
+    "ai-agents",
+    "automation",
+    "claude",
+    "codex",
+    "fastapi",
+    "feishu",
+    "kanban",
+    "llm",
+    "mcp",
+    "model-context-protocol",
+    "multi-agent-systems",
+    "python",
+    "react",
+    "self-hosted",
+    "sqlite",
+    "task-board",
+    "task-management",
+    "telegram-bot"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "smfworks/hermes-ai-team": {
+   "full_name": "smfworks/hermes-ai-team",
+   "stars": 69,
+   "pushed_at": "2026-10-04T12:52:04Z",
+   "created_at": "2026-08-20T10:47:59Z",
+   "description": "Build an AI team of Hermes agents: SOUL, memory, vault, skills, nightly research, kanban, chief of staff, rituals, and Desktop Bots group chats. Agent-consumable, phase-by-phase guide by Aiona Edge.",
+   "topics": [
+    "agent-identity",
+    "ai-agents",
+    "ai-team",
+    "hermes",
+    "hermes-agent",
+    "multi-agent",
+    "nous-research",
+    "orchestration",
+    "soul"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "edrisranjbar/lifeos": {
+   "full_name": "edrisranjbar/lifeos",
+   "stars": 69,
+   "pushed_at": "2026-10-17T17:11:22Z",
+   "created_at": "2026-09-05T04:33:11Z",
+   "description": "Self-hosted life OS: habits, goals, Kanban, finance and focus, with an MCP server for AI.",
+   "topics": [
+    "habit-tracker",
+    "kanban",
+    "life-os",
+    "mcp",
+    "personal-finance",
+    "php",
+    "productivity",
+    "self-hosted"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "OthmanAdi/plandeck": {
+   "full_name": "OthmanAdi/plandeck",
+   "stars": 68,
+   "pushed_at": "2026-08-03T10:19:37Z",
+   "created_at": "2026-07-12T12:10:05Z",
+   "description": "The visual Kanban for long-running AI agents. Watch your agent's plan organize itself: dependencies unlock into Ready, the critical path lights up, the one next move is obvious. Nobody wants to read a",
+   "topics": [
+    "agent-skill",
+    "agentic",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "crash-proof",
+    "critical-path",
+    "cursor",
+    "dependency-graph",
+    "developer-tools",
+    "estimation",
+    "kanban",
+    "kanban-board",
+    "planning",
+    "project-management",
+    "skill",
+    "sse",
+    "task-board",
+    "task-management",
+    "zero-dependency"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "Noveum/orbit": {
+   "full_name": "Noveum/orbit",
+   "stars": 66,
+   "pushed_at": "2026-10-18T00:22:28Z",
+   "created_at": "2026-07-22T15:20:31Z",
+   "description": "Free, open source, realtime task manager. Issues, boards, sprints, projects and docs that sync instantly. Keyboard-first, self-hostable, with an MCP server for AI agents. No pricing, ever.",
+   "topics": [
+    "agile",
+    "bun",
+    "issue-tracker",
+    "jira-alternative",
+    "kanban",
+    "linear-alternative",
+    "mcp",
+    "mcp-server",
+    "nextjs",
+    "open-source",
+    "postgresql",
+    "project-management",
+    "realtime",
+    "scrum",
+    "self-hosted",
+    "sprint-planning",
+    "task-manager",
+    "team-collaboration",
+    "typescript",
+    "websockets"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "johnreginald/donewhen": {
+   "full_name": "johnreginald/donewhen",
+   "stars": 59,
+   "pushed_at": "2026-10-04T01:46:37Z",
+   "created_at": "2026-07-29T14:19:21Z",
+   "description": "A new way to work with your AI Agents. Self-hosted issue tracker that keeps the record of AI-built work: done-when checklists, linked commits, engineering docs, MCP-first.",
+   "topics": [
+    "claude-code",
+    "go",
+    "issue-tracker",
+    "kanban",
+    "mcp",
+    "self-hosted",
+    "sveltekit"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "Ardha-Eco-System/RUDR9": {
+   "full_name": "Ardha-Eco-System/RUDR9",
+   "stars": 52,
+   "pushed_at": "2026-07-15T16:16:33Z",
+   "created_at": "2026-07-15T15:36:50Z",
+   "description": "One command → full AI engineering team. Transforms Hermes Agent into a 9-role development organization with Kanban coordination, per-profile authority enforcement, and PAUL-inspired workflows.",
+   "topics": [],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "ai4kanban/ai4kanban": {
+   "full_name": "ai4kanban/ai4kanban",
+   "stars": 44,
+   "pushed_at": "2026-10-18T12:10:11Z",
+   "created_at": "2026-07-10T05:33:49Z",
+   "description": "A draft-first agent workspace for indie hackers. Review the key parts of each task before agents handle the rest—from coding to marketing. Works with Claude Code, Codex, and more.",
+   "topics": [
+    "agent-orchestration",
+    "kanban",
+    "kanban-board",
+    "project-management",
+    "spec-driven-development"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "GumbyEnder/agent-relay": {
+   "full_name": "GumbyEnder/agent-relay",
+   "stars": 39,
+   "pushed_at": "2026-10-18T03:43:19Z",
+   "created_at": "2026-07-31T21:55:12Z",
+   "description": "Dev Boards — mission kanban for AI agents (poll · claim · heartbeat · escalate · deliver)",
+   "topics": [
+    "agent",
+    "ai-agents",
+    "kanban",
+    "mcp",
+    "typescript"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "Temavrix/PatchFlow": {
+   "full_name": "Temavrix/PatchFlow",
+   "stars": 35,
+   "pushed_at": "2026-10-18T04:18:39Z",
+   "created_at": "2026-06-30T05:48:34Z",
+   "description": "AI-powered issue tracking platform enabling teams to organize issues, monitor project progress and collaborate using Kanban boards, calendar views, team workspaces and supports GitHub integration and ",
+   "topics": [
+    "azure",
+    "continuous-deployment",
+    "firebase",
+    "google-cloud-run",
+    "java-springboot",
+    "mcp",
+    "typescript",
+    "ui"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "aenix-io/aeman": {
+   "full_name": "aenix-io/aeman",
+   "stars": 34,
+   "pushed_at": "2026-10-13T20:45:01Z",
+   "created_at": "2026-06-24T16:45:49Z",
+   "description": "A short-term planning system for engineering teams — keep engineers focused, run daily sprints, and track unplanned work. Built on GitHub Projects v2 (no database of its own): one Go binary with an em",
+   "topics": [
+    "agile",
+    "ai-agents",
+    "github-projects",
+    "github-projects-v2",
+    "golang",
+    "kanban",
+    "mcp",
+    "mcp-server",
+    "planner",
+    "productivity",
+    "project-management",
+    "react",
+    "scrum",
+    "self-hosted",
+    "sprint-planning",
+    "task-management",
+    "task-tracker",
+    "team-management",
+    "todo",
+    "typescript"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "jan-bogaerts/md2": {
+   "full_name": "jan-bogaerts/md2",
+   "stars": 34,
+   "pushed_at": "2026-10-15T07:45:45Z",
+   "created_at": "2026-07-02T14:01:37Z",
+   "description": "Plan, run, and track AI coding work feature by feature—with local Markdown cards, diagrams and Git worktrees.",
+   "topics": [
+    "agent-orchestration",
+    "ai-agents",
+    "ai-coding",
+    "ai-tools",
+    "automation",
+    "coding-agents",
+    "developer-tools",
+    "diagrams",
+    "electron",
+    "git",
+    "kanban",
+    "markdown",
+    "markdown-editor",
+    "mindmap",
+    "productivity",
+    "project-management",
+    "prompt-management",
+    "react",
+    "token-tracking",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "naodeng/dsh-qa": {
+   "full_name": "naodeng/dsh-qa",
+   "stars": 31,
+   "pushed_at": "2026-10-16T07:52:47Z",
+   "created_at": "2026-08-19T03:16:44Z",
+   "description": "dsh-qa · QA Workbench — A local software testing workbench plugin for DeepSeek Harness. Zero-dependency test project & iteration management with AI-assisted requirements, test cases, defects, mileston",
+   "topics": [
+    "ai-qa",
+    "deepseek",
+    "deepseek-harness",
+    "deepseek-harness-plugin",
+    "dsh-plugin",
+    "dsh-plugins",
+    "qa",
+    "qa-kanban"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "webkubor/xiaobai-kanban": {
+   "full_name": "webkubor/xiaobai-kanban",
+   "stars": 18,
+   "pushed_at": "2026-09-29T02:20:34Z",
+   "created_at": "2026-09-29T02:19:05Z",
+   "description": "🧭 小白看板 — 让 Agent 帮你写代码。你只说话，Agent 搞定一切。双入口文档站：真人看教程，Agent 读 AGENTS.md。",
+   "topics": [
+    "agent",
+    "agent-guide",
+    "ai",
+    "beginner-friendly",
+    "chinese",
+    "claude-code",
+    "deepseek",
+    "docs",
+    "git-workflow",
+    "guide",
+    "learning",
+    "tutorial",
+    "vitepress"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "gonnafaraway/kaiban": {
+   "full_name": "gonnafaraway/kaiban",
+   "stars": 17,
+   "pushed_at": "2026-09-29T18:46:36Z",
+   "created_at": "2026-09-22T11:51:47Z",
+   "description": "Open-source Kanban where every column is an AI agent",
+   "topics": [
+    "docker",
+    "go",
+    "llm",
+    "mcp",
+    "nextjs",
+    "openai"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "time-to-program/ai-kanban-board-ui-boilerplate-code": {
+   "full_name": "time-to-program/ai-kanban-board-ui-boilerplate-code",
+   "stars": 16,
+   "pushed_at": "2026-07-02T14:40:14Z",
+   "created_at": "2026-07-02T14:35:56Z",
+   "description": "AI Kanban Board ui boilerplate code",
+   "topics": [],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "Anton-Barinov/TropaTT": {
+   "full_name": "Anton-Barinov/TropaTT",
+   "stars": 16,
+   "pushed_at": "2026-10-17T23:17:41Z",
+   "created_at": "2026-06-04T14:08:16Z",
+   "description": "Free self-hosted open-source CRM, task manager, project platform, team chat, automation, API and AI workflows for PHP/MySQL.",
+   "topics": [
+    "ai",
+    "automation",
+    "bootstrap",
+    "business-software",
+    "calendar",
+    "crm",
+    "gantt",
+    "kanban",
+    "mysql",
+    "open-source",
+    "openapi",
+    "php",
+    "productivity",
+    "project-management",
+    "rest-api",
+    "self-hosted",
+    "task-management",
+    "team-chat",
+    "tropatt",
+    "workflows"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "alpacachen/dsh-kanban": {
+   "full_name": "alpacachen/dsh-kanban",
+   "stars": 15,
+   "pushed_at": "2026-10-16T05:00:40Z",
+   "created_at": "2026-08-20T04:52:20Z",
+   "description": "A shared kanban board for people and AI agents in DeepSeek Harness.",
+   "topics": [
+    "ai-agent",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "kanban",
+    "project-management"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "LioraLabs/cliban": {
+   "full_name": "LioraLabs/cliban",
+   "stars": 15,
+   "pushed_at": "2026-10-13T23:52:21Z",
+   "created_at": "2026-06-10T13:40:58Z",
+   "description": "Self-hosted, AI-agent-first kanban for the terminal — plan state that outlives the context window. CLI + TUI + SSH-hosted team boards.",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "cli",
+    "kanban",
+    "rust",
+    "sqlite",
+    "tui"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "upmeister/hermes-desktop-ru": {
+   "full_name": "upmeister/hermes-desktop-ru",
+   "stars": 14,
+   "pushed_at": "2026-10-05T04:43:30Z",
+   "created_at": "2026-07-15T20:48:22Z",
+   "description": "🇷🇺 Полная русская локализация Hermes Desktop — Bots, Kanban и хардкод UI. Установщик с doctor, AI-мониторинг апстрима и быстрые релизы вслед за Hermes.",
+   "topics": [
+    "electron",
+    "hermes-agent",
+    "hermes-desktop",
+    "i18n",
+    "linux",
+    "locale",
+    "localization",
+    "russian",
+    "russian-localization",
+    "translation",
+    "windows"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "ancs21/openleo": {
+   "full_name": "ancs21/openleo",
+   "stars": 14,
+   "pushed_at": "2026-10-14T07:44:47Z",
+   "created_at": "2026-10-08T10:13:08Z",
+   "description": "A to-do board like Trello, where AI agents do the cards on their own computer. Sign in with ChatGPT, like Codex. No code.",
+   "topics": [
+    "agpl",
+    "ai-agents",
+    "bun",
+    "chatgpt",
+    "computer-use",
+    "desktop-app",
+    "kanban",
+    "no-code",
+    "self-hosted",
+    "todo"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "emersonjds/santi": {
+   "full_name": "emersonjds/santi",
+   "stars": 13,
+   "pushed_at": "2026-10-18T02:05:03Z",
+   "created_at": "2026-10-15T17:12:46Z",
+   "description": "santi — free, open-source, self-hosted project management and issue tracker for agile teams. Scrum and Kanban boards, backlog, sprint planning, epics, drag and drop, CSV import, REST API, CLI and MCP ",
+   "topics": [
+    "agile",
+    "ai-agents",
+    "axum",
+    "docker",
+    "issue-tracker",
+    "kanban",
+    "kanban-board",
+    "mcp",
+    "mcp-server",
+    "open-source",
+    "postgresql",
+    "project-management",
+    "react",
+    "rust",
+    "scrum",
+    "self-hosted",
+    "sprint-planning",
+    "task-management",
+    "team-collaboration",
+    "typescript"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "kagan-sh/kagan-opencode": {
+   "full_name": "kagan-sh/kagan-opencode",
+   "stars": 12,
+   "pushed_at": "2026-07-28T11:07:01Z",
+   "created_at": "2026-07-06T22:17:56Z",
+   "description": "OpenCode Plugin for supervised agentic software development on a Kanban board",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "anthropic",
+    "kagan",
+    "kanban",
+    "kanban-board",
+    "llm-harness",
+    "mit-license",
+    "open-source",
+    "openai",
+    "opencode",
+    "opencode-ai",
+    "opencode-plugin",
+    "tui"
+   ],
+   "found_by": [
+    "kanban AI created:>2026-06-01"
+   ]
+  },
+  "rgdevment/Tisty": {
+   "full_name": "rgdevment/Tisty",
+   "stars": 4,
+   "pushed_at": "2026-10-18T17:01:38Z",
+   "created_at": "2026-08-05T06:29:30Z",
+   "description": "Free, open source task manager and Markdown notes for Windows and macOS. An archive that keeps what each task taught you: plain files, no account, no server, MCP for your assistant.",
+   "topics": [
+    "desktop-app",
+    "documents",
+    "knowledge-base",
+    "local-first",
+    "macos",
+    "markdown",
+    "markdown-editor",
+    "mcp",
+    "mcp-server",
+    "note-taking",
+    "notes",
+    "offline",
+    "personal-knowledge-management",
+    "privacy",
+    "productivity",
+    "rust",
+    "task-manager",
+    "tauri",
+    "todo",
+    "windows"
+   ],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "Recon2026/marvin-mcp": {
+   "full_name": "Recon2026/marvin-mcp",
+   "stars": 3,
+   "pushed_at": "2026-08-15T02:02:04Z",
+   "created_at": "2026-08-15T01:50:27Z",
+   "description": "An MCP server for the Amazing Marvin task manager — read and write tasks, projects, and time tracking from any MCP-compatible AI assistant.",
+   "topics": [
+    "amazing-marvin",
+    "claude",
+    "mcp",
+    "model-context-protocol",
+    "python",
+    "task-management"
+   ],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "RaptorTwentyOne/Anabolic": {
+   "full_name": "RaptorTwentyOne/Anabolic",
+   "stars": 3,
+   "pushed_at": "2026-10-18T17:04:08Z",
+   "created_at": "2026-10-17T21:02:17Z",
+   "description": "Task Manager on steroids: a Windows task manager that stays responsive under load and shows who is doing what, and why. Kernel tracing, stutters, network, history, and an MCP server for AI assistants.",
+   "topics": [
+    "dpc-latency",
+    "egui",
+    "etw",
+    "frame-time",
+    "gaming",
+    "mcp",
+    "mcp-server",
+    "network-monitor",
+    "performance-monitoring",
+    "process-explorer",
+    "process-manager",
+    "process-monitor",
+    "resource-monitor",
+    "rust",
+    "system-monitor",
+    "task-manager",
+    "windows",
+    "windows-10",
+    "windows-11"
+   ],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "altenwald/backlog": {
+   "full_name": "altenwald/backlog",
+   "stars": 2,
+   "pushed_at": "2026-10-16T12:18:46Z",
+   "created_at": "2026-08-31T03:33:55Z",
+   "description": "Visual task and priority manager with Fyne GUI, System Tray, CLI and MCP server",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "mattmaas/task-manager-mcp": {
+   "full_name": "mattmaas/task-manager-mcp",
+   "stars": 1,
+   "pushed_at": "2026-09-06T01:31:53Z",
+   "created_at": "2026-09-06T01:31:49Z",
+   "description": "MCP server for AI-assisted task management: task board, daily planning, velocity tracking, forecasting, and optional LLM recommendations",
+   "topics": [
+    "ai-agents",
+    "mcp",
+    "model-context-protocol",
+    "productivity",
+    "task-management"
+   ],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "JustSteveKing/taskgo": {
+   "full_name": "JustSteveKing/taskgo",
+   "stars": 1,
+   "pushed_at": "2026-10-02T09:59:36Z",
+   "created_at": "2026-08-25T10:12:56Z",
+   "description": "Local-first task manager for humans and AI agents. Tasks are plain Markdown files, shared by a CLI, a TUI, and an MCP server",
+   "topics": [
+    "ai-agents",
+    "bubbletea",
+    "cli",
+    "golang",
+    "local-first",
+    "markdown",
+    "mcp",
+    "model-context-protocol",
+    "task-manager",
+    "tui"
+   ],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "Krivoblotsky/somehow-i-manage": {
+   "full_name": "Krivoblotsky/somehow-i-manage",
+   "stars": 1,
+   "pushed_at": "2026-10-07T08:44:04Z",
+   "created_at": "2026-09-30T20:46:49Z",
+   "description": "People-first task manager for managers: your team on one map, 1:1 agendas that build themselves, and an MCP server so AI assistants work with your people as you. Free, offline-first, open source.",
+   "topics": [
+    "engineering-management",
+    "local-first",
+    "mcp",
+    "mcp-server",
+    "one-on-one",
+    "people-management",
+    "pwa",
+    "react",
+    "react-flow",
+    "supabase",
+    "task-manager",
+    "typescript"
+   ],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "OmkarAndhareHCT/MCP": {
+   "full_name": "OmkarAndhareHCT/MCP",
+   "stars": 0,
+   "pushed_at": "2026-08-31T13:07:15Z",
+   "created_at": "2026-08-26T09:53:11Z",
+   "description": "A Task Manager MCP server, client and LLM integration",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "Abhishek-Singh-AS/mcp-task-server": {
+   "full_name": "Abhishek-Singh-AS/mcp-task-server",
+   "stars": 0,
+   "pushed_at": "2026-09-17T08:31:31Z",
+   "created_at": "2026-09-17T08:24:05Z",
+   "description": "Local MCP Task-Manager",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "darenwhite79/nuvo-mcp": {
+   "full_name": "darenwhite79/nuvo-mcp",
+   "stars": 0,
+   "pushed_at": "2026-09-03T13:00:23Z",
+   "created_at": "2026-09-03T08:26:38Z",
+   "description": "MCP server for Nuvo Task Manager",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "shayanhabib18/task-manager-mcp-server-python": {
+   "full_name": "shayanhabib18/task-manager-mcp-server-python",
+   "stars": 0,
+   "pushed_at": "2026-10-01T11:30:28Z",
+   "created_at": "2026-10-01T11:11:30Z",
+   "description": "A Python-based Model Context Protocol (MCP) server that enables AI assistants to create, manage, update, and delete tasks through a simple task management system.",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "laibaafreen/mcp-todo-manager": {
+   "full_name": "laibaafreen/mcp-todo-manager",
+   "stars": 0,
+   "pushed_at": "2026-09-08T15:00:40Z",
+   "created_at": "2026-09-08T14:44:58Z",
+   "description": "A beginner-friendly MCP server for managing tasks.",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "Jithin-jith/MCP-task-manager": {
+   "full_name": "Jithin-jith/MCP-task-manager",
+   "stars": 0,
+   "pushed_at": "2026-09-24T16:58:54Z",
+   "created_at": "2026-09-23T16:07:38Z",
+   "description": "A modern, full-stack Task and Project Management application integrated with a Model Context Protocol (MCP) server.",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "wtf-amnn/task-manager-mcp": {
+   "full_name": "wtf-amnn/task-manager-mcp",
+   "stars": 0,
+   "pushed_at": "2026-09-03T12:31:51Z",
+   "created_at": "2026-09-03T12:29:58Z",
+   "description": "Task Manager MCP — A simple MCP server for managing tasks with support for creating, updating, completing, deleting, and organizing tasks efficiently.",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "AuliaAca/Task-Manager": {
+   "full_name": "AuliaAca/Task-Manager",
+   "stars": 0,
+   "pushed_at": "2026-10-11T04:51:15Z",
+   "created_at": "2026-10-11T04:41:46Z",
+   "description": "Secure MCP server that lets AI agents manage tasks in SQLite. Strict typed inputs, validation, parameterized SQL, explicit refusal boundaries, and full pytest coverage of invalid input. Python · MCP S",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "mennozweistra/ai-tm": {
+   "full_name": "mennozweistra/ai-tm",
+   "stars": 0,
+   "pushed_at": "2026-10-13T11:24:31Z",
+   "created_at": "2026-08-13T20:34:29Z",
+   "description": "Task manager for AI-assisted development: CLI and MCP server",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "L0ud3r/Taskord": {
+   "full_name": "L0ud3r/Taskord",
+   "stars": 0,
+   "pushed_at": "2026-09-08T09:49:11Z",
+   "created_at": "2026-09-02T10:46:05Z",
+   "description": "Discord Project Manager MCP Server - Model Context Protocol server for managing projects, roadmaps, and tasks in Discord",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "VyasSathya/taskflow-public": {
+   "full_name": "VyasSathya/taskflow-public",
+   "stars": 0,
+   "pushed_at": "2026-10-17T14:29:03Z",
+   "created_at": "2026-10-17T14:28:55Z",
+   "description": "Task manager for developers working with AI coding agents: CLI, MCP server, web, mobile, extensions.",
+   "topics": [
+    "claude-code",
+    "mcp",
+    "supabase"
+   ],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "Ibra106i/Taskmax": {
+   "full_name": "Ibra106i/Taskmax",
+   "stars": 0,
+   "pushed_at": "2026-09-05T08:29:05Z",
+   "created_at": "2026-08-29T12:10:04Z",
+   "description": "Full-stack task manager with built-in MCP server for Claude Desktop. Next.js 15, Clerk, Supabase, Resend.",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "Qaid-Danial/taskd": {
+   "full_name": "Qaid-Danial/taskd",
+   "stars": 0,
+   "pushed_at": "2026-10-09T09:53:12Z",
+   "created_at": "2026-10-02T08:18:30Z",
+   "description": "A personal task manager that Claude organises through a custom MCP server, with a Go CLI and a Supabase backend.",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "ZenFrogStudio/Synchrony": {
+   "full_name": "ZenFrogStudio/Synchrony",
+   "stars": 0,
+   "pushed_at": "2026-10-02T04:01:00Z",
+   "created_at": "2026-08-23T23:16:43Z",
+   "description": "VS Code task manager extension MCP server. Schedule plans to run automatically from markdown files.",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "qhchen31/agent_mcp_gateway": {
+   "full_name": "qhchen31/agent_mcp_gateway",
+   "stars": 0,
+   "pushed_at": "2026-10-10T19:31:42Z",
+   "created_at": "2026-09-30T16:15:41Z",
+   "description": "A local MCP server for parallel task delegation across OpenAI, DeepSeek, and Gemini, with text, image, and audio capabilities, configurable execution limits, and Windows Credential Manager integration",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "vlladevk/taskscope": {
+   "full_name": "vlladevk/taskscope",
+   "stars": 0,
+   "pushed_at": "2026-10-18T11:47:33Z",
+   "created_at": "2026-10-18T11:33:55Z",
+   "description": "A fast task manager for Windows: who is using the CPU, memory, disk, GPU, network and Docker — with a CLI and an MCP server for AI agents",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "0xAngel-Sec/boardagent": {
+   "full_name": "0xAngel-Sec/boardagent",
+   "stars": 0,
+   "pushed_at": "2026-08-28T10:14:04Z",
+   "created_at": "2026-08-26T16:18:32Z",
+   "description": "Local-first task manager for humans and AI agents. Terminal UI, REST API, MCP server. Free, no cloud.",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "TeamDzX/workflow-agent-bridge": {
+   "full_name": "TeamDzX/workflow-agent-bridge",
+   "stars": 0,
+   "pushed_at": "2026-10-08T21:20:21Z",
+   "created_at": "2026-09-09T12:00:24Z",
+   "description": "Agent bridge + MCP server for the WorkFlow task manager: lets Claude Code read and write tasks, file hand-offs and keep a session log.",
+   "topics": [
+    "claude",
+    "cli",
+    "macos",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol"
+   ],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "burok88/FamilyManager": {
+   "full_name": "burok88/FamilyManager",
+   "stars": 0,
+   "pushed_at": "2026-10-16T22:47:20Z",
+   "created_at": "2026-09-25T15:33:45Z",
+   "description": "Family household ontology as a Kùzu knowledge graph – people, tasks, appointments and school timetables, with Google Calendar sync, Home Assistant notifications and an MCP server for Claude. Runs as a",
+   "topics": [],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "theluckystrike/mcp-onboarding": {
+   "full_name": "theluckystrike/mcp-onboarding",
+   "stars": 0,
+   "pushed_at": "2026-09-26T13:19:13Z",
+   "created_at": "2026-09-22T06:22:19Z",
+   "description": "Model Context Protocol (MCP) server for a new-hire onboarding planner: hire records, role templates, task owners and due dates. New-hire onboarding as role-based task templates, with a dated checklist",
+   "topics": [
+    "ai",
+    "claude",
+    "claude-code",
+    "claude-desktop",
+    "cursor",
+    "gemini-cli-extension",
+    "llm",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "nodejs",
+    "typescript"
+   ],
+   "found_by": [
+    "MCP task manager server created:>2026-08-01"
+   ]
+  },
+  "DanielPan12/JobHuntBot": {
+   "full_name": "DanielPan12/JobHuntBot",
+   "stars": 868,
+   "pushed_at": "2026-10-12T07:25:41Z",
+   "created_at": "2026-08-02T15:20:12Z",
+   "description": "Agent-led job application workflow with a local progress-tracking dashboard — works with any AI coding agent that can read files and follow instructions.AI Agent 驱动的求职投递工作流,配本地进度追踪看板——适配任何能读文件、听懂指令的编程",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "whzxc/agent-remote-control": {
+   "full_name": "whzxc/agent-remote-control",
+   "stars": 13,
+   "pushed_at": "2026-10-18T13:56:24Z",
+   "created_at": "2026-09-19T08:44:13Z",
+   "description": "Connect ChatGPT to local coding agents—including Codex, Claude, Gemini, Cursor, and more—to explore projects, run coding tasks, and track progress via Secure MCP Tunnel or HTTPS MCP.",
+   "topics": [
+    "chatgpt",
+    "codex",
+    "mcp",
+    "plugin"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "Dicklesworthstone/beads_bend": {
+   "full_name": "Dicklesworthstone/beads_bend",
+   "stars": 6,
+   "pushed_at": "2026-10-15T12:13:23Z",
+   "created_at": "2026-09-20T16:27:13Z",
+   "description": "A law-proved port of br (beads_rust), the local-first, dependency-aware issue tracker for AI coding agents, to the Bend 2 language. Golden-tested against the original on every lane; early work in prog",
+   "topics": [
+    "ai-agents",
+    "beads",
+    "bend",
+    "bend-lang",
+    "cli",
+    "conformance-testing",
+    "dependent-types",
+    "formal-verification",
+    "issue-tracker",
+    "jsonl",
+    "local-first",
+    "program-porting"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "TaurenMountain/dsh-llm-as-a-verifier": {
+   "full_name": "TaurenMountain/dsh-llm-as-a-verifier",
+   "stars": 5,
+   "pushed_at": "2026-08-24T07:40:45Z",
+   "created_at": "2026-08-20T09:49:35Z",
+   "description": "LLM-as-a-Verifier for DeepSeek Harness: fine-grained reward, Probabilistic Pivot Tournament best-of-N selection, and per-step progress tracking as agent tools.",
+   "topics": [
+    "dsh-plugin"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "Srinithanya/AI_Learning_-_Study_Assistant": {
+   "full_name": "Srinithanya/AI_Learning_-_Study_Assistant",
+   "stars": 4,
+   "pushed_at": "2026-09-09T10:28:07Z",
+   "created_at": "2026-09-09T10:20:12Z",
+   "description": "AI-powered learning assistant that uses RAG, agentic tool calling, and student memory to answer questions from course materials, create personalized study plans, generate quizzes, and track learning p",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "yuhao-xin/aihot-daily-dashboard": {
+   "full_name": "yuhao-xin/aihot-daily-dashboard",
+   "stars": 3,
+   "pushed_at": "2026-08-08T09:31:40Z",
+   "created_at": "2026-08-08T09:29:09Z",
+   "description": "We built this skill to help you efficiently track cutting-edge AI developments, integrate them into your Agent, and break down information silos so everyone can share in AI's progress.",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "jarvis0626/CodeWatch": {
+   "full_name": "jarvis0626/CodeWatch",
+   "stars": 2,
+   "pushed_at": "2026-10-15T12:13:37Z",
+   "created_at": "2026-09-15T12:19:31Z",
+   "description": "Keep track of your IDE agent's progress anywhere",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "rocky2431/awesome-html-skill": {
+   "full_name": "rocky2431/awesome-html-skill",
+   "stars": 2,
+   "pushed_at": "2026-10-06T12:04:21Z",
+   "created_at": "2026-10-06T12:03:44Z",
+   "description": "Agent skill for local, self-contained single-file HTML pages that open offline: explainers, progress trackers, clickable prototypes, slide decks, charts.",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "AaronYOU129/ai-coding-project-template": {
+   "full_name": "AaronYOU129/ai-coding-project-template",
+   "stars": 2,
+   "pushed_at": "2026-10-18T10:11:01Z",
+   "created_at": "2026-09-16T13:56:34Z",
+   "description": "Reusable AI coding project template for Codex, Claude Code, Cursor, and other coding agents, with AGENTS.md, specifications, testing, verification, and progress tracking.",
+   "topics": [
+    "agents-md-template",
+    "agentsmd",
+    "ai-agent",
+    "ai-agents",
+    "ai-assisted-development",
+    "ai-coding",
+    "claude-code",
+    "claude-md",
+    "codex",
+    "coding-agent",
+    "coding-principles",
+    "cursor",
+    "developer-tools",
+    "github-template",
+    "spec-driven-development"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "Arin117Kaushik/claude-work-panel": {
+   "full_name": "Arin117Kaushik/claude-work-panel",
+   "stars": 2,
+   "pushed_at": "2026-10-07T15:37:28Z",
+   "created_at": "2026-10-05T09:46:12Z",
+   "description": "Live /work panel for Claude Code: progress bar, phase checklist, focus timer. Built for ADHD brains that lose track of what the agent is doing.",
+   "topics": [
+    "accessibility",
+    "adhd",
+    "ai-agents",
+    "claude-code",
+    "claude-code-plugin",
+    "focus-timer",
+    "productivity",
+    "progress-bar"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "amandeep-singh28/Generative-AI": {
+   "full_name": "amandeep-singh28/Generative-AI",
+   "stars": 2,
+   "pushed_at": "2026-10-15T10:42:00Z",
+   "created_at": "2026-08-19T04:50:04Z",
+   "description": "My hands-on Generative AI learning journey. A personal collection of notebooks, mini-projects, prompt engineering experiments, and notes tracking my progress from foundational LLMs to agentic systems.",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "AlexDM0/agent-progress": {
+   "full_name": "AlexDM0/agent-progress",
+   "stars": 1,
+   "pushed_at": "2026-10-06T13:59:23Z",
+   "created_at": "2026-09-19T07:36:35Z",
+   "description": "Per-repository progress tracker for AI orchestrators: tasks on a Gantt chart, stateful markdown tickets, a log, and a self-contained dashboard regenerated on every command",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "PatrickCOC/track-repository-progress": {
+   "full_name": "PatrickCOC/track-repository-progress",
+   "stars": 1,
+   "pushed_at": "2026-09-30T07:29:18Z",
+   "created_at": "2026-09-30T07:04:17Z",
+   "description": "An evidence-based Agent Skill for tracking GitHub repository progress and updating Google Sheets.",
+   "topics": [
+    "agent-skills",
+    "claude-code",
+    "codex",
+    "cursor",
+    "github",
+    "google-sheets",
+    "project-tracking",
+    "repository-management"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "amateuristrying/AgentLog": {
+   "full_name": "amateuristrying/AgentLog",
+   "stars": 1,
+   "pushed_at": "2026-08-23T17:03:47Z",
+   "created_at": "2026-08-06T16:20:18Z",
+   "description": "AgentLog tracks, understands, and organizes developer workflows across AI tools (Claude Code, Cursor, Codex), code editors, terminals, and Git into structured, meaningful progress logs.",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "Aman1108-cloud/ai-study-agent": {
+   "full_name": "Aman1108-cloud/ai-study-agent",
+   "stars": 1,
+   "pushed_at": "2026-08-23T14:33:28Z",
+   "created_at": "2026-08-23T14:32:46Z",
+   "description": "AI study agent that explains topics at your level and quizzes you (MCQ) using RAG + Groq — tracks progress and flags weak areas over time.",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "cliche-nomadness/job_hunter": {
+   "full_name": "cliche-nomadness/job_hunter",
+   "stars": 1,
+   "pushed_at": "2026-09-09T05:39:02Z",
+   "created_at": "2026-09-08T12:14:56Z",
+   "description": "An agent that helps you obtain available positions, track application progress, and modify your resume.",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "dtsola/xiaoyaoclaw-agent-orchestrator": {
+   "full_name": "dtsola/xiaoyaoclaw-agent-orchestrator",
+   "stars": 1,
+   "pushed_at": "2026-09-28T09:43:50Z",
+   "created_at": "2026-08-30T04:03:23Z",
+   "description": "OpenClaw multi-agent daily collaboration orchestrator - split tasks, dispatch via sessions_send, track progress, aggregate results, retry failures. 多 Agent 日常协作编排器",
+   "topics": [
+    "agent",
+    "automation",
+    "collaboration",
+    "multi-agent",
+    "openclaw",
+    "orchestration",
+    "skill",
+    "workflow"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "AlgForce/exceldashboard-skills": {
+   "full_name": "AlgForce/exceldashboard-skills",
+   "stars": 1,
+   "pushed_at": "2026-10-09T06:14:01Z",
+   "created_at": "2026-10-09T00:35:56Z",
+   "description": "Official agent skills for ExcelDashboard AI: analyze data, generate visual reports, and track report progress through MCP.",
+   "topics": [
+    "agent-skills",
+    "claude-code-skill",
+    "claude-skills",
+    "data-analysis",
+    "excel-dashboard",
+    "exceldashboard-ai",
+    "mcp",
+    "pptx-generator",
+    "report-generation"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "ZackSatrday/Language-coach": {
+   "full_name": "ZackSatrday/Language-coach",
+   "stars": 1,
+   "pushed_at": "2026-08-28T17:25:19Z",
+   "created_at": "2026-08-28T17:25:14Z",
+   "description": "Conversational AI agent for language practice — roleplay chat with corrections, voice, and progress tracking. LangGraph + FastAPI + Next.js.",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "ShaunNYC/streamdeck-ai-monitor": {
+   "full_name": "ShaunNYC/streamdeck-ai-monitor",
+   "stars": 1,
+   "pushed_at": "2026-10-16T14:47:23Z",
+   "created_at": "2026-10-15T21:50:17Z",
+   "description": "AI agent monitor for Elgato Stream Deck Neo on macOS. Track OpenAI Codex and Claude Code tasks, progress, and working time.",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "macos",
+    "openai-codex",
+    "productivity",
+    "stream-deck",
+    "stream-deck-neo",
+    "task-monitor"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "PoiCat69/context-keeper": {
+   "full_name": "PoiCat69/context-keeper",
+   "stars": 1,
+   "pushed_at": "2026-10-15T17:44:51Z",
+   "created_at": "2026-10-15T17:38:45Z",
+   "description": "A lightweight AI agent skill for tracking project progress, preserving session context, monitoring usage limits, and seamlessly resuming work across sessions.",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "corismix/aside-bridge": {
+   "full_name": "corismix/aside-bridge",
+   "stars": 1,
+   "pushed_at": "2026-09-29T16:31:32Z",
+   "created_at": "2026-09-01T10:01:28Z",
+   "description": "Text your Aside browser agent from your phone, Poke-style. Two-way Telegram bridge with persona, live progress streaming, photos, and usage tracking.",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "IRON136/dsh-plan-float": {
+   "full_name": "IRON136/dsh-plan-float",
+   "stars": 1,
+   "pushed_at": "2026-08-21T02:47:25Z",
+   "created_at": "2026-08-21T02:13:08Z",
+   "description": "Floating plan & todo cockpit for the dsh Web GUI: approve plans before execution, track progress live, and rewrite the roadmap mid-run to steer the agent instantly.",
+   "topics": [],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "Hamza-Asif-ai/AI-English-Coach": {
+   "full_name": "Hamza-Asif-ai/AI-English-Coach",
+   "stars": 1,
+   "pushed_at": "2026-10-04T17:12:04Z",
+   "created_at": "2026-10-04T15:26:03Z",
+   "description": "AI-powered English learning app: level-based Reading, Writing, Vocabulary and Grammar practice generated by CrewAI agents, with instant feedback, progress tracking and dark mode. React + FastAPI + Gro",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "crewai",
+    "education",
+    "english-learning",
+    "fastapi",
+    "groq",
+    "language-learning",
+    "llm",
+    "multi-agent",
+    "python",
+    "quiz-app",
+    "react",
+    "sqlite",
+    "tailwindcss",
+    "vite"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "STiFLeR7/Verge": {
+   "full_name": "STiFLeR7/Verge",
+   "stars": 1,
+   "pushed_at": "2026-09-18T09:39:13Z",
+   "created_at": "2026-09-08T04:06:25Z",
+   "description": "Ambient desktop overlay that tracks AI coding agents (Claude Code, Codex/ChatGPT, and more) — real activity, usage quotas, and sessions, with no invented data. Windows-complete; Linux/macOS in progres",
+   "topics": [
+    "ai-agents",
+    "ambient-display",
+    "chatgpt",
+    "claude",
+    "claude-code",
+    "codex",
+    "desktop-app",
+    "developer-tools",
+    "overlay",
+    "productivity",
+    "rust",
+    "windows"
+   ],
+   "found_by": [
+    "agent progress tracker created:>2026-08-01"
+   ]
+  },
+  "storytold/photocraft": {
+   "full_name": "storytold/photocraft",
+   "stars": 67208,
+   "pushed_at": "2026-10-18T16:41:35Z",
+   "created_at": "2026-09-30T13:37:48Z",
+   "description": "PhotoCraft: An open-source, photo editor written by scratch in pure Rust",
+   "topics": [
+    "art",
+    "image-editing",
+    "image-editing-software",
+    "image-editor",
+    "images",
+    "photo-editing",
+    "rust"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "awesome-dsh-plugin/awesome-dsh-plugin": {
+   "full_name": "awesome-dsh-plugin/awesome-dsh-plugin",
+   "stars": 19300,
+   "pushed_at": "2026-10-18T17:26:40Z",
+   "created_at": "2026-08-13T13:55:31Z",
+   "description": "A curated list of plugins for DeepSeek Harness (dsh) · DeepSeek Harness 插件精选列表",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "amagine-ai/Amagine3D": {
+   "full_name": "amagine-ai/Amagine3D",
+   "stars": 6278,
+   "pushed_at": "2026-10-18T09:39:10Z",
+   "created_at": "2026-08-19T15:31:34Z",
+   "description": "Amagine3D: From hardware requirements to editable 3D designs",
+   "topics": [
+    "3d-printing-tools",
+    "text-to-3d",
+    "text-to-cad"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "NxcoreAI/EverRoom": {
+   "full_name": "NxcoreAI/EverRoom",
+   "stars": 2991,
+   "pushed_at": "2026-10-17T18:08:48Z",
+   "created_at": "2026-08-14T13:13:51Z",
+   "description": "EverRoom - A workspace that remembers your projects, decisions, and sources.",
+   "topics": [
+    "ai",
+    "editor",
+    "electron",
+    "knowledge",
+    "memory",
+    "notion",
+    "obisidian",
+    "typescript"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "yibie/awesome-jev": {
+   "full_name": "yibie/awesome-jev",
+   "stars": 2396,
+   "pushed_at": "2026-10-18T11:31:56Z",
+   "created_at": "2026-09-17T14:23:21Z",
+   "description": "A curated list of public projects, integrations, and discussions built on Jev — TypeSafe AI's System One model for typed decisions.",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "jev",
+    "llm"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "cbrock84/headcount": {
+   "full_name": "cbrock84/headcount",
+   "stars": 2069,
+   "pushed_at": "2026-09-17T19:13:19Z",
+   "created_at": "2026-08-28T18:03:04Z",
+   "description": "An agent organization structured as a company — 15+ departments, 125+ skills, each independently installable, citing the standards and regulators that settle the question. Runs in Claude Code and Chat",
+   "topics": [
+    "agent-marketplace",
+    "chatgpt-plugin",
+    "chatgpt-skills",
+    "claude-code",
+    "claude-code-plugin",
+    "claude-plugin",
+    "claude-skills",
+    "mcp",
+    "organization"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "elliothux/open-compute": {
+   "full_name": "elliothux/open-compute",
+   "stars": 1982,
+   "pushed_at": "2026-10-10T12:50:04Z",
+   "created_at": "2026-08-23T04:34:25Z",
+   "description": "Self-hosted Cloudflare Workers-compatible platform with Workers、KV、D1、R2、DO、Queues、Workflows、Cron、Cache、Images、Vectorize、AI Search、Artifacts、Static Assets、Service Bindings、Dynamic Workers、LogTail、Gate",
+   "topics": [
+    "cloud",
+    "cloudflare",
+    "cloudflare-workers",
+    "container",
+    "d1",
+    "durable-objects",
+    "edge-computing",
+    "javascript",
+    "r2",
+    "runtime",
+    "rust",
+    "self-hosted",
+    "serverless",
+    "sqlite",
+    "typescript",
+    "v8",
+    "wasm",
+    "worker",
+    "workerd",
+    "wrangler"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "ranxianglei/billion-context": {
+   "full_name": "ranxianglei/billion-context",
+   "stars": 1857,
+   "pushed_at": "2026-10-18T17:17:57Z",
+   "created_at": "2026-08-06T08:27:34Z",
+   "description": "A context-compression plugin for small context windows (a 100K context is enough), token savings (5x fewer tokens), and month-long single sessions (billions of tokens).上下文压缩插件，兼顾小窗口(100k上下文足矣)省token(省",
+   "topics": [
+    "dsh-plugin"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "AMAP-ML/LongHorizon-Harness": {
+   "full_name": "AMAP-ML/LongHorizon-Harness",
+   "stars": 1753,
+   "pushed_at": "2026-08-20T12:36:03Z",
+   "created_at": "2026-08-04T04:30:58Z",
+   "description": "The long-horizon computer-use harness. Run AI agents across desktop apps and the CLI for extended periods while preserving task state and making reliable progress on complex workflows. Features fresh-",
+   "topics": [
+    "agent",
+    "claude",
+    "claude-code",
+    "claude-plugin",
+    "cli",
+    "codex",
+    "codex-desktop",
+    "codex-plugin",
+    "cua",
+    "deepseek-harness",
+    "gui",
+    "harness",
+    "long-horizon",
+    "long-horizon-agents",
+    "longhorizon-harness",
+    "loop",
+    "loop-engineering"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "aoci-spec/aoci-code": {
+   "full_name": "aoci-spec/aoci-code",
+   "stars": 1607,
+   "pushed_at": "2026-10-16T01:14:16Z",
+   "created_at": "2026-08-08T11:33:08Z",
+   "description": "A persistent, Git-versioned map of your whole codebase and database schema that coding agents read before they touch anything. Local-first MCP server + CLI in Go: a governed repository index of code k",
+   "topics": [
+    "agent-memory",
+    "agents-md",
+    "ai-coding",
+    "ai-context",
+    "claude-code",
+    "code-indexing",
+    "code-intelligence",
+    "codex",
+    "coding-agent",
+    "context-engineering",
+    "cursor",
+    "database-schema",
+    "golang",
+    "llm",
+    "local-first",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "opencode",
+    "repo-map"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "punkpeye/awesome-remote-mcp-servers": {
+   "full_name": "punkpeye/awesome-remote-mcp-servers",
+   "stars": 1458,
+   "pushed_at": "2026-10-18T04:24:33Z",
+   "created_at": "2026-09-08T00:43:30Z",
+   "description": "A collection of remote MCP servers.",
+   "topics": [
+    "mcp"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "panel-zeus/Z-E-U-S": {
+   "full_name": "panel-zeus/Z-E-U-S",
+   "stars": 1281,
+   "pushed_at": "2026-10-16T21:16:33Z",
+   "created_at": "2026-08-09T02:53:39Z",
+   "description": "",
+   "topics": [],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "0xsline/awesome-deepseek-harness": {
+   "full_name": "0xsline/awesome-deepseek-harness",
+   "stars": 1206,
+   "pushed_at": "2026-10-16T12:16:30Z",
+   "created_at": "2026-08-11T13:14:49Z",
+   "description": "DeepSeek Harness (DSH) ecosystem: curated plugins, tools, and infrastructure from dsh-external/hub and the public dsh-plugin topic.",
+   "topics": [
+    "agent",
+    "ai",
+    "ai-agents",
+    "ai-tools",
+    "awesome",
+    "awesome-list",
+    "coding-assistant",
+    "curated-list",
+    "deepseek",
+    "deepseek-harness",
+    "developer-tools",
+    "dsh",
+    "dsh-plugin",
+    "dsh-plugins",
+    "harness",
+    "llm",
+    "mcp",
+    "plugins"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "theoephraim/awesome-cloudflare-selfhosted": {
+   "full_name": "theoephraim/awesome-cloudflare-selfhosted",
+   "stars": 1186,
+   "pushed_at": "2026-10-01T18:08:43Z",
+   "created_at": "2026-09-15T09:39:14Z",
+   "description": "🍊☁️ Open-source* apps that replace SaaS product + tools, running in your own Cloudflare account",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "cloudflare",
+    "cloudflare-workers",
+    "self-hosted"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "usamahz/cpu-performance-engineering": {
+   "full_name": "usamahz/cpu-performance-engineering",
+   "stars": 1164,
+   "pushed_at": "2026-10-08T18:41:07Z",
+   "created_at": "2026-09-17T20:52:03Z",
+   "description": "A reading path for CPU performance engineering, from one instruction to production inference. Primary sources only, with a runnable benchmark for every section.",
+   "topics": [
+    "arm",
+    "awesome-list",
+    "benchmarks",
+    "computer-architecture",
+    "cpu",
+    "edge-ai",
+    "inference",
+    "low-latency",
+    "optimization",
+    "performance",
+    "performance-engineering",
+    "simd",
+    "systems-programming",
+    "x86"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "scenario-labs/skills": {
+   "full_name": "scenario-labs/skills",
+   "stars": 1047,
+   "pushed_at": "2026-10-18T17:08:38Z",
+   "created_at": "2026-08-12T10:08:49Z",
+   "description": "Get production-ready images, video, audio, and 3D from any AI agent: skills that pick the right model, price before spending, and keep characters and brands consistent through the Scenario MCP, plus e",
+   "topics": [
+    "3d-generation",
+    "agent-skills",
+    "blender",
+    "claude-code",
+    "claude-skills",
+    "codex",
+    "game-assets",
+    "game-development",
+    "gamedev",
+    "generative-ai",
+    "image-generation",
+    "maya",
+    "mcp",
+    "model-context-protocol",
+    "scenario",
+    "skills-sh",
+    "unity",
+    "unreal-engine",
+    "video-generation",
+    "zbrush"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "wangmiaozero/pi-harness": {
+   "full_name": "wangmiaozero/pi-harness",
+   "stars": 1038,
+   "pushed_at": "2026-10-18T01:10:45Z",
+   "created_at": "2026-08-20T12:29:47Z",
+   "description": "The operational superset of Pi Coding Agent — everything Pi, plus observability, governance, recovery, evaluation and multi-agent orchestration. Pi Coding Agent 的运维超集——完整继承 Pi 的核心能力，并进一步扩展可观测性、治理、故障恢复",
+   "topics": [
+    "agent-harness",
+    "agent-observability",
+    "agent-orchestration",
+    "ai-agent",
+    "coding-agent",
+    "desktop-app",
+    "developer-tools",
+    "electron",
+    "llm",
+    "mcp",
+    "multi-agent",
+    "pi",
+    "pi-agent",
+    "pi-coding-agent",
+    "pi-harness",
+    "skills",
+    "typescript",
+    "vue3"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "GoogleCloudPlatform/open-knowledge-format": {
+   "full_name": "GoogleCloudPlatform/open-knowledge-format",
+   "stars": 1008,
+   "pushed_at": "2026-08-21T20:08:36Z",
+   "created_at": "2026-08-11T18:29:55Z",
+   "description": "",
+   "topics": [],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "AgriciDaniel/compass": {
+   "full_name": "AgriciDaniel/compass",
+   "stars": 985,
+   "pushed_at": "2026-09-13T23:18:38Z",
+   "created_at": "2026-08-26T18:00:16Z",
+   "description": "Compass: run your whole life out of Obsidian. Daily questions, quarterly retreats, planning, habits, tasks, writing, and an AI assistant in the vault.",
+   "topics": [
+    "claude-code",
+    "journaling",
+    "life-os",
+    "obsidian",
+    "obsidian-vault",
+    "pkm",
+    "template"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "heyjunpenn/awesome-jev": {
+   "full_name": "heyjunpenn/awesome-jev",
+   "stars": 976,
+   "pushed_at": "2026-10-04T15:58:20Z",
+   "created_at": "2026-09-19T05:14:36Z",
+   "description": "A verified, community-maintained catalog of 981 open-source projects built with Jev.",
+   "topics": [
+    "astro",
+    "awesome",
+    "awesome-jev",
+    "awesome-list",
+    "jev",
+    "typesafe"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "Zyrexnn/Cybermes": {
+   "full_name": "Zyrexnn/Cybermes",
+   "stars": 948,
+   "pushed_at": "2026-10-17T09:24:00Z",
+   "created_at": "2026-08-19T13:25:08Z",
+   "description": "Autonomous Offensive Security, Bug Bounty & Red Teaming Agent Framework powered by Hermes Agent, specialized reasoning skills, and multi-model LLM orchestration.",
+   "topics": [
+    "ai-agent",
+    "appsec",
+    "bug-bounty",
+    "cvss-v3",
+    "cybersecurity",
+    "devsecops",
+    "exploit-validation",
+    "hermes-agent",
+    "infosec",
+    "llm-security",
+    "nuclei",
+    "offensive-security",
+    "penetration-testing",
+    "playwright",
+    "reconnaissance",
+    "red-teaming",
+    "security-tools",
+    "sqlmap",
+    "threat-research",
+    "vulnerability-scanner"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "ZeroDayEvil/ai-security-tool": {
+   "full_name": "ZeroDayEvil/ai-security-tool",
+   "stars": 893,
+   "pushed_at": "2026-10-18T10:40:24Z",
+   "created_at": "2026-09-10T09:38:49Z",
+   "description": "🛡️ Free open-source AI-powered security terminal & vulnerability scanner (CVE, SBOM). Supports SSH, SFTP, RDP, VNC, Serial, and 12+ autonomous AI agents (DeepSeek, OpenAI) for automated security workf",
+   "topics": [
+    "ai-hacking",
+    "ai-security-tool",
+    "cve-scanner",
+    "cybersecurity",
+    "hacking-tool",
+    "llm-security",
+    "mcp-server",
+    "mcp-tools",
+    "openai",
+    "osv",
+    "pentesting",
+    "rdp",
+    "red-teaming",
+    "sbom",
+    "security-tools",
+    "sftp",
+    "ssh-client",
+    "terminal",
+    "vnc"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "dondai44423/donsetch": {
+   "full_name": "dondai44423/donsetch",
+   "stars": 883,
+   "pushed_at": "2026-10-16T05:24:57Z",
+   "created_at": "2026-08-07T10:13:16Z",
+   "description": "Web fetch, search, and crawl for AI agents. Built from scratch in Rust. No keys, no accounts. AGPL v3.",
+   "topics": [
+    "agpl",
+    "ai-agents",
+    "anti-bot",
+    "crawling",
+    "mcp",
+    "pdf",
+    "rust",
+    "web-scraper",
+    "web-search"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "lobehub/awesome-rsi": {
+   "full_name": "lobehub/awesome-rsi",
+   "stars": 797,
+   "pushed_at": "2026-10-15T14:47:23Z",
+   "created_at": "2026-08-11T03:59:57Z",
+   "description": "A curated research map of Recursive Self-Improvement (RSI): models, agents, harnesses, embodied systems, automated AI R&D, benchmarks, and safety.",
+   "topics": [
+    "agi",
+    "ai",
+    "ai-agents",
+    "ai-model",
+    "ai-safety",
+    "artificial-intelligence",
+    "automated-ai",
+    "awesome",
+    "awesome-list",
+    "awesome-lists",
+    "recursive-self-improvement",
+    "rsi",
+    "self-evolution",
+    "self-evolving",
+    "self-evolving-agents",
+    "self-improving",
+    "self-improving-agents",
+    "self-improving-ai",
+    "self-improving-systems"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "morluto/awesome-reverse-engineering": {
+   "full_name": "morluto/awesome-reverse-engineering",
+   "stars": 793,
+   "pushed_at": "2026-10-18T11:01:19Z",
+   "created_at": "2026-10-09T14:58:20Z",
+   "description": "Curated reverse-engineering tools and learning resources for binaries, apps, firmware, formats, and protocols.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "awesome",
+    "awesome-list",
+    "binary-analysis",
+    "ctf",
+    "cybersecurity",
+    "debugging",
+    "decompiler",
+    "disassembler",
+    "dynamic-analysis",
+    "firmware",
+    "frida",
+    "ghidra",
+    "malware-analysis",
+    "mcp",
+    "reverse-engineering",
+    "security",
+    "security-tools",
+    "static-analysis"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "wangzhishou/OneBox": {
+   "full_name": "wangzhishou/OneBox",
+   "stars": 791,
+   "pushed_at": "2026-10-18T13:19:37Z",
+   "created_at": "2026-08-08T07:10:11Z",
+   "description": "A free AI agent & toolbox for Android | 一站式安卓 AI 智能体 & 工具箱",
+   "topics": [
+    "ai",
+    "ai-agent",
+    "ai-agents",
+    "ai-assistants",
+    "ai-tools",
+    "android",
+    "android-app",
+    "android-application",
+    "android-apps",
+    "chatbot",
+    "chatgpt",
+    "chatgpt-api",
+    "decompose",
+    "hilt-android",
+    "image-tools",
+    "jetpack-compose",
+    "kotlin",
+    "material3",
+    "toolbox"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "v-modal/awesome-jev-tools": {
+   "full_name": "v-modal/awesome-jev-tools",
+   "stars": 748,
+   "pushed_at": "2026-10-18T03:23:45Z",
+   "created_at": "2026-09-19T16:48:59Z",
+   "description": "A curated list of tools  built for Jev — TypeSafe AI's System One model for typed decisions.",
+   "topics": [
+    "awesome-ai",
+    "awesome-jev",
+    "awesome-list",
+    "awesome-readme",
+    "calibrated-probabilities",
+    "jev",
+    "jev-ai",
+    "jev-alternative",
+    "jev-api",
+    "jev-connectors",
+    "jev-model",
+    "jev-production",
+    "jev-test",
+    "jev-tools",
+    "jev-typesafe",
+    "laya",
+    "llm-evaluation",
+    "llm-inference",
+    "llm-tools",
+    "vmodal"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "facebookresearch/context-language-models": {
+   "full_name": "facebookresearch/context-language-models",
+   "stars": 734,
+   "pushed_at": "2026-10-14T23:17:10Z",
+   "created_at": "2026-09-18T00:36:27Z",
+   "description": "Official repository for \"Context Language Models\"",
+   "topics": [],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  },
+  "amitshekhariitbhu/ai-system-design": {
+   "full_name": "amitshekhariitbhu/ai-system-design",
+   "stars": 717,
+   "pushed_at": "2026-10-14T03:25:00Z",
+   "created_at": "2026-09-25T04:50:06Z",
+   "description": "AI System Design - Learn how to design AI systems built on LLMs, RAG, and AI Agents step by step.",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "ai-engineering",
+    "ai-system",
+    "ai-system-design",
+    "ai-systems",
+    "ai-systems-design",
+    "llm",
+    "system-design",
+    "system-design-interview"
+   ],
+   "found_by": [
+    "multi agent project management in:name,description,readme created:>2026-08-01"
+   ]
+  }
+ }
+}
