@@ -857,6 +857,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    run `39146148602` `gates` **success**（16:41:29 → 16:50:34 UTC，约 9 分 05 秒；
    7 个业务步骤全绿 + 4 个 Post 步骤全绿）；本轮在干净 runner 上把新版本资源（PE v1.7.4）与
    「重打包后 exe 内嵌前端与仓库这份逐字节一致」一起验过。
+   **2026-10-19 v1.8.0 第六轮吸取轮**：`5e4c517`（五条全落 + 探针 64→68 + 文档）—— 探针与
+   `git push` 都是第 1 轮即过（推送输出 `8898284..5e4c517 main -> main` 即权威确认）；
+   run `39229025847` `gates` **success**（09:18:11 → 09:27:12 UTC，约 9 分 01 秒，步骤全绿）。
    推送这一跳本身也会抖（2026-10-15 首遇，**2026-10-16 更正了探法**）：一次 `git push` 报
   `Failed to connect to github.com:443 after 21070 ms`，而**同一时刻 `api.github.com` 返回 200** ——
   分端点探测（含一个无关对照站点）定性为"主站线路被干扰、不是断网"。处置：本地提交一个都不动、
