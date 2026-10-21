@@ -302,12 +302,13 @@
         </div>
 <input id="f-tag-input" placeholder="输入新标签后按回车添加" style="margin-top:8px" aria-label="新标签">
       </div>
-      <div class="form-section"><span>交接信息（新智能体接手时会优先读这里）</span></div>
+      <div class="form-section"><span>发布节点</span></div>
       <div class="field">
         <label>里程碑（可选，用于把任务归进发布节点）</label>
         <div id="f-milestones" aria-label="里程碑列表"></div>
         <button class="btn small" data-act="addMilestoneRow" type="button">＋ 添加里程碑</button>
       </div>
+      <div class="form-section"><span>交接信息（新智能体接手时会优先读这里）</span></div>
       <div class="field"><label for="f-repo">代码路径（可选）</label><input id="f-repo" placeholder="例如：D:\longmao\edu-smart"></div>
       <div class="field"><label for="f-bg">项目背景</label><textarea id="f-bg" placeholder="这个项目是做什么的？技术栈、架构、核心模块……"></textarea></div>
       <div class="field">
@@ -331,14 +332,6 @@
       <div class="form-section"><span>基本信息</span></div>
       <div class="field"><label for="t-title">任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调" data-enter="saveTask"></div>
       <div class="field"><label for="t-desc">任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、背景……"></textarea></div>
-      <div class="form-section"><span>验收与关联（会给接手的人看）</span></div>
-      <div class="field"><label for="t-acceptance">验收标准（可选，一行一条——「怎么算完成」写清楚，验收和交接都有据可依）</label><textarea id="t-acceptance" rows="3" placeholder="例如：&#10;全部用例通过&#10;README 补上用法一节"></textarea>
-        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">最多 10 条、单条 120 字；会带进交接包与接手页，接手的人照着验收</div>
-      </div>
-      <div class="field"><label for="t-refs">相关代码位置（可选，逗号分隔）</label><input id="t-refs" placeholder="如 app/main.py:120, tests/test_api.py —— 接手的人不用再翻一遍找在哪改" data-enter="saveTask"></div>
-      <div class="field"><label for="t-deps">前置任务（可选，按住 Ctrl 多选）</label><select id="t-deps" multiple size="4"></select>
-        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了前置，交接包与 AGENTS.md 会按依赖排好顺序，AI 也能直接问「现在该做哪个」</div>
-      </div>
       <div class="form-section"><span>排期与指派</span></div>
       <div class="row3">
         <div class="field"><label for="t-status">状态</label><select id="t-status">
@@ -349,7 +342,7 @@
         </select></div>
         <div class="field"><label for="t-agent">负责 AI（可选）</label><input id="t-agent" placeholder="如 cline / 豆包" data-enter="saveTask"></div>
       </div>
-<div class="field"><label for="t-due">截止日期（可选）</label><input type="date" id="t-due">
+      <div class="field"><label for="t-due">截止日期（可选）</label><input type="date" id="t-due">
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了截止日期，仪表盘会统计临期/逾期，任务卡上也会标出来</div>
       </div>
       <div class="field"><label for="t-milestone">里程碑（可选）</label><select id="t-milestone"></select>
@@ -359,6 +352,14 @@
         <label for="t-blocked">阻塞原因（为什么卡着）</label>
         <input id="t-blocked" maxlength="300" placeholder="例如：在等上游接口文档；环境装不上依赖" data-enter="saveTask">
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">只在「阻塞」状态下保留：恢复其他状态会自动清空（历史留在过程日志里）</div>
+      </div>
+      <div class="form-section"><span>验收与关联（会给接手的人看）</span></div>
+      <div class="field"><label for="t-acceptance">验收标准（可选，一行一条——「怎么算完成」写清楚，验收和交接都有据可依）</label><textarea id="t-acceptance" rows="3" placeholder="例如：&#10;全部用例通过&#10;README 补上用法一节"></textarea>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">最多 10 条、单条 120 字；会带进交接包与接手页，接手的人照着验收</div>
+      </div>
+      <div class="field"><label for="t-refs">相关代码位置（可选，逗号分隔）</label><input id="t-refs" placeholder="如 app/main.py:120, tests/test_api.py —— 接手的人不用再翻一遍找在哪改" data-enter="saveTask"></div>
+      <div class="field"><label for="t-deps">前置任务（可选，按住 Ctrl 多选）</label><select id="t-deps" multiple size="4"></select>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了前置，交接包与 AGENTS.md 会按依赖排好顺序，AI 也能直接问「现在该做哪个」</div>
       </div>
       <div class="field" id="t-journal-field" style="display:none">
         <label>过程日志（自动记录状态流转，也可手动追加）</label>

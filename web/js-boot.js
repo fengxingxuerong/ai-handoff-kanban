@@ -26,9 +26,10 @@ async function openToday() {
       return;
     }
     box.innerHTML = r.tasks.map(t => `
-      <div class="tcard" data-act="gotoTask" data-arg="${esc(t.project_id)}" style="margin-bottom:8px;cursor:pointer">
+      <div class="tcard" tabindex="0" role="button" data-keyact="1" data-act="gotoTask" data-arg="${esc(t.project_id)}" style="margin-bottom:8px;cursor:pointer">
         <div class="tt">${esc(t.title)}${t.due_date ? ` <span class="due-badge">📅 ${esc(t.due_date)}</span>` : ""}</div>
-        <div class="td">${esc(t.project_name)} · ${esc(t.project_status)}${(t.refs && t.refs.length) ? " · 📍 " + t.refs.map(esc).join("、") : ""}</div>
+        <div class="td">${esc(t.project_name)} · ${esc(t.status)}${(t.refs && t.refs.length) ? " · 📍 " + t.refs.map(esc).join("、") : ""}</div>
+        ${t.status === "阻塞" && t.blocked_reason ? `<div class="td blocked-reason" title="${esc(t.blocked_reason)}">⛔ ${esc(t.blocked_reason)}</div>` : ""}
         <div class="tfoot"><span class="tag2 pri-${priCls(t.priority)}">${esc(priCls(t.priority))}</span>${t.status === "阻塞" ? '<span class="agent">阻塞</span>' : ""}</div>
       </div>`).join("")
       + (r.truncated ? `<div class="hint">这里只有前 ${r.tasks.length} 条，共 ${r.total} 条可以动手 —— 剩下的请到各项目详情里看。</div>` : "");
@@ -71,7 +72,7 @@ async function openInbox() {
     const parts = ["review", "blocked", "overdue"].filter(k => r.counts[k]).map(k => {
       const meta = INBOX_KINDS[k];
       const rows = r.items.filter(it => it.kind === k).map(t => `
-        <div class="tcard" data-act="gotoTask" data-arg="${esc(t.project_id)}" style="margin-bottom:8px;cursor:pointer">
+        <div class="tcard" tabindex="0" role="button" data-keyact="1" data-act="gotoTask" data-arg="${esc(t.project_id)}" style="margin-bottom:8px;cursor:pointer">
           <div class="tt">${esc(t.title)}${t.due_date ? ` <span class="due-badge">📅 ${esc(t.due_date)}</span>` : ""}</div>
           <div class="td">${esc(t.project_name)}</div>
           ${t.blocked_reason ? `<div class="td blocked-reason" title="${esc(t.blocked_reason)}">⛔ ${esc(t.blocked_reason)}</div>` : ""}

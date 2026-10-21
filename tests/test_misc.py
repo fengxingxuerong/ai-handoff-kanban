@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -60,6 +61,36 @@ def test_editing_a_sample_project_keeps_it(app_client):
     app_client.create_project("新项目")
     names = [p["name"] for p in app_client.get("/api/projects")[1]["projects"]]
     assert "改过的示例" in names and "新项目" in names
+
+
+def test_sample_data_is_fresh_and_says_the_truth(app_client):
+    """示例数据不能让第一次打开的用户看到「37 天没记录」或自相矛盾的告警。
+
+    写死日期的那一版过两周就开始腐烂：更新于几个月前、进行中任务全在停滞、
+    「进度 65% 却 0 条已完成」还会触发代码现实面板的告警。示例应当相对今天生成，
+    并且进度/完成任务数自洽、不指向不存在的本机仓库。
+    """
+    _, data = app_client.get("/api/projects")
+    now = datetime.now()
+    for p in data["projects"]:
+        if p["status"] in ("进行中", "规划中"):
+            age = (now - datetime.strptime(p["updated_at"], "%Y-%m-%d %H:%M")).days
+            assert age <= 7, f"{p['name']} 的示例更新时间已经 {age} 天前"
+        _, detail = app_client.get(f"/api/projects/{p['id']}")
+        tasks = detail.get("tasks") or []
+        done = [t for t in tasks if t.get("status") == "已完成"]
+        assert not (tasks and p["progress"] >= 60 and not done), \
+            f"{p['name']} 的示例进度与完成数互相矛盾，会触发假告警"
+        assert not p.get("repo_path"), f"{p['name']} 的示例不该指向不存在的本机路径"
+        for t in tasks:
+            if p["status"] == "进行中" and t.get("status") != "已完成":
+                t_age = (now - datetime.strptime(t["updated_at"], "%Y-%m-%d %H:%M")).days
+                assert t_age <= 7, f"{p['name']} / {t['title']} 的示例已经 {t_age} 天没动"
+
+    _, sample_a = app_client.get("/api/projects/sample-a")
+    assert any(t.get("due_date") for t in sample_a["tasks"]), "示例应当展示截止日期"
+    assert any(t.get("status") == "已完成" for t in sample_a["tasks"]), "示例应当展示完成态"
+    assert any(t.get("depends_on") for t in sample_a["tasks"]), "示例应当展示依赖关系"
 
 
 def test_legacy_junk_is_sanitized_on_load(app_client):

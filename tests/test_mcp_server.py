@@ -887,6 +887,17 @@ def test_today_tool_lists_actionable_tasks(mcp):
     assert "被挡住" not in text, "前置没完成的不该出现在今日待办里"
 
 
+def test_today_tool_carries_blocked_reason(mcp):
+    """「现在能做」列表里的阻塞任务必须带原因：只写「阻塞中」代理仍可能直接开工。"""
+    proj, _ = mcp.tool("kanban_create_project", {"name": "今日阻塞原因", "status": "进行中"})
+    pid = proj.split("[")[-1].split("]")[0]
+    mcp.tool("kanban_add_task", {"project_id": pid, "title": "卡住的活",
+                                 "status": "阻塞", "blocked_reason": "在等接口文档"})
+    text, is_err = mcp.tool("kanban_today", {})
+    assert not is_err, text
+    assert "⛔ 阻塞中：在等接口文档" in text, text
+
+
 def test_search_tool_returns_task_ids(mcp):
     proj, _ = mcp.tool("kanban_create_project", {"name": "搜索靶项目"})
     pid = proj.split("[")[-1].split("]")[0]

@@ -1752,3 +1752,96 @@ def test_token_mode_desktop_ui_can_write(token_server, browser):
     finally:
         ctx.close()
 
+
+# ---------------- 2026-10-22 用户视角收口 ----------------
+
+def test_task_modal_opens_with_status_priority_and_due_in_view(ui):
+    """点开任务第一眼要能看到状态/优先级/截止/负责 AI。
+
+    以前这些字段排在「验收标准 + 相关代码 + 前置任务」之后，1440×900 的窗口里
+    y≈870、弹窗可视区底部只有 ≈785 —— 想改个状态先得滚一段，而这恰好是最常改的字段。
+    """
+    page, api, _ = ui
+    p = make_project(api, "任务弹窗首屏")
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "要改状态的任务"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('任务弹窗首屏')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.locator(".tcard:has-text('要改状态的任务')").click()
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    page.eval_on_selector("#task-modal .mbody", "el => { el.scrollTop = 0; }")
+
+    body = page.locator("#task-modal .mbody").bounding_box()
+    assert body, "任务弹窗主体没渲染出来"
+    for sel, label in (("#t-status", "状态"), ("#t-priority", "优先级"),
+                       ("#t-due", "截止日期"), ("#t-agent", "负责 AI")):
+        box = page.locator(sel).bounding_box()
+        assert box, f"{label} 字段没渲染出来"
+        assert box["y"] >= body["y"] - 1 and box["y"] + box["height"] <= body["y"] + body["height"] + 1, \
+            f"{label} 在首屏之外（field y={box['y']:.0f}, modal body bottom={body['y'] + body['height']:.0f}）"
+
+
+def test_readiness_updates_in_place_after_task_create_and_status_change(ui):
+    """详情页里建任务 / 改状态后，左侧就绪度要立即更新，不用重新进项目。
+
+    旧实现只从 /api/stats 的全局快照算就绪度，而保存任务只重取单项目 ——
+    任务已经在看板上了，面板还写着「已有任务清单 ✗」。
+    """
+    page, api, _ = ui
+    p = make_project(api, "就绪度即时刷新", background="背景", handoff_note="交接说明",
+                     next_action="下一步")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('就绪度即时刷新')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    assert page.locator("#readiness-body .rd-ring").inner_text().strip() == "75"
+
+    page.click("[data-act='openTaskModal']")
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    page.fill("#t-title", "新任务")
+    page.select_option("#t-status", "进行中")
+    page.click("[data-act='saveTask']")
+    page.wait_for_selector("#task-modal", state="hidden", timeout=10000)
+    page.wait_for_function(
+        "() => document.querySelector('#readiness-body .rd-ring')?.textContent.trim() === '100'",
+        timeout=10000)
+
+    page.locator(".tcard:has-text('新任务')").click()
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    page.select_option("#t-status", "待办")
+    page.click("[data-act='saveTask']")
+    page.wait_for_selector("#task-modal", state="hidden", timeout=10000)
+    page.wait_for_function(
+        "() => document.querySelector('#readiness-body .rd-ring')?.textContent.trim() === '90'",
+        timeout=10000)
+
+
+def test_today_shows_task_status_blocked_reason_and_is_keyboard_usable(ui):
+    """今日面板：显示任务状态（而不是项目状态），阻塞带原因，卡片可键盘打开。"""
+    page, api, _ = ui
+    p = make_project(api, "今日状态项目", status="进行中")
+    api.post(f"/api/projects/{p['id']}/tasks",
+             {"title": "今天要做的事", "status": "待办", "priority": "高"})
+    api.post(f"/api/projects/{p['id']}/tasks",
+             {"title": "今天卡住的事", "status": "阻塞", "priority": "高",
+              "blocked_reason": "在等接口文档"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+
+    page.click("[data-act='openToday']")
+    page.wait_for_selector("#today-modal.show", timeout=10000)
+    todo_row = page.locator("#today-body .tcard:has-text('今天要做的事')")
+    text = todo_row.inner_text()
+    assert "· 待办" in text, f"今日列表没显示任务状态：{text}"
+    assert "· 进行中" not in text, f"把项目状态当任务状态显示了：{text}"
+
+    blocked_row = page.locator("#today-body .tcard:has-text('今天卡住的事')")
+    assert "⛔ 在等接口文档" in blocked_row.inner_text(), "阻塞任务没带原因"
+
+    # 键盘可达：旧模板的 div 没有 tabindex/data-keyact，focus() 之后 Enter 什么也不会发生
+    todo_row.focus()
+    page.keyboard.press("Enter")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    assert "今日状态项目" in page.locator("#view-detail").inner_text()
+

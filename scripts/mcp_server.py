@@ -676,7 +676,9 @@ def t_today(args: dict) -> str:
     for t in tasks:
         due = f" 📅{t['due_date']}" if t.get("due_date") else ""
         refs = " 📍" + "、".join(t["refs"]) if t.get("refs") else ""
-        mark = "（阻塞中，先解）" if t.get("status") == "阻塞" else ""
+        mark = (f"（⛔ 阻塞中：{t['blocked_reason']}，先解）"
+                if t.get("status") == "阻塞" and t.get("blocked_reason")
+                else ("（阻塞中，先解）" if t.get("status") == "阻塞" else ""))
         lines.append(f"  [{t['priority']}]{mark} {t['title']} —— {t['project_name']}{due}{refs}")
     return _agent_text("\n".join(lines), args)
 

@@ -186,7 +186,11 @@ function renderMarkdown(text) {
 function renderReadiness(pid) {
   const body = document.getElementById("readiness-body");
   if (!body) return;
-  const rd = (stats && stats.readiness || []).find(x => x.id === pid);
+  // 优先用项目详情里随 current 一起回来的那份：详情页内的任务新建/改状态/删除
+  // 都会重取 current 并重绘，而全局 stats 只由总览刷新 —— 只看 stats 的话
+  // 会出现「任务明明在下面，就绪度却写着没有任务清单」的旧快照。
+  const rd = (current && current.id === pid && current.readiness)
+    || ((stats && stats.readiness || []).find(x => x.id === pid));
   if (!rd) { body.innerHTML = '<div style="font-size:12px;color:var(--text-faint)">暂无数据</div>'; return; }
   const cls = rd.score >= 80 ? "rd-hi" : rd.score >= 50 ? "rd-mid" : "rd-lo";
   const tip = rd.score >= 80 ? "交接准备充分，可以放心交给新智能体 👍" : rd.score >= 50 ? "基本可用，建议按清单补齐缺口" : "交接信息不足，强烈建议补全再交接";

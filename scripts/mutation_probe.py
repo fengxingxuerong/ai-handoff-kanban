@@ -705,6 +705,32 @@ MUTATIONS: list[dict] = [
         "why": "增量包把 start_here 也裁成「只列变化的」：没变化时看起来没事可做，恰恰丢掉接手方最需要的一节",
         "tests": ["tests/test_api.py"],
     },
+    {
+        "id": "project_readiness_not_in_detail",
+        "file": "app/main.py",
+        "old": '    p["readiness"] = {"score": _readiness_score(p), "items": _readiness_items(p)}',
+        "new": '    p.pop("readiness", None)',
+        "why": "详情不再随项目返回就绪度：前端只能退回全局 stats 旧快照，建完任务左侧还写着「没有任务清单」",
+        "tests": ["tests/test_api.py"],
+    },
+    {
+        "id": "today_blocked_reason_dropped",
+        "file": "app/main.py",
+        "old": '                "blocked_reason": t.get("blocked_reason") or "",',
+        "new": '                "blocked_reason": "",',
+        "why": "今日列表不再带阻塞原因：代理只看到「阻塞中」，仍可能把它当普通待办直接开工",
+        "tests": ["tests/test_api.py", "tests/test_mcp_server.py"],
+    },
+    {
+        "id": "sample_dates_hardcoded_again",
+        "file": "app/main.py",
+        "old": "    def at(days_ago: int = 0) -> str:\n"
+               "        return (now - timedelta(days=days_ago)).strftime(\"%Y-%m-%d %H:%M\")",
+        "new": "    def at(days_ago: int = 0) -> str:\n"
+               "        return \"2026-09-14 09:30\"",
+        "why": "示例时间戳退回写死：新装用户过几周就看到「37 天没记录」和成排停滞告警",
+        "tests": ["tests/test_misc.py"],
+    },
 ]
 
 

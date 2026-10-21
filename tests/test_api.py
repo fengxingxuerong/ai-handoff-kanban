@@ -1231,3 +1231,49 @@ def test_bulk_delete_refuses_missing_id_without_deleting(app_client):
     assert status == 404, body
     _, data = app_client.get("/api/projects")
     assert any(x["id"] == p["id"] for x in data["projects"]), "部分 id 不存在时仍然删了项目"
+
+
+# ---------------- 2026-10-22 用户视角收口：详情就绪度 / 今日列表 ----------------
+
+def test_project_detail_readiness_tracks_task_changes(server):
+    """详情页改完任务，就绪度必须跟着这一份详情刷新。
+
+    以前就绪度只从 /api/stats 的全局快照取，而详情页保存任务后只重取单项目；
+    结果任务卡已经在下面了，左侧还写着「已有任务清单 ✗ / 任务有推进 ✗」，
+    要重新进项目才恢复 —— 用户会以为任务没存上。
+    """
+    _, p = server.create_project("就绪度刷新项目", background="背景",
+                                 handoff_note="交接说明", next_action="下一步")
+    _, detail = server.get(f"/api/projects/{p['id']}")
+    assert detail["readiness"]["score"] == 75
+    assert {it["key"] for it in detail["readiness"]["items"]} == {
+        "handoff", "next", "bg", "tasks", "active"}
+
+    _, t = server.post(f"/api/projects/{p['id']}/tasks",
+                       {"title": "进行中的活", "status": "进行中"})
+    _, detail = server.get(f"/api/projects/{p['id']}")
+    assert detail["readiness"]["score"] == 100
+
+    server.patch(f"/api/tasks/{t['id']}", {"status": "待办"})
+    _, detail = server.get(f"/api/projects/{p['id']}")
+    assert detail["readiness"]["score"] == 90, "任务改回待办后「任务有推进」应当立刻灭掉"
+    active = next(it for it in detail["readiness"]["items"] if it["key"] == "active")
+    assert active["ok"] is False
+
+
+def test_today_items_carry_task_status_and_blocked_reason(server):
+    """「现在能做什么」列表里，状态说的是**任务**状态，不是项目状态；
+    阻塞任务还要带上原因，否则人会把它当成普通待办直接开工。"""
+    _, p = server.create_project("今日状态项目", status="进行中")
+    server.post(f"/api/projects/{p['id']}/tasks",
+                {"title": "今天要做的事", "status": "待办"})
+    server.post(f"/api/projects/{p['id']}/tasks",
+                {"title": "今天卡住的事", "status": "阻塞",
+                 "blocked_reason": "在等接口文档"})
+
+    _, body = server.get("/api/today")
+    rows = {t["title"]: t for t in body["tasks"]}
+    assert rows["今天要做的事"]["status"] == "待办"
+    assert rows["今天要做的事"]["blocked_reason"] == ""
+    assert rows["今天卡住的事"]["status"] == "阻塞"
+    assert rows["今天卡住的事"]["blocked_reason"] == "在等接口文档"
