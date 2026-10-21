@@ -13,7 +13,7 @@
 
 | 路径 | 职责 |
 | --- | --- |
-| `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程。**2026-09-26 起分轮拆出（3596 行 → 下表 23 个模块），本文件只留路由编排、数据层临界区与有全局状态的部分** |
+| `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程。**2026-09-26 起分轮拆出（3596 行 → 下表 24 个模块），本文件只留路由编排、数据层临界区与有全局状态的部分** |
 | `app/taskgraph.py` | 任务依赖图：`clean_deps` / `task_graph` / `has_cycle` / `topo_order` / `_break_dep_cycles` / `executable_tasks` / `deps_blocking`（与 /api/inbox 共用的"被前置挡住"谓词，2026-10-07 抽出）/ `_dedupe_ids` / `clean_refs`（纯函数，从 main 逐字搬来） |
 | `app/due.py` | 日期类判定（纯函数）：截止日期归一 `_clean_due_date`、状态判定 `_due_state`、记忆过期 `_memory_expired`、记忆召回排序 `recall_memories`（2026-10-11 对标 claude-mem Awareness：决策/坑/约定优先于事实，同类内时间新在前；AGENTS.md 的 12 条窗口与 AI 简报的 10 条窗口共用一套，避免晚写的背景事实把早记的坑挤出窗口） |
 | `app/journal.py` | 过程轨迹与验收标准的清洗与上限（纯函数，2026-10-07 从 main 拆出）：`append_journal`（溢出**折叠成摘要**的写入侧）/ `compress_journal` / `clean_journal` / `clean_acceptance` 与 `MAX_JOURNAL*`、`MAX_ACCEPTANCE*`、`JOURNAL_SNIPPET`。**这些上限常量的 monkeypatch 点在这里**（main 是转发别名，patch 别名改不到函数读的全局）；时钟由 main 的 `_append_journal` 包装注入，本模块不 import main |
@@ -21,6 +21,7 @@
 | `app/idem.py` | 创建幂等键 `client_ref` 的清洗与记账（纯函数） |
 | `app/security.py` | 本地访问防护与落盘白名单（纯函数，2026-10-14 从 main 拆出）：`EXPORT_SUFFIXES` / `ALLOWED_HOSTS` / `host_of` / `origin_allowed` / `request_verdict`（Host→Origin→Token 三关判定，返回 `(状态码, 原因)`、0 = 放行）/ `forbidden_roots` / `is_forbidden_target`（**两条边界都 fail-closed**：target 解析失败拒绝；某条黑名单 root 解析失败**也拒绝** —— 2026-10-14 用户拍板收紧，原先 `continue` 等于"那条 root 不存在"的 fail-open 窗口。与放行名单 TEMP/TMP 的不对称是有意的：放行名单算不出来只是少给一个许可，安全方向）。main 里是 `_host_of` / `_forbidden_roots` / `_is_forbidden_target` 同名转发，测试与 monkeypatch 路径不变。**五条探针（`guard_host_ipv6` / `guard_token_methods` / `guard_origin_reversed` / `forbidden_roots_drops_appdata` / `forbidden_target_fails_open` / `forbidden_root_unresolvable_allowed`）的目标文件在这里** |
 | `app/handoff_meta.py` | 交接包小节解析 `parse_handoff_sections` 与尺寸预算 `context_budget` / `_budget_note`，以及**条目级尺寸估算** `text_size` / `size_note` / `estimate_tokens`（2026-10-11 对标 claude-mem 的渐进式披露最小落地：给记忆检索输出报每条成本，HTTP / MCP / 前端记忆面板三处同一口径；口径与纪律见硬性约定 29） |
+| `app/context_slice.py` | 接手包切片与增量（纯函数，2026-10-21 第七轮竞品吸取）：`CONTEXT_SECTIONS`（可选小节白名单，`project` 始终返回）/ `parse_context_sections`（不认识的 name 400，不静默忽略）/ `parse_since`（`YYYY-MM-DD` / `HH:MM` / ISO `T` 归一，非法 400）/ `changed_since`（分钟精度、含边界；缺时间戳 fail-open，避免老数据在增量里永久消失）/ `has_timestamp`（只用于"这几条没时间戳"计数）。**三条探针 `context_unknown_section_ignored` / `context_since_exclusive` / `context_delta_filters_start_here` 的目标文件涉及这里与 main 的 `project_context`** |
 | `app/sessions.py` | 会话扫描与文本提取（目录遍历有界、只读文件尾部、源内外校验） |
 | `app/gitinfo.py` | git 集成（2026-10-06 从 main 搬出）：`git_snapshot` / `_run_git` / `_git_cache`。只读、列表传参、绝不拼 shell。**`_run_git`/`_git_cache`/`GIT_TIMEOUT` 的 monkeypatch 点在这里**（main 里是转发别名） |
 | `app/repo_watch.py` | 仓库变化雷达（2026-10-18）：按 `repo_path` 扫描 git，检测未提交/新提交，按任务完成度给建议进度；`repo_watch.json` 基线 + `repo_audit.jsonl` 确认审计（**第三条追加型存储，有上限**：超 `MAX_AUDIT_LINES=2000` 裁到 `KEEP_AUDIT_ON_TRIM=1000`，`ack` 的追加+裁剪共用跨进程锁；删项目走 `forget(pids)` 清孤儿基线，单个/批量两处都调）。**只有用户显式确认才写 progress**；总览巡检吃 `_git_cache` 60s 快照、点名单个项目绕过缓存要现值（2026-10-18 实测：8 真仓库冷扫 1.58s / 40 次子进程，缓存命中 2ms / 0 次）。**备份/恢复带上基线**（与项目数据同拍同回滚，来源里没有 = 不动现状；last-good 等与线上同目录的来源靠 `same_as_live` 跳过）；**导出/导入有意不带**（跨机后 repo_path 指不到同一仓库，与 `_client_refs` 同理）；`repo_audit.jsonl` 不随备份（与 `usage.jsonl` 同为本地操作记录） |
@@ -51,7 +52,7 @@
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复" |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往 `app/` 注入 68 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"）；2026-10-14 拆出 `app/security.py` 时把四条安全探针的 `file` 串同步改到新家（不改就是哑火），并按用户拍板收紧 fail-closed 边界，新增 `forbidden_target_fails_open` 与 `forbidden_root_unresolvable_allowed` 增至 55 条。**2026-10-18**：还原时**连 mtime 一起拨回**（`_restore_mtime`，用例 `tests/test_mutation_probe.py`）—— 探针每跑一次会把探过的文件改写两遍，只还原内容就会把它们全刷成"刚刚改过"，而 `frozen_smoke` 判断"exe 是否落后于源码"靠的正是 mtime，于是那条门禁在**每次跑完探针之后稳定假红**（实测 2026-10-18：10 通过 / 1 失败，点名一串刚改过的文件，而同一次里"内嵌前端就是仓库这一份"是过的 —— 产物其实不旧）。一条本该只报"忘重打包"的门禁被噪音盖住，人很快就对它脱敏。2026-10-18 晚随雷达收口（v1.7.3）再加 9 条（55→64）：首扫脏仓库静默、建议把进度往回拽、审计无上限、总览绕过缓存、删项目留孤儿基线、备注无长度上限；备份/恢复同拍同回滚的三条（备份丢基线、坏来源清基线、同目录假回滚）—— 每条先 `--only` 单跑确认被杀、再随全量复跑。2026-10-19 第六轮竞品吸取再加 4 条（64→68）：离开阻塞不清原因、stale 判定失效、去重返回假 id、URL ref 被当本机坐标 —— 同样先 `--only` 确认被杀 |
+| `scripts/mutation_probe.py` | **变异探针**：往源码注入 75 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"）；2026-10-14 拆出 `app/security.py` 时把四条安全探针的 `file` 串同步改到新家（不改就是哑火），并按用户拍板收紧 fail-closed 边界，新增 `forbidden_target_fails_open` 与 `forbidden_root_unresolvable_allowed` 增至 55 条。**2026-10-18**：还原时**连 mtime 一起拨回**（`_restore_mtime`，用例 `tests/test_mutation_probe.py`）—— 探针每跑一次会把探过的文件改写两遍，只还原内容就会把它们全刷成"刚刚改过"，而 `frozen_smoke` 判断"exe 是否落后于源码"靠的正是 mtime，于是那条门禁在**每次跑完探针之后稳定假红**（实测 2026-10-18：10 通过 / 1 失败，点名一串刚改过的文件，而同一次里"内嵌前端就是仓库这一份"是过的 —— 产物其实不旧）。一条本该只报"忘重打包"的门禁被噪音盖住，人很快就对它脱敏。2026-10-18 晚随雷达收口（v1.7.3）再加 9 条（55→64）：首扫脏仓库静默、建议把进度往回拽、审计无上限、总览绕过缓存、删项目留孤儿基线、备注无长度上限；备份/恢复同拍同回滚的三条（备份丢基线、坏来源清基线、同目录假回滚）—— 每条先 `--only` 单跑确认被杀、再随全量复跑。2026-10-19 第六轮竞品吸取再加 4 条（64→68）：离开阻塞不清原因、stale 判定失效、去重返回假 id、URL ref 被当本机坐标 —— 同样先 `--only` 确认被杀。2026-10-19 v1.8.1 评测修复轮再加 4 条（68→72）：空回复当成功直接返回（降级链不触发）、/next 丢阻塞原因、分配器吃阻塞任务、MCP 可做列表无 ⛔ 标记 —— 同样先 `--only` 确认被杀；`assign_ignores_priority` 的 `old` 随 allocatable 改写同步更新（不改就是哑火）。2026-10-21 第七轮竞品吸取再加 3 条（72→75）：不认识的 sections 被静默忽略、since 改成开区间漏掉同分钟改动、增量包把 start_here 也裁成"只列变化的"——同样先 `--only` 单跑确认被杀。 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打包 |
 
@@ -347,6 +348,11 @@ rem 打包后必跑：冻结版自查（会短暂弹出应用窗口，脚本自�
     "可执行"和界面给的不一样。结构性钉子：
     `test_next_task_tool_delegates_instead_of_recomputing`。响应里的 `total`/`done`
     是用来分清"没任务 / 都完成 / 在等前置"三种情况的（文案要不同，别笼统说"都在等前置"）。
+    **可做列表必须带阻塞标记**（2026-10-19 v1.8.1）：状态=阻塞的任务也在 `next` 里
+    （先解阻塞也算推进），条目带 `status`/`blocked_reason`，文本行由 `_blocked_mark()`
+    加 " · ⛔ 阻塞中：原因（先解阻塞，别直接开工）"；blocked 小节同时说清"等谁"与
+    "为什么卡"。实盘教训：不带标记的时代理把它当普通待办直接开工，而同一条任务在
+    /today 里明明带着标记 —— **列表允许它出现，但必须让它无法被误认**。
   - **resources / prompts 是同一批内容的另一个入口，不是第二套实现**：`resources/read`
     必须复用工具 handler，`prompts` 正文只引用现有工具与资源。指向不存在的对象时报
     `-32602`，不许回一份空壳装作成功；`CAPABILITIES` 里声明了什么，`handle()` 就得真能答。
@@ -525,7 +531,9 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | .venv\Scripts\python.exe s
     字段是超集，硬挡等于把用户关在门外，但事后发现字段被规范化掉更糟。
     接手包顶层与 `project` / `tasks` 的字段集合由
     `test_context_package_field_set_is_pinned` 钉住：加字段要有意为之
-    （v2 = 2026-10-06：任务 slim 带 `acceptance`、顶层带 `expired_memory_count`）。
+    （v2 = 2026-10-06：任务 slim 带 `acceptance`、顶层带 `expired_memory_count`；
+    v3 = 2026-10-19：`start_here` 条目带 `status`，阻塞中的带 `blocked_reason` ——
+    "可做"列表不带标记时代理会把阻塞任务当普通待办直接开工）。
 15. **同一条清单不许前后端各写一份**：导出扩展名白名单是 `EXPORT_SUFFIXES`（2026-10-14 起住在
     `app/security.py`，main 里是同名转发），
     前端 `saveAgentsMD` 那条正则必须与它一字不差 —— 以前前端少一条 `.markdown`，
@@ -914,15 +922,38 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 当前进度与下一步
 
-**状态：v1.8.0（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
+**状态：v1.9.0（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 里写的版本号与 `app/version.py` 同数 ——
 2026-10-18 之前这一条**没有门禁**，1.5.0 落地后两份文档里都还是 1.4.0（`1.5.0` 字样出现 0 次）。
 1.2.0 → 1.2.1（2026-10-07）只带一个用户可见修复（`/api/inbox` 补「依赖没满足的不算」过滤，见提交 317a239）与 journal.py 拆分重构（32b2b32）。
+**1.8.1 → 1.9.0（2026-10-21）：第七轮竞品吸取轮（一次功能轮）。** 只落调研里性价比最高的一条：
+接手包按需切片 + 增量。`GET /api/context/{pid}` 与 MCP `kanban_context` 新增 `sections`
+（`memories` / `code_reality` / `start_here` / `tasks` / `readiness` 白名单，`project` 始终返回；
+不认识的 name 400）与 `since`（只列该时刻之后变化的 tasks / memories；分钟精度、含边界，
+同一分钟会重复不会漏；缺时间戳 fail-open 并计数）。**`start_here` / `readiness` / `code_reality`
+在增量里仍全量** —— 只给变化项会让代理误以为"没变化 = 没活干"。顶层新增 `slice` 元数据
+（省略小节、变化/未变计数、`note`），`SCHEMA_VERSION` 3→4。实现拆在 `app/context_slice.py`
+（纯函数），HTTP 与 MCP 共用一份判定，MCP 直链带上同样的 `sections` / `since`。
+验证：探针 72→75（三条先 `--only` 单跑确认被杀），新增纯函数 5 条（10 例）+ HTTP 4 条 + MCP 3 条；
+`ci_local --with-exe` 11 步全绿（明细见文末「验证基线」）。
+**1.8.0 → 1.8.1（2026-10-19）：评测轮修复（真实项目端到端测试撞出来的两处，修复轮）。**
+先对真实运行的实例做了三轮端到端驱动（HTTP 接口 / MCP stdio / 真浏览器），两处问题都是真实使用中显形的：
+① **「现在可以做」不再撒谎**：`/next` 与接手包 `start_here` 条目带 `status`（阻塞时带 `blocked_reason`，
+`SCHEMA_VERSION` 2→3），MCP `kanban_next_task` 与接手包文本行带「⛔ 阻塞中：原因（先解阻塞，别直接开工）」，
+自动分配 `allocatable` 同步排除阻塞 —— 实盘代理把无标记的阻塞任务当普通待办直接开工，而同一条任务
+在 /today 里明明带着标记。② **LLM 网关空回复按失败处理**：推理模型（deepseek-v4 系）把
+`max_tokens=3000` 烧在 reasoning 上、HTTP 200 但 content 空串时，以前记 ok=true 直接返回，
+其它可用端点永远轮不到 —— 症状是随机的 500「LLM 返回为空」与 AGENTS.md 静默退回本地版；
+现在记 ok=False、进错误聚合、继续走降级链（含 kimi temp=1 重试分支）。
+验证：探针 68→72、LLM 降级 +4、/next 标记 +2、分配排除 +1、MCP ⛔ +1；`ci_local --with-exe` 11 步全绿
+（明细见文末「验证基线」）。
 **1.7.4 → 1.8.0（2026-10-19）：第六轮竞品吸取轮（一次功能轮）。** 用户拍板「五条全落」：
 ① **阻塞原因 `blocked_reason`**：只在状态=阻塞时保留、离开自动清（清也不是静默丢——journal 记「原阻塞原因」，
-停留中换原因记「阻塞原因更新：旧 → 新」）；四个出口（任务卡 ⛔、待拍板列表、接手包 slim、交接包小节
-「阻塞中的任务（为什么卡着）」）都带着它；MCP 侧没记原因会提醒一句、离开阻塞时传原因会如实说「没落上」。
+停留中换原因记「阻塞原因更新：旧 → 新」）；各出口（任务卡 ⛔、待拍板列表、接手包 slim、交接包小节
+「阻塞中的任务（为什么卡着）」；2026-10-19 起「可做」类列表 `/next`、接手包 `start_here`、
+MCP next_task 也带状态与原因 —— **不带标记的"现在可以做"是句谎话**，自动分配 `allocatable`
+同步排除阻塞）都带着它；MCP 侧没记原因会提醒一句、离开阻塞时传原因会如实说「没落上」。
 ② **`done_at` +「验收后代码又变了」**：进入已完成记下时刻（反复保存不清首次值），
 `repo_watch.stale_done_tasks` 只认提交时间（脏文件没有时间戳、不猜）、没有 done_at 的老任务跳过、
 同分钟不报（验收与提交先后说不清）——两处出口（`/api/projects/{pid}/git` 与 `/api/repo-watch`）
@@ -984,10 +1015,15 @@ AI 简报，de1dfe2）；随后第四轮对标 claude-mem（99k★）深挖并�
 | 五 | 上下文与排期 | git 集成（只读）、任务 `refs`（代码位置）、任务 `depends_on`（依赖/拓扑排序/可执行任务） |
 | 六 | 功能扩展与对标 | 截止日期、看板拖拽、数据导入导出、全局搜索（Ctrl+K）、深浅色主题、脱敏、健康趋势预警、交付演练脚本、真实模型端到端测试、版本号贯通、1.0.0 转正 |
 
-**验证基线（2026-10-19 v1.8.0 第六轮竞品吸取轮：阻塞原因 / 验收后变化提示 / refs 硬化 / 去重修假 id /
-复制编号，3 条 MCP 契约 + 2 条 API + 1 条 git + 2 条雷达 + 2 条 E2E（阻塞闭环、stale 提示）+ 4 条探针）**：
-`pytest` 763 收集（758 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
-35 个测试文件、717 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+**验证基线（2026-10-21 v1.9.0 第七轮竞品吸取轮：接手包 `sections` / `since` 切片与增量，
+5 条纯函数（10 例）+ 4 条 HTTP + 3 条 MCP + 3 条探针）**：
+`pytest` 788 收集（783 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（门槛 90%）/
+35 个测试文件、737 个 `def test_` 且**无重名**（数一遍对不上 `--collect-only` 就是有用例被静默覆盖）。
+2026-10-21（v1.9.0）第七轮吸取：`ci_local --with-exe` 11 步全绿：pytest 62.3s /
+变异探针 299.0s（75 条全被杀，新增 3 条先 `--only` 单跑确认被杀）/ 场景 32/32 /
+发版回归 16 通过 + 2 明示未验 / 交付演练 21/0 / 只读体检 12/0 / 真实浏览器 16/0；
+重打包（PE 版本资源 v1.9.0）+ `frozen_smoke` 11/0。
+全量 `pytest` 788 收集：783 通过 / 5 跳过 / 分支覆盖 93%。
 2026-10-19（v1.8.0）第六轮吸取：`ci_local --with-exe` 11 步全绿：pytest 109.1s /
 变异探针 319.6s（68 条全被杀，四条新探针先 `--only` 单跑确认被杀）/ 场景 32/32 /
 发版回归 16 通过 + 2 明示未验 / 交付演练 21/0 / 只读体检 12/0 / 真实浏览器 16/0；

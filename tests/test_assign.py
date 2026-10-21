@@ -53,6 +53,25 @@ def test_allocatable_done_tasks_in_no_status():
     assert all(t["id"] == "w" for t in allocatable(tasks, "高"))
 
 
+def test_allocatable_skips_blocked_status():
+    """状态=阻塞的任务不参与自动分配：它"依赖已就绪"是因为卡的从来不是前置，
+    而是缺权限/缺环境之类 —— 自动派给谁都是推一块推不动的石头。
+    （/next 与接手包仍会列出它，但带 ⛔ 与原因，让人去解阻塞；分配器是不带标记
+    的自动动作，所以排除。）
+
+    2026-10-19：以前 allocatable 直接用 executable_tasks，阻塞任务会被
+    一键分配给代理。上面那条用例的旧注释一直写着"阻塞不在候选"，但代码里
+    没有任何一处真的排掉它。
+    """
+    tasks = [
+        _task("b", priority="高"),
+        {"id": "s", "title": "卡住的活", "priority": "高", "status": "阻塞",
+         "blocked_reason": "缺权限", "agent": ""},
+    ]
+    got = [t["id"] for t in allocatable(tasks, "高")]
+    assert got == ["b"], f"阻塞任务不该进分派候选：{got}"
+
+
 def test_allocatable_unknown_priority_raises():
     with pytest.raises(ValueError):
         allocatable([], "紧急")

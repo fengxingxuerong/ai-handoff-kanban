@@ -26,11 +26,16 @@ DEFAULT_PRIORITY = "高"
 def allocatable(tasks: list[dict], priority: str = DEFAULT_PRIORITY) -> list[dict]:
     """合格候选：`priority` 匹配 + 未完成 + 依赖已就绪（复用 executable_tasks 口径）。
 
+    状态=阻塞的任务不参与分配（2026-10-19）：它"依赖已就绪"是因为阻塞的不是前置，
+    而是缺权限/缺环境之类 —— 自动派给谁都是在推一块推不动的石头。
+    /next、接手包会把它带标记列出来让人处置，但分配器不该把它算成可开工。
+
     只做筛选不做分配；写路径在 `apply_assign` 的锁内完成。返回任务 dict 的引用。
     """
     if priority not in PRIORITY_SET:
         raise ValueError(f"未知优先级：{priority!r}，可选 {PRIORITY_SET}")
-    return [t for t in executable_tasks(tasks) if t.get("priority") == priority]
+    return [t for t in executable_tasks(tasks)
+            if t.get("priority") == priority and t.get("status") != "阻塞"]
 
 
 def plan_assign(tasks: list[dict], agent: str, priority: str = DEFAULT_PRIORITY,

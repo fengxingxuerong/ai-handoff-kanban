@@ -90,7 +90,22 @@ from pathlib import Path
 # 只提示绝不自动改状态。③ refs 检查硬化：跳过 :// URL、剥 #片段。④ 记忆去重命中
 # 返回**盘上已有那条**（旧实现给假 id，拿去删 404）。⑤ 任务号一键复制（界面）。
 # 探针 64→68；新增 3 条 MCP 契约、2 条 API、1 条 git、2 条雷达、2 条 E2E。
-__version__ = "1.8.0"
+# 1.8.1（2026-10-19）：评测轮修复（真实项目端到端测试发现的两处）。① 「现在可以做」
+# 不再撒谎：/next、接手包 start_here 条目带 status（阻塞时带 blocked_reason），
+# MCP next_task 与接手包文本行带 ⛔ 与原因 —— 实盘代理把无标记的阻塞任务当普通待办
+# 直接开工；自动分配（allocatable）同步排除阻塞（推不动的石头不该派给谁）。
+# ② LLM 网关把空回复（推理模型烧光 max_tokens、HTTP 200 但 content 空串）记为失败
+# 并继续走降级链（含 kimi temp=1 重试分支）—— 以前当成功返回，其它可用端点永远
+# 轮不到，症状是随机的 500「LLM 返回为空」与 AGENTS.md 静默退回本地版。
+# 探针 68→72；SCHEMA_VERSION 2→3（start_here 条目形状变化）。
+# 1.9.0（2026-10-21）：第七轮竞品吸取（功能轮）。接手包支持按需切片与增量：
+# /api/context/{pid} 与 MCP kanban_context 新增 sections（可选小节白名单，
+# project 始终返回）与 since（只列该时刻之后变化的 tasks/memories，含边界、缺时间戳
+# fail-open）。start_here/readiness/code_reality 在增量里仍全量 —— 只给变化项会让代理
+# 误以为"没变化 = 没活干"。顶层新增 slice 元数据（含省略小节、变化/未变计数与说明），
+# SCHEMA_VERSION 3→4；探针 72→75（不认识的 sections 静默忽略、since 开区间、
+# 增量裁掉 start_here）。
+__version__ = "1.9.0"
 
 ROOT = Path(__file__).resolve().parent.parent
 

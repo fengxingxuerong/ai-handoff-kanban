@@ -428,6 +428,25 @@ def test_add_task_with_refs_roundtrip(mcp):
     assert "涉及：app/main.py:120" in detail
 
 
+def test_next_task_tool_marks_blocked_tasks(mcp):
+    """阻塞中的任务会出现在"现在可以做"里（先解阻塞也算推进），但必须带 ⛔ 与原因。
+
+    2026-10-19 实测：不带标记时代理把它当普通待办直接开工 —— 同一条任务在
+    /today 与交接行里都带着阻塞标记，"可做"列表却看起来毫无异常。
+    """
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "带阻塞的活"})[0])
+    tid = last_id(mcp.tool("kanban_add_task",
+                           {"project_id": pid, "title": "等权限的活", "priority": "高",
+                            "status": "阻塞", "blocked_reason": "等隔壁团队开权限"})[0])
+    text, is_err = mcp.tool("kanban_next_task", {"project_id": pid})
+    assert not is_err
+    line = next(l for l in text.splitlines() if tid in l)
+    assert "⛔ 阻塞中：等隔壁团队开权限" in line, line
+
+    ctx, _ = mcp.tool("kanban_context", {"project_id": pid})
+    assert "⛔ 阻塞中：等隔壁团队开权限" in ctx, ctx
+
+
 def test_next_task_tool(mcp):
     """接手时最该先问的问题：现在能动手的是哪个"""
     pid = last_id(mcp.tool("kanban_create_project", {"name": "有依赖的活"})[0])
@@ -649,6 +668,50 @@ def test_context_tool_returns_live_link(mcp):
     text, err = mcp.tool("kanban_context", {"project_id": pid})
     assert not err
     assert f"127.0.0.1:18320/api/context/{pid}" in text
+
+
+def test_context_tool_sections_are_sliced_and_link_keeps_params(mcp):
+    """MCP 是代理最常用的入口：`sections` 要真的少给，且直链不能又指回整包。"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "MCP 切片"})[0])
+    mcp.tool("kanban_add_task", {"project_id": pid, "title": "一条任务"})
+
+    text, err = mcp.tool("kanban_context", {"project_id": pid, "sections": ["tasks"]})
+    assert not err, text
+    assert "本次省略小节" in text and "code_reality" in text, text
+    assert "代码现实" not in text, "code_reality 被裁掉后不该再渲染代码现实"
+    assert "交接就绪度" not in text, "readiness 被裁掉后不该再渲染"
+    assert "sections=tasks" in text, "直链要带上同样的切片参数"
+
+    text, err = mcp.tool("kanban_context", {"project_id": pid, "sections": []})
+    assert not err, text
+    assert "现在就能动手" not in text and "待办：" not in text
+    assert "sections=" in text, "空数组也是一次明确的切片，直链要能复现"
+
+
+def test_context_tool_delta_reports_counts_and_keeps_start_here(mcp):
+    """增量包不能把 start_here 也裁掉：代理会以为"没变化 = 没活干"。"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "MCP 增量"})[0])
+    mcp.tool("kanban_add_task", {"project_id": pid, "title": "老任务"})
+
+    text, err = mcp.tool("kanban_context", {"project_id": pid, "since": "2999-01-01"})
+    assert not err, text
+    assert "增量模式" in text and "任务 0 条" in text, text
+    assert "现在就能动手的任务" in text and "老任务" in text, \
+        "start_here 必须保持全量，否则增量包看起来像没事可做"
+    assert "since=2999-01-01" in text
+
+
+def test_context_tool_rejects_unknown_sections_and_bad_since(mcp):
+    """schema 里声明了 enum，就要真的拦下 —— 传错名字不能静默变成另一份包。"""
+    pid = last_id(mcp.tool("kanban_create_project", {"name": "MCP 参数校验"})[0])
+    bad_sections, is_err = mcp.tool("kanban_context",
+                                    {"project_id": pid, "sections": ["background"]})
+    assert is_err is True, bad_sections
+    assert "background" in bad_sections and "只能是" in bad_sections, bad_sections
+
+    bad_since, is_err = mcp.tool("kanban_context", {"project_id": pid, "since": "下周三"})
+    assert is_err is True, bad_since
+    assert "YYYY-MM-DD" in bad_since, bad_since
 
 
 def test_context_includes_review_task_and_acceptance(mcp):

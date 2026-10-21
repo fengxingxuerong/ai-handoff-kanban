@@ -1,0 +1,6808 @@
+{
+ "generated": "2026-10-21",
+ "query_count": 17,
+ "total_hits_unique": 321,
+ "kept": {
+  "sindresorhus/awesome": {
+   "full_name": "sindresorhus/awesome",
+   "stars": 521850,
+   "pushed_at": "2026-09-02T02:10:47Z",
+   "created_at": "2014-07-11T13:42:37Z",
+   "description": "😎 Awesome lists about all kinds of interesting topics [NOTE: Pull requests are temporarily disabled until I have a chance to catch up with the existing ones]",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "lists",
+    "resources",
+    "unicorns"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "claude code task manager in:name,description,readme stars:>10"
+   ]
+  },
+  "public-apis/public-apis": {
+   "full_name": "public-apis/public-apis",
+   "stars": 490805,
+   "pushed_at": "2026-10-19T12:30:00Z",
+   "created_at": "2016-03-20T23:49:42Z",
+   "description": "A collective list of free APIs",
+   "topics": [
+    "api",
+    "apis",
+    "dataset",
+    "development",
+    "free",
+    "list",
+    "lists",
+    "open-source",
+    "public",
+    "public-api",
+    "public-apis",
+    "resources",
+    "software"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "awesome-selfhosted/awesome-selfhosted": {
+   "full_name": "awesome-selfhosted/awesome-selfhosted",
+   "stars": 328643,
+   "pushed_at": "2026-10-18T15:44:07Z",
+   "created_at": "2015-06-01T02:33:17Z",
+   "description": "A list of Free Software network services and web applications which can be hosted on your own servers",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "cloud",
+    "free-software",
+    "hosting",
+    "privacy",
+    "self-hosted",
+    "selfhosted"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10"
+   ]
+  },
+  "avelino/awesome-go": {
+   "full_name": "avelino/awesome-go",
+   "stars": 189410,
+   "pushed_at": "2026-10-19T14:07:44Z",
+   "created_at": "2014-07-06T13:42:15Z",
+   "description": "A curated list of awesome Go frameworks, libraries and software",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "go",
+    "golang",
+    "golang-library",
+    "hacktoberfest"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "DietrichGebert/ponytail": {
+   "full_name": "DietrichGebert/ponytail",
+   "stars": 169271,
+   "pushed_at": "2026-10-18T01:55:14Z",
+   "created_at": "2026-06-12T00:52:37Z",
+   "description": "Makes your AI agent think like the laziest senior dev in the room. The best code is the code you never wrote.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "claude",
+    "claude-code",
+    "claude-code-plugin",
+    "cursor-rules",
+    "developer-tools",
+    "llm",
+    "prompt-engineering",
+    "yagni"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20"
+   ]
+  },
+  "msitarzewski/agency-agents": {
+   "full_name": "msitarzewski/agency-agents",
+   "stars": 162163,
+   "pushed_at": "2026-10-19T16:48:24Z",
+   "created_at": "2025-10-13T12:12:29Z",
+   "description": "A complete AI agency at your fingertips - From frontend wizards to Reddit community ninjas, from whimsy injectors to reality checkers. Each agent is a specialized expert with personality, processes, a",
+   "topics": [],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5",
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "farion1231/cc-switch": {
+   "full_name": "farion1231/cc-switch",
+   "stars": 146773,
+   "pushed_at": "2026-10-20T15:35:52Z",
+   "created_at": "2025-08-04T14:16:16Z",
+   "description": "A cross-platform desktop All-in-One assistant for Claude Code, Codex, OpenCode, OpenClaw, Grok Build & Hermes Agent. Only official website: ccswitch.io",
+   "topics": [
+    "ai-tools",
+    "claude-code",
+    "codex",
+    "desktop-app",
+    "grok",
+    "grokbuild",
+    "hermes",
+    "hermes-agent",
+    "mcp",
+    "open-source",
+    "openclaw",
+    "openclaw-ui",
+    "opencode",
+    "pi",
+    "provider-management",
+    "rust",
+    "skills",
+    "skills-management",
+    "tauri",
+    "wsl-support"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "Shubhamsaboo/awesome-llm-apps": {
+   "full_name": "Shubhamsaboo/awesome-llm-apps",
+   "stars": 142402,
+   "pushed_at": "2026-10-18T16:28:46Z",
+   "created_at": "2024-04-29T05:30:25Z",
+   "description": "100+ AI Agents, Agent Skills and RAG Apps - Free and Open Source.",
+   "topics": [
+    "agents",
+    "llms",
+    "python",
+    "rag"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "ripienaar/free-for-dev": {
+   "full_name": "ripienaar/free-for-dev",
+   "stars": 139846,
+   "pushed_at": "2026-10-20T16:41:13Z",
+   "created_at": "2015-03-18T21:06:26Z",
+   "description": "A list of SaaS, PaaS and IaaS offerings that have free tiers of interest to devops and infradev",
+   "topics": [
+    "awesome-list",
+    "free-for-developers"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "garrytan/gstack": {
+   "full_name": "garrytan/gstack",
+   "stars": 137052,
+   "pushed_at": "2026-10-20T18:28:21Z",
+   "created_at": "2026-03-11T21:22:45Z",
+   "description": "Use Garry Tan's exact Claude Code setup: 23 opinionated tools that serve as CEO, Designer, Eng Manager, Release Manager, Doc Engineer, and QA",
+   "topics": [],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "jaywcjlove/awesome-mac": {
+   "full_name": "jaywcjlove/awesome-mac",
+   "stars": 116575,
+   "pushed_at": "2026-10-19T14:55:45Z",
+   "created_at": "2016-07-17T15:33:47Z",
+   "description": " This project is dedicated to collecting high-quality macOS software and organizing them systematically by different categories for easy search and use.",
+   "topics": [
+    "app",
+    "apple",
+    "application",
+    "apps",
+    "awesome",
+    "awesome-list",
+    "awesome-mac",
+    "desktop-app",
+    "desktop-application",
+    "desktop-apps",
+    "list",
+    "mac",
+    "mac-osx",
+    "macos",
+    "macos-app",
+    "macos-apps",
+    "macosx",
+    "software",
+    "swift",
+    "swiftui"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "paperclipai/paperclip": {
+   "full_name": "paperclipai/paperclip",
+   "stars": 105137,
+   "pushed_at": "2026-10-20T18:27:32Z",
+   "created_at": "2026-03-02T15:01:51Z",
+   "description": "The open-source app everyone uses to manage agents at work",
+   "topics": [
+    "acpx",
+    "agent-orchestration",
+    "agent-skills",
+    "agentic-ai",
+    "ai-agents",
+    "ai-engineering",
+    "ai-governance",
+    "ai-tools",
+    "autonomous-agents",
+    "claude",
+    "claude-code",
+    "claude-skills",
+    "codex",
+    "hermes",
+    "llm",
+    "mcp",
+    "multi-agent",
+    "openclaw",
+    "project-management",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "ruvnet/RuView": {
+   "full_name": "ruvnet/RuView",
+   "stars": 98905,
+   "pushed_at": "2026-10-20T18:18:52Z",
+   "created_at": "2025-06-07T04:32:30Z",
+   "description": "π RuView turns commodity WiFi signals into real-time spatial intelligence, vital sign monitoring, and presence detection — all without a single pixel of video.",
+   "topics": [
+    "awesome",
+    "claude",
+    "densepose",
+    "esp32",
+    "firmware",
+    "home-assistant",
+    "home-automation",
+    "iot",
+    "monitoring",
+    "networking",
+    "npm",
+    "pose-estimation",
+    "react",
+    "rf",
+    "self-learning",
+    "skills",
+    "spatial-intelligence",
+    "typescript",
+    "wifi",
+    "wifi-security"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "punkpeye/awesome-mcp-servers": {
+   "full_name": "punkpeye/awesome-mcp-servers",
+   "stars": 96661,
+   "pushed_at": "2026-10-18T02:37:56Z",
+   "created_at": "2024-11-30T04:49:10Z",
+   "description": "A collection of MCP servers.",
+   "topics": [
+    "ai",
+    "mcp"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "microsoft/ML-For-Beginners": {
+   "full_name": "microsoft/ML-For-Beginners",
+   "stars": 91628,
+   "pushed_at": "2026-10-18T11:32:27Z",
+   "created_at": "2021-03-03T01:34:05Z",
+   "description": "12 weeks, 26 lessons, 52 quizzes, classic Machine Learning for all",
+   "topics": [
+    "data-science",
+    "education",
+    "machine-learning",
+    "machine-learning-algorithms",
+    "machinelearning",
+    "machinelearning-python",
+    "microsoft-for-beginners",
+    "ml",
+    "python",
+    "r",
+    "scikit-learn",
+    "scikit-learn-python"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20"
+   ]
+  },
+  "awesomedata/awesome-public-datasets": {
+   "full_name": "awesomedata/awesome-public-datasets",
+   "stars": 79648,
+   "pushed_at": "2026-10-20T17:04:40Z",
+   "created_at": "2014-11-20T06:20:50Z",
+   "description": "A topic-centric list of HQ open datasets.",
+   "topics": [
+    "aaron-swartz",
+    "awesome-public-datasets",
+    "datasets",
+    "opendata"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20"
+   ]
+  },
+  "career-ops-hq/career-ops": {
+   "full_name": "career-ops-hq/career-ops",
+   "stars": 75795,
+   "pushed_at": "2026-10-20T18:19:20Z",
+   "created_at": "2026-04-04T18:21:18Z",
+   "description": "Open-source AI job search agent and job finder: scan job boards, score each job 1-5 against your CV before you apply, tailor an ATS-friendly resume and cover letter, get interview prep and a job appli",
+   "topics": [
+    "agent-skills",
+    "ai-agent",
+    "ai-job-search",
+    "ats",
+    "career",
+    "career-ops",
+    "careerops",
+    "claude-code",
+    "cli",
+    "cover-letter",
+    "cv",
+    "interview-prep",
+    "job-application",
+    "job-hunting",
+    "job-search",
+    "latex",
+    "local-first",
+    "open-source",
+    "resume",
+    "terminal"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "hiyouga/LlamaFactory": {
+   "full_name": "hiyouga/LlamaFactory",
+   "stars": 75600,
+   "pushed_at": "2026-10-19T18:17:27Z",
+   "created_at": "2023-05-28T10:09:12Z",
+   "description": "Unified Efficient Fine-Tuning of 100+ LLMs & VLMs (ACL 2024)",
+   "topics": [
+    "agent",
+    "ai",
+    "deepseek",
+    "fine-tuning",
+    "gemma",
+    "gpt",
+    "instruction-tuning",
+    "large-language-models",
+    "llama",
+    "llama3",
+    "llm",
+    "lora",
+    "moe",
+    "nlp",
+    "peft",
+    "qlora",
+    "quantization",
+    "qwen",
+    "rlhf",
+    "transformers"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20"
+   ]
+  },
+  "vuejs/awesome-vue": {
+   "full_name": "vuejs/awesome-vue",
+   "stars": 73511,
+   "pushed_at": "2026-10-19T10:49:59Z",
+   "created_at": "2015-10-20T00:16:14Z",
+   "description": "🎉 A curated list of awesome things related to Vue.js",
+   "topics": [],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10"
+   ]
+  },
+  "rohitg00/ai-engineering-from-scratch": {
+   "full_name": "rohitg00/ai-engineering-from-scratch",
+   "stars": 71714,
+   "pushed_at": "2026-10-19T08:42:46Z",
+   "created_at": "2026-03-18T18:38:02Z",
+   "description": "Learn AI Engineering! Learn it. Build it. Ship it for others.",
+   "topics": [
+    "agents",
+    "ai",
+    "ai-agents",
+    "ai-engineering",
+    "computer-vision",
+    "course",
+    "deep-learning",
+    "dsh",
+    "from-scratch",
+    "generative-ai",
+    "llm",
+    "machine-learning",
+    "mcp",
+    "python",
+    "rea",
+    "reinforcement-learning",
+    "rust",
+    "transformers",
+    "tutorial",
+    "typescript"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "calesthio/OpenMontage": {
+   "full_name": "calesthio/OpenMontage",
+   "stars": 70255,
+   "pushed_at": "2026-10-16T15:07:33Z",
+   "created_at": "2026-03-29T15:23:22Z",
+   "description": "World's first open-source, agentic video production system. 12 production pipelines, 100+ tools, 700+ agent skill and production-knowledge files. Turn your AI coding assistant into a full video produc",
+   "topics": [
+    "agent",
+    "agentic-ai",
+    "ai",
+    "claude",
+    "copilot",
+    "cursor",
+    "elevenlabs",
+    "ffmpeg",
+    "flux",
+    "image-generation",
+    "open-source",
+    "openai",
+    "python",
+    "remotion",
+    "stable-diffusion",
+    "text-to-speech",
+    "text-to-video",
+    "video-generation",
+    "video-production"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20"
+   ]
+  },
+  "1c7/chinese-independent-developer": {
+   "full_name": "1c7/chinese-independent-developer",
+   "stars": 61863,
+   "pushed_at": "2026-10-20T14:09:01Z",
+   "created_at": "2017-09-21T11:08:23Z",
+   "description": "👩🏿‍💻👨🏾‍💻👩🏼‍💻👨🏽‍💻👩🏻‍💻中国独立开发者项目列表 -- 分享大家都在做什么",
+   "topics": [
+    "china",
+    "indie",
+    "indie-developer"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "claude code task manager in:name,description,readme stars:>10",
+    "AI 交接 in:name,description,readme",
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "rust-unofficial/awesome-rust": {
+   "full_name": "rust-unofficial/awesome-rust",
+   "stars": 59978,
+   "pushed_at": "2026-10-20T17:49:05Z",
+   "created_at": "2014-07-17T10:45:10Z",
+   "description": "A curated list of Rust code and resources.",
+   "topics": [
+    "awesome",
+    "rust"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10"
+   ]
+  },
+  "hesreallyhim/awesome-claude-code": {
+   "full_name": "hesreallyhim/awesome-claude-code",
+   "stars": 56091,
+   "pushed_at": "2026-10-20T18:12:24Z",
+   "created_at": "2025-04-19T20:55:59Z",
+   "description": "A hand-picked collection of the finest of resources for the most awesome of agents, Claude Code, the undisputed champion of coding companions, from the unstoppable team at Anthropic PBC (no affiliatio",
+   "topics": [
+    "agent-skills",
+    "agentic-code",
+    "agentic-coding",
+    "ai-workflow-optimization",
+    "ai-workflows",
+    "anthropic",
+    "anthropic-claude",
+    "awesome",
+    "awesome-claude-code",
+    "awesome-list",
+    "awesome-lists",
+    "awesome-resources",
+    "claude",
+    "claude-code",
+    "coding-agent",
+    "coding-agents",
+    "coding-assistant",
+    "coding-assistants",
+    "llm"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "coreyhaines31/marketingskills": {
+   "full_name": "coreyhaines31/marketingskills",
+   "stars": 55658,
+   "pushed_at": "2026-10-19T22:01:09Z",
+   "created_at": "2026-01-15T19:45:23Z",
+   "description": "Marketing skills for Claude Code and AI agents. CRO, copywriting, SEO, analytics, and growth engineering.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "ai-seo",
+    "claude",
+    "claude-code",
+    "claude-code-plugin",
+    "claude-skills",
+    "codex",
+    "content-marketing",
+    "conversion-rate-optimization",
+    "copywriting",
+    "cursor",
+    "email-marketing",
+    "generative-engine-optimization",
+    "growth-marketing",
+    "marketing",
+    "marketing-automation",
+    "saas-marketing",
+    "seo",
+    "skill-md"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "VoltAgent/awesome-openclaw-skills": {
+   "full_name": "VoltAgent/awesome-openclaw-skills",
+   "stars": 53234,
+   "pushed_at": "2026-10-19T05:54:13Z",
+   "created_at": "2026-01-25T09:22:32Z",
+   "description": "The awesome collection of OpenClaw skills. 5,400+ skills filtered and categorized from the official OpenClaw Skills Registry.🦞",
+   "topics": [
+    "agent-skills",
+    "awesome",
+    "awesome-list",
+    "awesome-lists",
+    "clawd",
+    "clawdbot",
+    "clawdbot-skill",
+    "clawdhub",
+    "moltbot",
+    "moltbot-skills",
+    "openclaw",
+    "openclaw-skills"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20",
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "CherryHQ/cherry-studio": {
+   "full_name": "CherryHQ/cherry-studio",
+   "stars": 52791,
+   "pushed_at": "2026-10-20T18:13:11Z",
+   "created_at": "2024-05-24T01:56:26Z",
+   "description": "AI productivity studio with smart chat, autonomous agents, and 300+ assistants. Unified access to frontier LLMs",
+   "topics": [
+    "agent-skills",
+    "ai-agent",
+    "claude-code",
+    "codex",
+    "deepseek",
+    "hermes-agent",
+    "open-code-review",
+    "skills",
+    "vibe-coding"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20"
+   ]
+  },
+  "dkhamsing/open-source-ios-apps": {
+   "full_name": "dkhamsing/open-source-ios-apps",
+   "stars": 52702,
+   "pushed_at": "2026-10-20T17:39:03Z",
+   "created_at": "2015-01-26T23:32:34Z",
+   "description": ":iphone: Collaborative List of Open-Source iOS Apps",
+   "topics": [
+    "app",
+    "apple",
+    "apple-tv",
+    "apple-vision-pro",
+    "awesome",
+    "cocoapods",
+    "duo",
+    "example",
+    "flutter",
+    "game",
+    "ios",
+    "ipad",
+    "iphone",
+    "list",
+    "objective-c",
+    "react-native",
+    "swift",
+    "swiftui",
+    "tvos",
+    "watchos"
+   ],
+   "found_by": [
+    "AI agent task board in:name,description,readme stars:>20"
+   ]
+  },
+  "morluto/rea": {
+   "full_name": "morluto/rea",
+   "stars": 346175,
+   "pushed_at": "2026-10-20T18:31:25Z",
+   "created_at": "2026-04-14T00:51:32Z",
+   "description": "Reverse engineer anything with agents, from app behavior down to native binaries.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "binary-analysis",
+    "claude-code",
+    "cli",
+    "codex",
+    "cordis",
+    "decompiler",
+    "developer-tools",
+    "dsh",
+    "dsh-plugin",
+    "ghidra",
+    "hopper",
+    "llm",
+    "mcp",
+    "model-context-protocol",
+    "rea",
+    "reverse-engineering",
+    "static-analysis",
+    "touhou"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "affaan-m/ECC": {
+   "full_name": "affaan-m/ECC",
+   "stars": 284709,
+   "pushed_at": "2026-10-20T14:51:29Z",
+   "created_at": "2026-01-18T00:51:51Z",
+   "description": "The agent harness performance optimization system. Skills, instincts, memory, security, and research-first development for Claude Code, Codex, Opencode, Cursor and beyond.",
+   "topics": [
+    "ai-agents",
+    "anthropic",
+    "claude",
+    "claude-code",
+    "developer-tools",
+    "llm",
+    "mcp",
+    "productivity"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "github/spec-kit": {
+   "full_name": "github/spec-kit",
+   "stars": 142103,
+   "pushed_at": "2026-10-20T17:58:52Z",
+   "created_at": "2025-08-21T22:54:31Z",
+   "description": "💫 Toolkit to help you get started with SDD or any other process!",
+   "topics": [
+    "ai",
+    "copilot",
+    "development",
+    "engineering",
+    "prd",
+    "spec",
+    "spec-driven"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "nexu-io/open-design": {
+   "full_name": "nexu-io/open-design",
+   "stars": 102772,
+   "pushed_at": "2026-10-20T18:17:46Z",
+   "created_at": "2026-04-28T04:25:20Z",
+   "description": "The 1st Collaborative AI Design Agent Workspace. Local-first and open source. Create motion, prototypes, websites, apps, dashboards, presentations, images, and videos with your team and AI agents. Sha",
+   "topics": [
+    "agent-skills",
+    "ai-design",
+    "byok",
+    "claude-code-for-design",
+    "claude-design",
+    "codex-design",
+    "cursor-design",
+    "deepseek",
+    "deepseek-harness",
+    "design-systems",
+    "desktop-app",
+    "desktop-apps",
+    "dsh",
+    "dsh-plugin",
+    "figma-alternative",
+    "hermes-agent",
+    "local-first",
+    "prototyping",
+    "ui-generator",
+    "vibe-coding"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "tt-a1i/archify": {
+   "full_name": "tt-a1i/archify",
+   "stars": 86256,
+   "pushed_at": "2026-10-20T12:04:50Z",
+   "created_at": "2026-04-15T05:27:37Z",
+   "description": "Turn any idea, plan, or codebase into a beautiful interactive diagram. An agent skill for Claude Code, Codex, and more.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "architecture-diagram",
+    "claude-code",
+    "claude-skills",
+    "codex",
+    "coding-agents",
+    "deepseek-harness",
+    "developer-tools",
+    "diagrams",
+    "diagrams-as-code",
+    "dsh-plugin",
+    "flowchart",
+    "llm",
+    "mermaid",
+    "opencode",
+    "sequence-diagram",
+    "software-architecture",
+    "system-design",
+    "visualization"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "bytedance/deer-flow": {
+   "full_name": "bytedance/deer-flow",
+   "stars": 84199,
+   "pushed_at": "2026-10-20T15:17:51Z",
+   "created_at": "2025-05-07T02:50:19Z",
+   "description": "An open-source long-horizon SuperAgent harness that researches, codes, and creates. With the help of sandboxes, memories, tools, skill, subagents and message gateway, it handles different levels of ta",
+   "topics": [
+    "agent",
+    "agentic",
+    "agentic-framework",
+    "agentic-workflow",
+    "ai",
+    "ai-agents",
+    "deep-research",
+    "harness",
+    "langchain",
+    "langgraph",
+    "langmanus",
+    "llm",
+    "multi-agent",
+    "nodejs",
+    "podcast",
+    "python",
+    "superagent",
+    "typescript"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "ruvnet/ruflo": {
+   "full_name": "ruvnet/ruflo",
+   "stars": 77682,
+   "pushed_at": "2026-10-20T17:26:15Z",
+   "created_at": "2025-06-02T21:24:20Z",
+   "description": "🌊 The original agent harness. Deploy intelligent multi-player swarms, coordinate autonomous workflows, and build conversational AI systems. Features adaptive memory, self-learning intelligence, federa",
+   "topics": [
+    "agentic-ai",
+    "agentic-framework",
+    "agentic-workflow",
+    "agents",
+    "ai-agents",
+    "ai-assistant",
+    "ai-skills",
+    "autonomous-agents",
+    "claude",
+    "codex",
+    "dsh-plugin",
+    "harness",
+    "mcp-server",
+    "multi-agent",
+    "multi-agent-systems",
+    "npm",
+    "skills",
+    "swarm",
+    "swarm-intelligence",
+    "typescript"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "heygen-com/hyperframes": {
+   "full_name": "heygen-com/hyperframes",
+   "stars": 68319,
+   "pushed_at": "2026-10-20T18:21:59Z",
+   "created_at": "2026-03-10T01:51:06Z",
+   "description": "Write HTML. Render video. Built for agents.",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "animation",
+    "claude-code",
+    "ffmpeg",
+    "framework",
+    "gsap",
+    "html",
+    "html-to-video",
+    "mcp",
+    "motion-graphics",
+    "puppeteer",
+    "rendering",
+    "typescript",
+    "video-editor"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "shanraisshan/claude-code-best-practice": {
+   "full_name": "shanraisshan/claude-code-best-practice",
+   "stars": 67825,
+   "pushed_at": "2026-10-20T06:34:02Z",
+   "created_at": "2025-10-31T14:15:28Z",
+   "description": "from vibe coding to agentic engineering - practice makes claude perfect",
+   "topics": [
+    "agentic-ai",
+    "agentic-coding",
+    "agentic-engineering",
+    "agentic-workflow",
+    "ai",
+    "ai-agents",
+    "anthropic",
+    "best-practices",
+    "boris",
+    "claude",
+    "claude-ai",
+    "claude-code",
+    "claude-code-agents",
+    "claude-code-best-practices",
+    "claude-code-commands",
+    "claude-code-skills",
+    "context-engineering",
+    "pakistan",
+    "pakistani-developer",
+    "vibe-coding"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "bradtraversy/design-resources-for-developers": {
+   "full_name": "bradtraversy/design-resources-for-developers",
+   "stars": 67216,
+   "pushed_at": "2026-10-18T12:50:03Z",
+   "created_at": "2020-05-06T14:40:35Z",
+   "description": "Curated list of design and UI resources from stock photos, web templates, CSS frameworks, UI libraries, tools and much more",
+   "topics": [],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "claude code task manager in:name,description,readme stars:>10"
+   ]
+  },
+  "MemPalace/mempalace": {
+   "full_name": "MemPalace/mempalace",
+   "stars": 59658,
+   "pushed_at": "2026-10-20T08:52:54Z",
+   "created_at": "2026-04-05T01:12:07Z",
+   "description": "The best-benchmarked open-source AI memory system. And it's free.",
+   "topics": [
+    "ai",
+    "chromadb",
+    "llm",
+    "mcp",
+    "memory",
+    "python"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "bilawalsidhu/gods-eye-view": {
+   "full_name": "bilawalsidhu/gods-eye-view",
+   "stars": 58473,
+   "pushed_at": "2026-10-20T17:15:33Z",
+   "created_at": "2026-06-22T23:37:22Z",
+   "description": "A spy satellite simulator in your browser, except the data is real. Live open source spatial intelligence on a photorealistic 3D globe.",
+   "topics": [
+    "3d-globe",
+    "cesium",
+    "flight-tracking",
+    "geospatial",
+    "geospatial-intelligence",
+    "gis",
+    "osint",
+    "photogrammetry",
+    "satellite-tracking",
+    "spatial-intelligence",
+    "webgl",
+    "worldview"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "K-Dense-AI/scientific-agent-skills": {
+   "full_name": "K-Dense-AI/scientific-agent-skills",
+   "stars": 53225,
+   "pushed_at": "2026-10-19T09:33:57Z",
+   "created_at": "2025-10-19T20:54:15Z",
+   "description": "Turn any AI agent into an AI Scientist. The #1 Agent Skills library for science, used by 250,000+ scientists worldwide. 177 ready-to-use validated skills plus 100+ scientific databases covering biolog",
+   "topics": [
+    "agent-skills",
+    "ai-scientist",
+    "bioinformatics",
+    "chemoinformatics",
+    "claude",
+    "claude-skills",
+    "claudecode",
+    "clinical-research",
+    "computational-biology",
+    "data-analysis",
+    "drug-discovery",
+    "genomics",
+    "materials-science",
+    "metabolomics",
+    "proteomics",
+    "scientific-computing",
+    "scientific-visualization"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "Imbad0202/academic-research-skills": {
+   "full_name": "Imbad0202/academic-research-skills",
+   "stars": 53162,
+   "pushed_at": "2026-10-18T01:25:37Z",
+   "created_at": "2026-02-26T06:31:01Z",
+   "description": "Academic Research Skills for Claude Code: research → write → review → revise → finalize",
+   "topics": [
+    "academic-pipeline",
+    "academic-writing",
+    "ai-research",
+    "claude",
+    "claude-code",
+    "literature-review",
+    "peer-review",
+    "prompt-engineering"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "sickn33/agentic-awesome-skills": {
+   "full_name": "sickn33/agentic-awesome-skills",
+   "stars": 48077,
+   "pushed_at": "2026-10-20T18:04:35Z",
+   "created_at": "2026-01-14T17:48:09Z",
+   "description": "AAS Core is the local, agent-first control plane for complete catalog discovery, agent-owned selection, stack validation, and planning, backed by 2,600+ agentic skills. Includes CLI, local MCP, catalo",
+   "topics": [
+    "agent-skills",
+    "agentic-skills",
+    "ai-agent-skills",
+    "ai-agents",
+    "ai-coding",
+    "ai-workflows",
+    "antigravity",
+    "antigravity-skills",
+    "claude-code",
+    "claude-code-skills",
+    "codex-cli",
+    "codex-skills",
+    "cursor",
+    "cursor-skills",
+    "developer-tools",
+    "gemini-cli",
+    "gemini-skills",
+    "kiro",
+    "mcp",
+    "skill-library"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme",
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "DeusData/codebase-memory-mcp": {
+   "full_name": "DeusData/codebase-memory-mcp",
+   "stars": 47022,
+   "pushed_at": "2026-10-20T18:25:10Z",
+   "created_at": "2026-02-24T22:01:00Z",
+   "description": "Local code intelligence for developers and AI agents. Connect code, docs and infrastructure in a persistent graph, with CBM Lens, MCP tools, agent integrations and change-aware test selection.",
+   "topics": [
+    "aider",
+    "ast",
+    "claude-code",
+    "code-analysis",
+    "code-intelligence",
+    "codex",
+    "cursor",
+    "cypher",
+    "developer-tools",
+    "gemini-cli",
+    "graph-visualization",
+    "kilocode",
+    "knowledge-graph",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "opencode",
+    "sqlite",
+    "tree-sitter",
+    "windsurf"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "zhaoxuya520/reverse-skill": {
+   "full_name": "zhaoxuya520/reverse-skill",
+   "stars": 42784,
+   "pushed_at": "2026-09-22T06:43:21Z",
+   "created_at": "2026-05-13T14:37:57Z",
+   "description": "Reverse Engineering / Authorized Penetration Testing / Security Research Skill Router Pack AI-powered routing + On-demand toolchain bootstrapping + Self-evolving knowledge base  Supports Claude Code, ",
+   "topics": [],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "HKUDS/DeepTutor": {
+   "full_name": "HKUDS/DeepTutor",
+   "stars": 41892,
+   "pushed_at": "2026-10-19T18:51:54Z",
+   "created_at": "2025-12-28T15:35:54Z",
+   "description": "DeepTutor: Lifelong Personalized Tutoring. https://deeptutor.info/.",
+   "topics": [
+    "ai-agents",
+    "ai-tutor",
+    "clawbot",
+    "cli-tool",
+    "deepresearch",
+    "interactive-learning",
+    "learning",
+    "multi-agent-systems",
+    "rag"
+   ],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10",
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "anthropics/financial-services": {
+   "full_name": "anthropics/financial-services",
+   "stars": 40522,
+   "pushed_at": "2026-09-21T21:10:41Z",
+   "created_at": "2026-02-23T19:24:50Z",
+   "description": "",
+   "topics": [],
+   "found_by": [
+    "agent handoff in:name,description,readme stars:>10"
+   ]
+  },
+  "goabstract/Awesome-Design-Tools": {
+   "full_name": "goabstract/Awesome-Design-Tools",
+   "stars": 41553,
+   "pushed_at": "2024-07-28T19:57:31Z",
+   "created_at": "2019-02-12T13:55:30Z",
+   "description": "The best design tools and plugins for everything 👉",
+   "topics": [
+    "animations",
+    "awesome",
+    "awesome-list",
+    "design",
+    "design-systems",
+    "design-tools",
+    "font-awesome",
+    "ui-design"
+   ],
+   "found_by": [
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "vadimdemedes/ink": {
+   "full_name": "vadimdemedes/ink",
+   "stars": 40128,
+   "pushed_at": "2026-10-03T11:21:19Z",
+   "created_at": "2017-06-12T06:12:28Z",
+   "description": "🌈 React for interactive command-line apps",
+   "topics": [
+    "cli",
+    "command-line",
+    "flexbox",
+    "interactive",
+    "javascript",
+    "react"
+   ],
+   "found_by": [
+    "project handoff AI in:name,description,readme"
+   ]
+  },
+  "cathrynlavery/diagram-design": {
+   "full_name": "cathrynlavery/diagram-design",
+   "stars": 58891,
+   "pushed_at": "2026-10-20T02:07:06Z",
+   "created_at": "2026-04-16T18:01:16Z",
+   "description": "Editorial diagram design for Claude Code, Codex, GitHub Copilot, Cursor, Factory Droid, and Pi. 44 diagram types. Self-contained HTML + SVG. No shadows. No Mermaid slop.",
+   "topics": [
+    "agent-skills",
+    "claude-code",
+    "codex",
+    "data-visualization",
+    "diagrams",
+    "drawio",
+    "mermaid",
+    "svg"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10"
+   ]
+  },
+  "serhii-londar/open-source-mac-os-apps": {
+   "full_name": "serhii-londar/open-source-mac-os-apps",
+   "stars": 50910,
+   "pushed_at": "2026-10-20T09:49:45Z",
+   "created_at": "2017-11-03T02:35:33Z",
+   "description": "🚀 Awesome list of open source applications for macOS. https://t.me/s/opensourcemacosapps",
+   "topics": [
+    "applications",
+    "apps",
+    "awesome",
+    "awesome-list",
+    "c",
+    "c-plus-plus",
+    "hacktoberfest",
+    "javascript",
+    "mac",
+    "macos",
+    "macos-application",
+    "macosx",
+    "objective-c",
+    "open-source",
+    "opensource",
+    "python",
+    "ruby",
+    "swift"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "GitHubDaily/GitHubDaily": {
+   "full_name": "GitHubDaily/GitHubDaily",
+   "stars": 48259,
+   "pushed_at": "2025-12-31T18:59:20Z",
+   "created_at": "2018-12-30T13:56:58Z",
+   "description": "坚持分享 GitHub 上高质量、有趣实用的开源技术教程、开发者工具、编程网站、技术资讯。A list cool, interesting projects of GitHub.",
+   "topics": [
+    "ai",
+    "algorithms-and-data-structures",
+    "backend",
+    "developer-tools",
+    "development",
+    "frontend",
+    "github",
+    "java",
+    "javascript",
+    "kubernetes",
+    "linux",
+    "markdown",
+    "open-source",
+    "python",
+    "tutorials",
+    "web"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme",
+    "任务看板 AI in:name,description,readme",
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "sorrycc/awesome-javascript": {
+   "full_name": "sorrycc/awesome-javascript",
+   "stars": 35030,
+   "pushed_at": "2026-10-18T19:00:58Z",
+   "created_at": "2014-07-01T15:59:02Z",
+   "description": "🐢 A collection of awesome browser-side  JavaScript libraries, resources and shiny things.",
+   "topics": [],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10"
+   ]
+  },
+  "hesamsheikh/awesome-openclaw-usecases": {
+   "full_name": "hesamsheikh/awesome-openclaw-usecases",
+   "stars": 31652,
+   "pushed_at": "2026-03-24T14:54:56Z",
+   "created_at": "2026-02-08T22:08:17Z",
+   "description": "A community collection of OpenClaw use cases for making life easier.",
+   "topics": [
+    "awesome-list",
+    "clawdbot",
+    "moltbot",
+    "openclaw",
+    "openclaw-plugin",
+    "openclaw-setup",
+    "openclaw-skills",
+    "usecase"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "academic/awesome-datascience": {
+   "full_name": "academic/awesome-datascience",
+   "stars": 30217,
+   "pushed_at": "2026-10-18T10:08:53Z",
+   "created_at": "2014-07-05T07:07:43Z",
+   "description": ":memo: An awesome Data Science repository to learn and apply for real world problems.",
+   "topics": [
+    "analytics",
+    "awesome-list",
+    "data-mining",
+    "data-science",
+    "data-scientists",
+    "data-visualization",
+    "deep-learning",
+    "hacktoberfest",
+    "machine-learning",
+    "science"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "mikeroyal/Self-Hosting-Guide": {
+   "full_name": "mikeroyal/Self-Hosting-Guide",
+   "stars": 23185,
+   "pushed_at": "2025-06-27T01:51:16Z",
+   "created_at": "2022-02-06T20:03:15Z",
+   "description": "Self-Hosting Guide. Learn all about  locally hosting (on premises & private web servers) and managing software applications by yourself or your organization. Including Cloud, LLMs, WireGuard, Automati",
+   "topics": [
+    "authentication",
+    "awesome",
+    "awesome-list",
+    "decentralized",
+    "docker-compose",
+    "home-assistant",
+    "home-automation",
+    "linux",
+    "oauth",
+    "observability",
+    "open-source",
+    "privacy",
+    "raspberry-pi",
+    "reverse-proxy",
+    "search",
+    "self-hosted",
+    "self-hosting",
+    "selfhosted",
+    "ssh",
+    "wireguard"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10"
+   ]
+  },
+  "teableio/teable": {
+   "full_name": "teableio/teable",
+   "stars": 21909,
+   "pushed_at": "2026-10-20T12:30:07Z",
+   "created_at": "2022-11-01T07:02:49Z",
+   "description": "✨ AI Spreadsheet for Business",
+   "topics": [
+    "ai-agent",
+    "airtable",
+    "airtable-alternative",
+    "app-builder",
+    "database",
+    "internal-tool",
+    "low-code",
+    "no-code",
+    "postgres",
+    "postgresql",
+    "sandbox",
+    "spreadsheet"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10"
+   ]
+  },
+  "rothgar/awesome-tuis": {
+   "full_name": "rothgar/awesome-tuis",
+   "stars": 20945,
+   "pushed_at": "2026-10-12T03:41:37Z",
+   "created_at": "2019-03-31T16:58:51Z",
+   "description": "List of projects that provide terminal user interfaces",
+   "topics": [],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "birobirobiro/awesome-shadcn-ui": {
+   "full_name": "birobirobiro/awesome-shadcn-ui",
+   "stars": 20666,
+   "pushed_at": "2026-10-20T06:46:02Z",
+   "created_at": "2024-02-05T19:48:57Z",
+   "description": "A curated list of awesome things related to shadcn/ui.",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "list",
+    "open-source",
+    "resources",
+    "shad",
+    "shadcn",
+    "shadcn-ui"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "nesquena/hermes-webui": {
+   "full_name": "nesquena/hermes-webui",
+   "stars": 19055,
+   "pushed_at": "2026-10-20T13:13:15Z",
+   "created_at": "2026-03-30T21:50:12Z",
+   "description": "Hermes WebUI: The best way to use Hermes Agent from the web or from your phone!",
+   "topics": [
+    "agent",
+    "ai-agents",
+    "hermes",
+    "hermes-agent",
+    "nous-research"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "ellisonleao/magictools": {
+   "full_name": "ellisonleao/magictools",
+   "stars": 17532,
+   "pushed_at": "2026-10-20T17:15:27Z",
+   "created_at": "2014-07-17T21:27:07Z",
+   "description": ":video_game: :pencil: A list of Game Development resources to make magic happen.",
+   "topics": [
+    "art",
+    "awesome",
+    "awesome-list",
+    "board-games",
+    "curated",
+    "design",
+    "frameworks",
+    "game-design",
+    "game-development",
+    "game-engine",
+    "game-jam",
+    "game-programming",
+    "gamedev",
+    "games",
+    "hacktoberfest",
+    "list"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "Wechat-ggGitHub/Awesome-GitHub-Repo": {
+   "full_name": "Wechat-ggGitHub/Awesome-GitHub-Repo",
+   "stars": 17359,
+   "pushed_at": "2026-06-10T02:53:23Z",
+   "created_at": "2021-12-27T06:28:51Z",
+   "description": "收集整理 GitHub 上高质量、有趣的开源项目。",
+   "topics": [],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10",
+    "MCP kanban in:name,description,readme",
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "cjbarber/ToolsOfTheTrade": {
+   "full_name": "cjbarber/ToolsOfTheTrade",
+   "stars": 17192,
+   "pushed_at": "2026-10-18T16:15:49Z",
+   "created_at": "2014-05-29T04:11:33Z",
+   "description": "Tools of The Trade, from Hacker News.",
+   "topics": [],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10"
+   ]
+  },
+  "cft0808/edict": {
+   "full_name": "cft0808/edict",
+   "stars": 17006,
+   "pushed_at": "2026-09-28T02:33:22Z",
+   "created_at": "2026-02-23T14:35:04Z",
+   "description": "🏛️ 三省六部制 · OpenClaw Multi-Agent Orchestration System — 9 specialized AI agents with real-time dashboard, model config, and full audit trails",
+   "topics": [
+    "ai-agents",
+    "ai-orchestration",
+    "autonomous-agents",
+    "claude",
+    "dashboard",
+    "kanban",
+    "llm",
+    "multi-agent",
+    "openai",
+    "openclaw",
+    "orchestration",
+    "python",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10"
+   ]
+  },
+  "theonedev/onedev": {
+   "full_name": "theonedev/onedev",
+   "stars": 15319,
+   "pushed_at": "2026-10-20T09:22:30Z",
+   "created_at": "2018-11-06T02:57:01Z",
+   "description": "The Unified and Autonomous Development Platform",
+   "topics": [
+    "ai",
+    "ci-cd",
+    "devops",
+    "git",
+    "kanban",
+    "packages",
+    "self-hosted",
+    "wiki",
+    "workspaces"
+   ],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10"
+   ]
+  },
+  "AndyMik90/Aperant": {
+   "full_name": "AndyMik90/Aperant",
+   "stars": 14576,
+   "pushed_at": "2026-06-14T08:27:00Z",
+   "created_at": "2025-12-04T22:10:37Z",
+   "description": "Autonomous multi-session AI coding",
+   "topics": [],
+   "found_by": [
+    "kanban AI agent in:name,description,readme stars:>10"
+   ]
+  },
+  "siteboon/claudecodeui": {
+   "full_name": "siteboon/claudecodeui",
+   "stars": 14191,
+   "pushed_at": "2026-10-20T15:43:51Z",
+   "created_at": "2025-06-25T12:51:12Z",
+   "description": "Use Claude Code, OpenCode, Cursor CLI, and Codex on mobile and web with CloudCLI (aka Claude Code UI). CloudCLI is a free open source webui/GUI that helps you manage your Claude Code session and proje",
+   "topics": [
+    "anthropic",
+    "anthropic-ai",
+    "anthropic-claude",
+    "claude",
+    "claude-api",
+    "claude-code",
+    "claude-code-ui",
+    "claudecode",
+    "gui",
+    "mobile-first",
+    "react",
+    "ui"
+   ],
+   "found_by": [
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "steven2358/awesome-generative-ai": {
+   "full_name": "steven2358/awesome-generative-ai",
+   "stars": 12744,
+   "pushed_at": "2026-10-15T21:22:18Z",
+   "created_at": "2022-10-20T11:18:17Z",
+   "description": "A curated list of modern Generative Artificial Intelligence projects and services",
+   "topics": [
+    "ai",
+    "artificial-intelligence",
+    "awesome",
+    "awesome-list",
+    "generative-ai",
+    "generative-art",
+    "large-language-models",
+    "llm"
+   ],
+   "found_by": [
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "EKKOLearnAI/ekko-studio": {
+   "full_name": "EKKOLearnAI/ekko-studio",
+   "stars": 11486,
+   "pushed_at": "2026-10-20T12:55:29Z",
+   "created_at": "2026-04-11T07:38:18Z",
+   "description": "Ekko Studio is a local-first AI workspace for multi-agent chat, coding, and visual workflows, available on desktop and the web.",
+   "topics": [
+    "agent",
+    "ai-agent",
+    "chat-ui",
+    "coding-agents",
+    "dashboard",
+    "ekko-studio",
+    "hermes",
+    "hermes-agent",
+    "hermes-studio",
+    "hermes-web-ui",
+    "llm",
+    "multi-agent",
+    "multi-model",
+    "multi-platform",
+    "self-hosted",
+    "typescript",
+    "vue3",
+    "web-ui",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "awesome-opencode/awesome-opencode": {
+   "full_name": "awesome-opencode/awesome-opencode",
+   "stars": 10669,
+   "pushed_at": "2026-07-03T14:10:38Z",
+   "created_at": "2025-09-22T00:01:14Z",
+   "description": "A curated list of awesome plugins, themes, agents, projects, and resources for https://opencode.ai",
+   "topics": [],
+   "found_by": [
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "BehiSecc/awesome-claude-skills": {
+   "full_name": "BehiSecc/awesome-claude-skills",
+   "stars": 10277,
+   "pushed_at": "2026-09-21T07:16:41Z",
+   "created_at": "2025-10-17T15:05:35Z",
+   "description": "A curated list of Claude Skills.",
+   "topics": [],
+   "found_by": [
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "Agents365-ai/drawio-skill": {
+   "full_name": "Agents365-ai/drawio-skill",
+   "stars": 10265,
+   "pushed_at": "2026-10-11T11:22:56Z",
+   "created_at": "2026-03-03T16:54:59Z",
+   "description": "Agent skill that turns natural language, code, Terraform/K8s, SQL, OpenAPI, AsyncAPI, Protobuf and GraphQL sources into editable, tested draw.io architecture diagrams: incremental sync, multi-view pro",
+   "topics": [
+    "agent-skills",
+    "architecture",
+    "architecture-diagram",
+    "asyncapi",
+    "bpmn",
+    "c4-model",
+    "claude-code",
+    "diagram",
+    "diagrams-as-code",
+    "drawio",
+    "flowchart",
+    "github-actions",
+    "graphql",
+    "image-to-diagram",
+    "kubernetes",
+    "mcp-server",
+    "protobuf",
+    "sysml",
+    "terraform",
+    "uml"
+   ],
+   "found_by": [
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "PatrickJS/awesome-angular": {
+   "full_name": "PatrickJS/awesome-angular",
+   "stars": 10092,
+   "pushed_at": "2026-10-20T15:41:34Z",
+   "created_at": "2015-09-01T05:12:10Z",
+   "description": ":page_facing_up: A curated list of awesome Angular resources",
+   "topics": [
+    "angular",
+    "angular-components",
+    "angular10",
+    "angular11",
+    "angular2",
+    "angular4",
+    "angular9",
+    "awesome",
+    "awesome-list"
+   ],
+   "found_by": [
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "gitkraken/vscode-gitlens": {
+   "full_name": "gitkraken/vscode-gitlens",
+   "stars": 9950,
+   "pushed_at": "2026-10-20T18:27:04Z",
+   "created_at": "2016-08-08T14:50:30Z",
+   "description": "Supercharge Git inside VS Code and unlock untapped knowledge within each repository — Visualize code authorship at a glance via Git blame annotations and CodeLens, seamlessly navigate and explore Git ",
+   "topics": [
+    "git",
+    "github",
+    "vscode",
+    "vscode-extension"
+   ],
+   "found_by": [
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "marcelscruz/public-apis": {
+   "full_name": "marcelscruz/public-apis",
+   "stars": 9602,
+   "pushed_at": "2026-10-20T15:51:09Z",
+   "created_at": "2022-05-11T06:31:22Z",
+   "description": "A collaborative list of public APIs for developers",
+   "topics": [
+    "apis",
+    "awesome",
+    "awesome-list",
+    "hacktoberfest",
+    "lists",
+    "open-source",
+    "public-api",
+    "public-apis",
+    "resources"
+   ],
+   "found_by": [
+    "MCP kanban in:name,description,readme"
+   ]
+  },
+  "cyanheads/atlas-mcp-server": {
+   "full_name": "cyanheads/atlas-mcp-server",
+   "stars": 477,
+   "pushed_at": "2025-07-22T05:17:41Z",
+   "created_at": "2024-12-16T05:55:30Z",
+   "description": "A Model Context Protocol (MCP) server for ATLAS, a Neo4j-powered task management system for LLM Agents - implementing a three-tier architecture (Projects, Tasks, Knowledge) to manage complex workflows",
+   "topics": [
+    "ai-agents",
+    "cyanheads",
+    "deep-research",
+    "graph-database",
+    "knowledge-management",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "neo4j",
+    "project-management",
+    "task-management",
+    "typescript"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5",
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "abhiz123/todoist-mcp-server": {
+   "full_name": "abhiz123/todoist-mcp-server",
+   "stars": 392,
+   "pushed_at": "2025-04-20T04:03:50Z",
+   "created_at": "2024-12-03T18:38:40Z",
+   "description": "MCP server for Todoist integration enabling natural language task management with Claude",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "greirson/mcp-todoist": {
+   "full_name": "greirson/mcp-todoist",
+   "stars": 246,
+   "pushed_at": "2026-05-01T10:23:20Z",
+   "created_at": "2025-05-23T05:27:38Z",
+   "description": "MCP server that connects Claude to Todoist for natural language task and project   management with bulk operations",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "scopecraft/command": {
+   "full_name": "scopecraft/command",
+   "stars": 174,
+   "pushed_at": "2025-11-09T12:20:07Z",
+   "created_at": "2025-05-10T17:23:08Z",
+   "description": "Scopecraft Command - A CLI and MCP server for Markdown-Driven Task Management (MDTM)",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "democratize-technology/vikunja-mcp": {
+   "full_name": "democratize-technology/vikunja-mcp",
+   "stars": 112,
+   "pushed_at": "2026-02-15T15:20:36Z",
+   "created_at": "2025-05-26T18:12:33Z",
+   "description": "Model Context Protocol server for Vikunja task management. Enables AI assistants to interact with Vikunja instances via MCP.",
+   "topics": [
+    "ai-tools",
+    "mcp",
+    "model-context-protocol",
+    "productivity",
+    "task-management",
+    "typescript",
+    "vikunja"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "Pimzino/agentic-tools-mcp": {
+   "full_name": "Pimzino/agentic-tools-mcp",
+   "stars": 88,
+   "pushed_at": "2025-06-20T14:42:52Z",
+   "created_at": "2025-05-28T01:32:54Z",
+   "description": "A comprehensive Model Context Protocol (MCP) server providing AI assistants with powerful task management and agent memories capabilities with project-specific storage.",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5",
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "alexarevalo9/ticktick-mcp-server": {
+   "full_name": "alexarevalo9/ticktick-mcp-server",
+   "stars": 73,
+   "pushed_at": "2026-09-01T23:05:21Z",
+   "created_at": "2025-03-30T22:48:24Z",
+   "description": "A Model Context Protocol (MCP) server designed to integrate with the TickTick task management platform, enabling intelligent context-aware task operations and automation.",
+   "topics": [
+    "artificial-intelligence",
+    "mcp",
+    "node"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "jqlts1/omnifocus-mcp-enhanced": {
+   "full_name": "jqlts1/omnifocus-mcp-enhanced",
+   "stars": 63,
+   "pushed_at": "2026-08-16T16:38:57Z",
+   "created_at": "2025-07-09T07:36:53Z",
+   "description": "Enhanced Model Context Protocol (MCP) server for OmniFocus with complete subtask support, perspective views (Inbox/Flagged/Forecast/Tags), ultimate   task filtering, and direct access to custom perspe",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "cookjohn/teammcp": {
+   "full_name": "cookjohn/teammcp",
+   "stars": 56,
+   "pushed_at": "2026-06-15T15:23:42Z",
+   "created_at": "2026-03-31T09:37:25Z",
+   "description": "MCP-native collaboration server for AI agent teams — real-time messaging, task management, and web dashboard with just 1 npm dependency",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "flesler/mcp-tasks": {
+   "full_name": "flesler/mcp-tasks",
+   "stars": 47,
+   "pushed_at": "2026-08-06T15:10:16Z",
+   "created_at": "2025-07-17T17:24:24Z",
+   "description": "A comprehensive and efficient MCP server for task management with multi-format support (Markdown, JSON, YAML)",
+   "topics": [
+    "ai",
+    "claude",
+    "claude-ai",
+    "claude-code",
+    "cursor",
+    "llm",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "task-manager",
+    "todo"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "dizlexic/moo-tasks": {
+   "full_name": "dizlexic/moo-tasks",
+   "stars": 45,
+   "pushed_at": "2026-06-21T17:57:40Z",
+   "created_at": "2026-04-21T03:37:15Z",
+   "description": "A simple multiuser multiboard task MCP server managed via kanban board interface. Created to allow simple self hosted agent task management.",
+   "topics": [
+    "agentic-ai",
+    "agentic-workflow",
+    "agents",
+    "mcp-server"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "eyalzh/kanban-mcp": {
+   "full_name": "eyalzh/kanban-mcp",
+   "stars": 41,
+   "pushed_at": "2025-07-13T13:19:05Z",
+   "created_at": "2025-04-21T18:35:47Z",
+   "description": "MCP server providing kanban-based task management memory for complex multi-session workflows with AI agents",
+   "topics": [
+    "kanban",
+    "mcp",
+    "mcp-server",
+    "memory-bank",
+    "project-management"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5",
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "tradesdontlie/task-manager-mcp": {
+   "full_name": "tradesdontlie/task-manager-mcp",
+   "stars": 38,
+   "pushed_at": "2025-04-16T17:41:46Z",
+   "created_at": "2025-04-15T01:20:11Z",
+   "description": "A task management MCP server that provides comprehensive project and task tracking capabilities",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "tcarac/taskboard": {
+   "full_name": "tcarac/taskboard",
+   "stars": 37,
+   "pushed_at": "2026-02-16T08:53:08Z",
+   "created_at": "2026-02-15T07:06:59Z",
+   "description": "Local project management with Kanban UI, CLI, and MCP server for AI assistants. SQLite-backed, single binary, installable via Homebrew.",
+   "topics": [
+    "ai-tools",
+    "cli",
+    "golang",
+    "homebrew",
+    "kanban",
+    "mcp",
+    "model-context-protocol",
+    "project-management",
+    "self-hosted",
+    "sqlite"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5",
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "RF-D/motion-mcp": {
+   "full_name": "RF-D/motion-mcp",
+   "stars": 36,
+   "pushed_at": "2025-12-08T09:29:13Z",
+   "created_at": "2025-07-07T22:03:43Z",
+   "description": "Unofficial MCP server for Motion (usemotion.com) - AI-powered calendar & task management. Integrate Motion with Claude and other AI assistants",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "PhelanShao/openmm-mcp-server": {
+   "full_name": "PhelanShao/openmm-mcp-server",
+   "stars": 36,
+   "pushed_at": "2025-05-31T04:52:56Z",
+   "created_at": "2025-05-31T02:11:56Z",
+   "description": "OpenMM, an open-source platform for molecular dynamics (MD) simulations, is supported by an MCP server that offers a structured communication interface for task submission, management, and execution.",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "cbunting99/enhanced-mcp-memory": {
+   "full_name": "cbunting99/enhanced-mcp-memory",
+   "stars": 33,
+   "pushed_at": "2025-08-04T15:36:52Z",
+   "created_at": "2025-07-15T13:15:21Z",
+   "description": "An enhanced MCP (Model Context Protocol) server for intelligent memory and task management, designed for AI assistants and development workflows. Features semantic search, automatic task extraction, k",
+   "topics": [
+    "cline",
+    "kiro",
+    "kiro-mcp-memory",
+    "mcp-memory",
+    "mcp-server",
+    "roo-code",
+    "vscode"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "aliasunder/vault-cortex": {
+   "full_name": "aliasunder/vault-cortex",
+   "stars": 31,
+   "pushed_at": "2026-10-20T03:32:54Z",
+   "created_at": "2026-05-01T00:06:42Z",
+   "description": "Standalone MCP server for Obsidian vaults — hybrid search, structured memory, task management, files, OAuth 2.1. Run locally, self-host, or one-click deploy for remote access.",
+   "topics": [
+    "ai-agents",
+    "ai-memory-system",
+    "claude",
+    "docker",
+    "hybrid-search",
+    "knowledge-base",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "note-taking",
+    "obsidian",
+    "obsidian-mcp-server",
+    "obsidian-sync",
+    "obsidian-vault",
+    "one-click-deploy",
+    "personal-knowledge-management",
+    "pkm",
+    "self-hosted",
+    "semantic-search",
+    "task-management"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "devondragon/MotionMCP": {
+   "full_name": "devondragon/MotionMCP",
+   "stars": 30,
+   "pushed_at": "2026-10-17T15:17:33Z",
+   "created_at": "2025-05-25T22:57:19Z",
+   "description": "MCP Server for Use Motion Task Management System",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "pinkpixel-dev/taskflow-mcp": {
+   "full_name": "pinkpixel-dev/taskflow-mcp",
+   "stars": 29,
+   "pushed_at": "2026-03-13T12:27:19Z",
+   "created_at": "2025-05-09T21:34:17Z",
+   "description": "A task management Model Context Protocol (MCP) server that helps AI assistants break down user requests into manageable tasks with subtasks, dependencies, and notes. Enforces a structured workflow wit",
+   "topics": [
+    "ai-assistant",
+    "claude",
+    "cursor",
+    "dependencies-manager",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "model-context-protocol-servers",
+    "nodejs",
+    "notes-manager",
+    "npm-package",
+    "project-management",
+    "subtasks",
+    "taskflow",
+    "typescript",
+    "workflow"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "shrimpwtf/akiflow-mcp": {
+   "full_name": "shrimpwtf/akiflow-mcp",
+   "stars": 28,
+   "pushed_at": "2026-05-24T11:31:44Z",
+   "created_at": "2026-01-25T18:25:20Z",
+   "description": "MCP server for Akiflow task and calendar management - schedule tasks, edit events, manage projects and tags",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "bivex/kanboard-mcp": {
+   "full_name": "bivex/kanboard-mcp",
+   "stars": 28,
+   "pushed_at": "2026-06-12T13:39:28Z",
+   "created_at": "2025-07-14T03:21:00Z",
+   "description": "A Model Context Protocol (MCP) server written in Go that empowers AI agents and Large Language Models (LLMs) to seamlessly interact with Kanboard. It transforms natural language commands into Kanboard",
+   "topics": [
+    "ai-agent",
+    "go",
+    "json-rpc",
+    "kanboard",
+    "llm-integration",
+    "mcp",
+    "productivity-tools",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "joehaddad2000/claude-todo-emulator": {
+   "full_name": "joehaddad2000/claude-todo-emulator",
+   "stars": 26,
+   "pushed_at": "2025-11-21T21:43:21Z",
+   "created_at": "2025-06-20T19:01:49Z",
+   "description": "This is an MCP server that emulates Claude Code's task management system, providing persistent todo functionality for AI coding assistants in IDEs like Cursor, Windsurf, and others.",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "bsmi021/mcp-task-manager-server": {
+   "full_name": "bsmi021/mcp-task-manager-server",
+   "stars": 25,
+   "pushed_at": "2025-06-11T14:37:22Z",
+   "created_at": "2025-04-09T14:27:25Z",
+   "description": "A local Model Context Protocol (MCP) server providing backend tools for client-driven project and task management using a SQLite database.",
+   "topics": [
+    "claude",
+    "cline",
+    "mcp",
+    "modelcontextprotocol",
+    "roo",
+    "task",
+    "task-management",
+    "task-manager",
+    "taskmanager"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "jbrinkman/valkey-ai-tasks": {
+   "full_name": "jbrinkman/valkey-ai-tasks",
+   "stars": 25,
+   "pushed_at": "2025-07-05T23:53:10Z",
+   "created_at": "2025-06-15T19:16:46Z",
+   "description": "MCP server for task management with Valkey persistence",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "NotePlan/noteplan-mcp": {
+   "full_name": "NotePlan/noteplan-mcp",
+   "stars": 18,
+   "pushed_at": "2026-08-15T16:37:27Z",
+   "created_at": "2026-01-31T22:00:44Z",
+   "description": "MCP server for NotePlan note and task management",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "RMANOV/sqlite-memory-mcp": {
+   "full_name": "RMANOV/sqlite-memory-mcp",
+   "stars": 18,
+   "pushed_at": "2026-10-17T13:48:34Z",
+   "created_at": "2026-03-01T15:21:25Z",
+   "description": "SQLite-backed MCP Memory Server with WAL concurrent safety, FTS5 search, session tracking, task management, and cross-machine bridge sync",
+   "topics": [
+    "ai-memory",
+    "claude",
+    "claude-code",
+    "concurrent",
+    "fts5",
+    "full-text-search",
+    "knowledge-graph",
+    "llm",
+    "llm-memory",
+    "mcp",
+    "mcp-server",
+    "memory-server",
+    "model-context-protocol",
+    "persistent-memory",
+    "python",
+    "session-tracking",
+    "sqlite",
+    "wal-mode"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "0xK3vin/vikunja-mcp": {
+   "full_name": "0xK3vin/vikunja-mcp",
+   "stars": 17,
+   "pushed_at": "2026-10-02T19:42:41Z",
+   "created_at": "2026-01-10T19:01:53Z",
+   "description": "MCP server for Vikunja task management",
+   "topics": [
+    "ai-tools",
+    "claude",
+    "mcp",
+    "model-context-protocol",
+    "task-management",
+    "typescript",
+    "vikunja"
+   ],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "brysontang/DeltaTask": {
+   "full_name": "brysontang/DeltaTask",
+   "stars": 17,
+   "pushed_at": "2025-02-27T22:44:46Z",
+   "created_at": "2025-02-27T05:55:33Z",
+   "description": "A powerful MCP (Model Context Protocol) server for Claude Desktop, integrating task management, SQLite, and Obsidian visualization.",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "Chevalicious/things3-mcp-gtd": {
+   "full_name": "Chevalicious/things3-mcp-gtd",
+   "stars": 15,
+   "pushed_at": "2026-07-15T17:23:25Z",
+   "created_at": "2026-03-13T03:38:33Z",
+   "description": "Things 3 MCP Server - GTD workflow automation for Things 3 task management",
+   "topics": [],
+   "found_by": [
+    "task management MCP server in:name,description stars:>5"
+   ]
+  },
+  "itechmeat/open-second-brain": {
+   "full_name": "itechmeat/open-second-brain",
+   "stars": 491,
+   "pushed_at": "2026-10-19T22:48:07Z",
+   "created_at": "2026-05-06T07:40:41Z",
+   "description": "Local-first 🧠 memory for Hermes Agent that lives in your Obsidian vault and remembers project context. Nightly 😴 dream passes turn repeat corrections into confirmed preferences with measurable confide",
+   "topics": [],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "zszszszsz/.config": {
+   "full_name": "zszszszsz/.config",
+   "stars": 363,
+   "pushed_at": "2023-10-05T22:52:42Z",
+   "created_at": "2020-06-23T17:51:35Z",
+   "description": "# # Automatically generated file; DO NOT EDIT. # OpenWrt Configuration # CONFIG_MODULES=y CONFIG_HAVE_DOT_CONFIG=y # CONFIG_TARGET_sunxi is not set # CONFIG_TARGET_apm821xx is not set # CONFIG_TARGET_",
+   "topics": [],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "nhevers/MoltBrain": {
+   "full_name": "nhevers/MoltBrain",
+   "stars": 252,
+   "pushed_at": "2026-03-25T10:39:37Z",
+   "created_at": "2026-01-26T17:22:52Z",
+   "description": "Long-term memory layer for OpenClaw & MoltBook agents that learns and recalls your project context automatically.",
+   "topics": [
+    "ai",
+    "claude",
+    "claude-code",
+    "mcp",
+    "memory",
+    "nodejs",
+    "plugin",
+    "typescript"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "jmagly/aiwg": {
+   "full_name": "jmagly/aiwg",
+   "stars": 224,
+   "pushed_at": "2026-10-20T18:28:08Z",
+   "created_at": "2025-08-14T17:52:47Z",
+   "description": "Reusable project context and specialist workflows for the AI tools you already use. Agents, skills, rules and MCP tools for Claude Code, Codex, Copilot, Cursor and more, plus SDLC workflows, session m",
+   "topics": [
+    "agent-skills",
+    "agentic-ai",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "coding-agents",
+    "context-engineering",
+    "copilot",
+    "cursor",
+    "decision-engine",
+    "decision-support",
+    "developer-tools",
+    "jev",
+    "llm",
+    "mcp",
+    "multi-agent",
+    "prompt-engineering",
+    "sdlc",
+    "token-optimization",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "coddy-project/coddy-agent": {
+   "full_name": "coddy-project/coddy-agent",
+   "stars": 178,
+   "pushed_at": "2026-10-20T17:40:57Z",
+   "created_at": "2026-03-23T06:37:12Z",
+   "description": "General-purpose agent in one static Go binary: console TUI, ACP server for editors, OpenAI-compatible API with embedded web UI, Telegram gateway, cron scheduler, swarm relay, remote mode. Rules, skill",
+   "topics": [
+    "acp",
+    "agent-client-protocol",
+    "ai-agent",
+    "anthropic",
+    "autonomous-agents",
+    "cli",
+    "coding-agent",
+    "distroless",
+    "go",
+    "golang",
+    "llm",
+    "mcp",
+    "multi-agent",
+    "ollama",
+    "openai",
+    "self-hosted",
+    "skills",
+    "swarm",
+    "telegram-bot",
+    "tui"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "Frappucc1no/recall-loom": {
+   "full_name": "Frappucc1no/recall-loom",
+   "stars": 155,
+   "pushed_at": "2026-08-06T12:07:34Z",
+   "created_at": "2026-04-13T03:36:55Z",
+   "description": "Project memory for long-running AI work across agents, models, and sessions. Keep context, decisions, progress, and next steps in local project files.",
+   "topics": [
+    "agent-memory",
+    "agent-skills",
+    "ai-agents",
+    "ai-coding",
+    "ai-memory",
+    "claude",
+    "claude-code",
+    "claude-code-skills",
+    "claude-skills",
+    "codex",
+    "codex-skill",
+    "context-management",
+    "developer-tools",
+    "gemini-cli",
+    "llm",
+    "llm-agents",
+    "markdown",
+    "project-continuity",
+    "project-memory",
+    "session-memory"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "uudam42/agent-memory-engine": {
+   "full_name": "uudam42/agent-memory-engine",
+   "stars": 127,
+   "pushed_at": "2026-10-02T03:08:21Z",
+   "created_at": "2026-06-25T10:15:48Z",
+   "description": "Memory Engine is a local-first MCP server that gives coding agents persistent, evidence-backed project memory. It automatically builds a project knowledge base, retrieves relevant architecture, constr",
+   "topics": [],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "giraffe-tree/agent-base": {
+   "full_name": "giraffe-tree/agent-base",
+   "stars": 104,
+   "pushed_at": "2026-08-20T09:45:57Z",
+   "created_at": "2026-02-18T05:03:05Z",
+   "description": "Agent Base is a source-level research project on coding agents. It compares Codex CLI, OpenCode, Gemini CLI, Kimi CLI, and SWE-agent across agent loops, tools, MCP integration, context/memory handling",
+   "topics": [],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "Artistsyn/cortex_suite": {
+   "full_name": "Artistsyn/cortex_suite",
+   "stars": 84,
+   "pushed_at": "2026-10-08T14:51:25Z",
+   "created_at": "2026-08-04T05:39:24Z",
+   "description": "Local MCP servers that give coding agents a reliable project memory. quartz-ctx serves live code structure in 10 languages, cross-language calls included; cortex keeps learned patterns and traps, push",
+   "topics": [],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "ScriptedAlchemy/tracedecay": {
+   "full_name": "ScriptedAlchemy/tracedecay",
+   "stars": 81,
+   "pushed_at": "2026-10-20T09:43:19Z",
+   "created_at": "2026-06-06T23:05:08Z",
+   "description": "Local semantic code intelligence, project memory, and workflow context for AI coding agents.",
+   "topics": [
+    "ai-coding-agents",
+    "code-intelligence",
+    "developer-tools",
+    "knowledge-graph",
+    "mcp",
+    "rust",
+    "semantic-search",
+    "tree-sitter"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "kruschdev/krusch-context-mcp": {
+   "full_name": "kruschdev/krusch-context-mcp",
+   "stars": 71,
+   "pushed_at": "2026-10-20T04:47:01Z",
+   "created_at": "2026-05-06T02:58:19Z",
+   "description": "Persistent working memory and invariant steering MCP server for AI coding agents (Claude Code, Cursor, Windsurf). Captures architectural decisions, enforces project rules with pre-commit audits, and s",
+   "topics": [
+    "ai-agents",
+    "antigravity",
+    "claude",
+    "claude-code",
+    "context-engineering",
+    "cursor",
+    "llm",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "sqlite",
+    "windsurf",
+    "working-memory"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "ma-nucho-pro/wife": {
+   "full_name": "ma-nucho-pro/wife",
+   "stars": 69,
+   "pushed_at": "2026-09-21T01:07:53Z",
+   "created_at": "2026-07-31T03:05:20Z",
+   "description": "Local-first, evidence-aware memory and project continuity for AI coding agents. Checkpoints, context packs and auditable receipts without telemetry.",
+   "topics": [
+    "agent-memory",
+    "ai-agents",
+    "ai-memory",
+    "claude",
+    "claude-code",
+    "cli",
+    "codex",
+    "context-engineering",
+    "context-packs",
+    "developer-tools",
+    "evidence-aware",
+    "hooks",
+    "llm-memory",
+    "local-first",
+    "memory-layer",
+    "openai-codex",
+    "persistent-memory",
+    "project-continuity",
+    "project-memory",
+    "zero-dependencies"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "contextstream/mcp-server": {
+   "full_name": "contextstream/mcp-server",
+   "stars": 44,
+   "pushed_at": "2026-10-20T09:48:33Z",
+   "created_at": "2025-12-12T18:12:00Z",
+   "description": "Persistent memory, semantic search, and shared project context for AI agents with traceable sources and scoped access. Carry decisions, lessons, and intent across sessions and tools.",
+   "topics": [
+    "agent",
+    "agentmemory",
+    "ai-memory",
+    "claude",
+    "context",
+    "context-management",
+    "cursor",
+    "gemini-cli-extension",
+    "mcp",
+    "windsurf"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "MedAdemBHA/docflow": {
+   "full_name": "MedAdemBHA/docflow",
+   "stars": 44,
+   "pushed_at": "2026-08-15T12:57:51Z",
+   "created_at": "2026-06-03T10:40:56Z",
+   "description": "Documentation memory for AI coding agents—route project knowledge, reduce repeated context loading, and validate living Markdown docs.",
+   "topics": [
+    "ai-agents",
+    "claude-code-plugin",
+    "codex-plugin",
+    "documentation"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "prakrititz/relayBrain": {
+   "full_name": "prakrititz/relayBrain",
+   "stars": 33,
+   "pushed_at": "2026-10-18T14:05:43Z",
+   "created_at": "2026-06-11T23:25:41Z",
+   "description": "Coordination and context layer for AI coding agents. Shared file locks, live patch sync, and portable project memory across Claude Code, Cursor, Copilot, Codex and Antigravity with rooms for team-wide",
+   "topics": [
+    "agent",
+    "agentic-framework",
+    "antigravity",
+    "claude",
+    "codex",
+    "copilot",
+    "cursor",
+    "gitworktrees",
+    "locking-systems",
+    "mcp",
+    "ngrok-tunnel"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "luckeyfaraday/Athena": {
+   "full_name": "luckeyfaraday/Athena",
+   "stars": 33,
+   "pushed_at": "2026-10-07T19:14:28Z",
+   "created_at": "2026-05-12T11:16:30Z",
+   "description": "Athena is a desktop control surface for AI coding agents with shared project context. Built with Electron, React, and FastAPI, it embeds native terminals for Codex, OpenCode, Claude, and Hermes with H",
+   "topics": [
+    "ade",
+    "agent",
+    "agentic-coding",
+    "agentic-context",
+    "agentic-context-environment",
+    "ai",
+    "coding",
+    "developer-tools",
+    "hermes-agent",
+    "ide",
+    "persistent-memory",
+    "terminal"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "codefromkarl/ContextAtlas": {
+   "full_name": "codefromkarl/ContextAtlas",
+   "stars": 29,
+   "pushed_at": "2026-06-02T06:10:50Z",
+   "created_at": "2026-04-03T05:55:34Z",
+   "description": "ContextAtlas — context infrastructure for AI coding agents: hybrid retrieval, project memory and retrieval observability via CLI, MCP server or embeddable library. Tree-sitter indexing, LanceDB vector",
+   "topics": [
+    "ai-agent",
+    "ai-tools",
+    "claude-code",
+    "code-retrieval",
+    "code-search",
+    "codebase-indexing",
+    "context-engineering",
+    "context-management",
+    "developer-tools",
+    "hybrid-search",
+    "lancedb",
+    "mcp",
+    "mcp-server",
+    "oss",
+    "project-memory",
+    "rag",
+    "semantic-search",
+    "tree-sitter",
+    "typescript",
+    "vector-database"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "waittim/MemoryCustodian": {
+   "full_name": "waittim/MemoryCustodian",
+   "stars": 22,
+   "pushed_at": "2026-09-27T23:23:55Z",
+   "created_at": "2026-06-29T00:25:37Z",
+   "description": "Durable, repo-native project memory for coding agents, without context bloat.",
+   "topics": [
+    "agent",
+    "agent-memory",
+    "ai",
+    "claude-code",
+    "claude-skills",
+    "codex",
+    "codex-skills",
+    "coding",
+    "coding-agents",
+    "developer-tools",
+    "gemini-cli",
+    "local-first",
+    "markdown",
+    "memory",
+    "memory-governance",
+    "memory-management",
+    "skill"
+   ],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "mirror-mind-ai/mirror": {
+   "full_name": "mirror-mind-ai/mirror",
+   "stars": 21,
+   "pushed_at": "2026-10-20T16:28:22Z",
+   "created_at": "2026-04-21T19:06:09Z",
+   "description": "A local-first memory and identity framework for agentic AI runtimes. Mirror Mind gives knowledge workers a coordinated team of specialized AI personas — all briefed on your identity, your projects, an",
+   "topics": [],
+   "found_by": [
+    "agent memory project context in:name,description stars:>20"
+   ]
+  },
+  "jwasham/coding-interview-university": {
+   "full_name": "jwasham/coding-interview-university",
+   "stars": 363163,
+   "pushed_at": "2025-08-28T14:42:47Z",
+   "created_at": "2016-06-06T02:34:12Z",
+   "description": "A complete computer science study plan to become a software engineer.",
+   "topics": [
+    "algorithm",
+    "algorithms",
+    "coding-interview",
+    "coding-interviews",
+    "computer-science",
+    "data-structures",
+    "interview",
+    "interview-prep",
+    "interview-preparation",
+    "programming-interviews",
+    "software-engineering",
+    "study-plan"
+   ],
+   "found_by": [
+    "claude code task manager in:name,description,readme stars:>10"
+   ]
+  },
+  "vinta/awesome-python": {
+   "full_name": "vinta/awesome-python",
+   "stars": 328964,
+   "pushed_at": "2026-10-19T05:39:01Z",
+   "created_at": "2014-06-27T21:00:06Z",
+   "description": "The definitive list that answers \"I want to do X in Python, which tool should I use?\"",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "python",
+    "python-frameworks",
+    "python-libraries",
+    "python-tools"
+   ],
+   "found_by": [
+    "claude code task manager in:name,description,readme stars:>10"
+   ]
+  },
+  "obra/superpowers": {
+   "full_name": "obra/superpowers",
+   "stars": 302510,
+   "pushed_at": "2026-10-20T15:30:53Z",
+   "created_at": "2025-10-09T19:45:18Z",
+   "description": "An agentic skills framework & software development methodology that works.",
+   "topics": [
+    "ai",
+    "brainstorming",
+    "coding",
+    "obra",
+    "sdlc",
+    "skills",
+    "subagent-driven-development",
+    "superpowers"
+   ],
+   "found_by": [
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "nextlevelbuilder/ui-ux-pro-max-skill": {
+   "full_name": "nextlevelbuilder/ui-ux-pro-max-skill",
+   "stars": 137934,
+   "pushed_at": "2026-10-15T02:04:34Z",
+   "created_at": "2025-11-30T11:36:31Z",
+   "description": "An AI skill that provides design intelligence for building professional UI/UX across multiple platforms.",
+   "topics": [
+    "ai-skills",
+    "antigravity",
+    "claude",
+    "claude-code",
+    "codex",
+    "command-line",
+    "copilot",
+    "cursor-ai",
+    "html5",
+    "kiro",
+    "landing-page",
+    "mobile-ui",
+    "qoder",
+    "react",
+    "tailwindcss",
+    "trae",
+    "ui-design",
+    "uikit",
+    "windsurf-ai"
+   ],
+   "found_by": [
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "TauricResearch/TradingAgents": {
+   "full_name": "TauricResearch/TradingAgents",
+   "stars": 112298,
+   "pushed_at": "2026-10-16T21:38:46Z",
+   "created_at": "2024-12-28T03:31:08Z",
+   "description": "TradingAgents: Multi-Agents LLM Financial Trading Framework",
+   "topics": [
+    "agent",
+    "finance",
+    "llm",
+    "multiagent",
+    "trading"
+   ],
+   "found_by": [
+    "claude code task manager in:name,description,readme stars:>10"
+   ]
+  },
+  "deepseek-ai/DeepSeek-V3": {
+   "full_name": "deepseek-ai/DeepSeek-V3",
+   "stars": 104529,
+   "pushed_at": "2025-08-28T03:24:37Z",
+   "created_at": "2024-12-26T09:52:40Z",
+   "description": "",
+   "topics": [],
+   "found_by": [
+    "claude code task manager in:name,description,readme stars:>10"
+   ]
+  },
+  "stablyai/orca": {
+   "full_name": "stablyai/orca",
+   "stars": 99480,
+   "pushed_at": "2026-10-20T18:30:54Z",
+   "created_at": "2026-03-17T03:28:57Z",
+   "description": "Orca is the place for working with a fleet of agents (e.g. Grok Bot, Claude Code). Run any coding agent with your own subscription. Available on desktop, mobile and remote runtime.",
+   "topics": [
+    "ade",
+    "agent-ide",
+    "ai-agents",
+    "automation",
+    "bot",
+    "claude-code",
+    "codex",
+    "ghostty",
+    "grok-bot",
+    "hermes-agent",
+    "mobile-app",
+    "muse",
+    "openclaw",
+    "opencode",
+    "orchestration",
+    "pi",
+    "runtime",
+    "terminal",
+    "worktrees",
+    "yc-backed"
+   ],
+   "found_by": [
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "diegosouzapw/OmniRoute": {
+   "full_name": "diegosouzapw/OmniRoute",
+   "stars": 78881,
+   "pushed_at": "2026-10-20T18:32:10Z",
+   "created_at": "2026-02-13T12:38:31Z",
+   "description": "Never stop coding. Free MIT AI gateway: one endpoint, 375 providers (150+ free), 1,400+ models Kimi, Claude, GPT, Gemini, GLM, DeepSeek, MiniMax. Works with Claude Code, Codex, Cursor, OpenCode, Cline",
+   "topics": [
+    "a2a",
+    "ai-agents",
+    "ai-gateway",
+    "anthropic",
+    "claude",
+    "claude-code",
+    "cline",
+    "codex",
+    "copilot",
+    "cursor",
+    "deepseek",
+    "free-ai",
+    "gemini",
+    "kimi",
+    "llm-gateway",
+    "mcp",
+    "openai",
+    "openai-proxy",
+    "qwen",
+    "token-saver"
+   ],
+   "found_by": [
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "colbymchenry/codegraph": {
+   "full_name": "colbymchenry/codegraph",
+   "stars": 74521,
+   "pushed_at": "2026-10-20T18:31:10Z",
+   "created_at": "2026-01-18T21:45:37Z",
+   "description": "Pre-indexed code knowledge graph, auto syncs on code changes, for Claude Code, Codex, Gemini, Cursor, OpenCode, AntiGravity, Kiro, CoPilot, and Hermes Agent — fewer tokens, fewer tool calls, 100% loca",
+   "topics": [],
+   "found_by": [
+    "claude code task manager in:name,description,readme stars:>10",
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "code-yeongyu/oh-my-openagent": {
+   "full_name": "code-yeongyu/oh-my-openagent",
+   "stars": 70226,
+   "pushed_at": "2026-10-20T18:25:43Z",
+   "created_at": "2025-12-03T01:40:05Z",
+   "description": "OmO: Just type \"mass ulw\" keyword with your prompt. Now you are the master of graph engineering.",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "anthropic",
+    "chatgpt",
+    "claude",
+    "claude-skills",
+    "codex",
+    "cursor",
+    "gemini",
+    "ide",
+    "openai",
+    "opencode",
+    "orchestration",
+    "tui",
+    "typescript"
+   ],
+   "found_by": [
+    "claude code task manager in:name,description,readme stars:>10"
+   ]
+  },
+  "ultraworkers/claw-code": {
+   "full_name": "ultraworkers/claw-code",
+   "stars": 194924,
+   "pushed_at": "2026-10-19T04:07:34Z",
+   "created_at": "2026-03-31T08:58:08Z",
+   "description": "An agent-managed museum exhibit, built in Rust with Gajae-Code / LazyCodex — developed and maintained with no human intervention.",
+   "topics": [],
+   "found_by": [
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "Graphify-Labs/graphify": {
+   "full_name": "Graphify-Labs/graphify",
+   "stars": 129952,
+   "pushed_at": "2026-10-20T16:16:19Z",
+   "created_at": "2026-04-03T15:49:07Z",
+   "description": "Turn any codebase, with its docs, SQL schemas, configs, and PDFs, into a queryable knowledge graph. A /graphify skill for Claude Code, Cursor, Codex, and Gemini CLI: local deterministic AST parsing, e",
+   "topics": [
+    "ai-agents",
+    "antigravity",
+    "ast",
+    "claude-code",
+    "code-analysis",
+    "code-search",
+    "codex",
+    "cursor",
+    "developer-tools",
+    "gemini",
+    "graphify",
+    "graphrag",
+    "knowledge-graph",
+    "leiden",
+    "llm",
+    "mcp",
+    "openclaw",
+    "rag",
+    "skills",
+    "tree-sitter"
+   ],
+   "found_by": [
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "JuliusBrussee/caveman": {
+   "full_name": "JuliusBrussee/caveman",
+   "stars": 113821,
+   "pushed_at": "2026-10-19T08:07:31Z",
+   "created_at": "2026-04-04T10:03:00Z",
+   "description": "🪨 why use many token when few token do trick. Viral skill + proxy for coding agents that cuts 65% of tokens by talking like a caveman.",
+   "topics": [
+    "ai",
+    "anthropic",
+    "caveman",
+    "claude",
+    "claude-code",
+    "llm",
+    "meme",
+    "prompt-engineering",
+    "skill",
+    "tokens"
+   ],
+   "found_by": [
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "addyosmani/agent-skills": {
+   "full_name": "addyosmani/agent-skills",
+   "stars": 108918,
+   "pushed_at": "2026-10-13T20:24:07Z",
+   "created_at": "2026-02-15T20:20:26Z",
+   "description": "Production-grade engineering skills for AI coding agents.",
+   "topics": [
+    "agent-skills",
+    "antigravity",
+    "claude-code",
+    "codex",
+    "cursor",
+    "skills"
+   ],
+   "found_by": [
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "rtk-ai/rtk": {
+   "full_name": "rtk-ai/rtk",
+   "stars": 84079,
+   "pushed_at": "2026-10-20T14:03:49Z",
+   "created_at": "2026-01-22T16:54:16Z",
+   "description": "CLI proxy that reduces LLM token consumption by 60-90% on common dev commands. Single Rust binary, zero dependencies",
+   "topics": [
+    "agentic-coding",
+    "ai-coding",
+    "anthropic",
+    "claude-code",
+    "cli",
+    "command-line-tool",
+    "cost-reduction",
+    "developer-tools",
+    "llm",
+    "open-source",
+    "productivity",
+    "rust",
+    "token-optimization"
+   ],
+   "found_by": [
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "ComposioHQ/awesome-claude-skills": {
+   "full_name": "ComposioHQ/awesome-claude-skills",
+   "stars": 77507,
+   "pushed_at": "2026-09-18T07:16:11Z",
+   "created_at": "2025-10-17T07:15:01Z",
+   "description": "A curated list of awesome Claude Skills, resources, and tools for customizing Claude AI workflows",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "antigravity",
+    "automation",
+    "claude",
+    "claude-code",
+    "codex",
+    "composio",
+    "cursor",
+    "developer-tools",
+    "gemini-cli",
+    "mcp",
+    "openai-codex",
+    "rube",
+    "saas",
+    "skill",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "Fission-AI/OpenSpec": {
+   "full_name": "Fission-AI/OpenSpec",
+   "stars": 72532,
+   "pushed_at": "2026-10-20T18:25:49Z",
+   "created_at": "2025-08-05T10:37:45Z",
+   "description": "Spec-driven development (SDD) for AI coding assistants.",
+   "topics": [
+    "ai",
+    "context-engineering",
+    "engineering",
+    "planning",
+    "prd",
+    "sdd",
+    "sdlc",
+    "spec",
+    "spec-driven-development",
+    "specification"
+   ],
+   "found_by": [
+    "codex task tracker in:name,description,readme stars:>5"
+   ]
+  },
+  "VoltAgent/awesome-agent-skills": {
+   "full_name": "VoltAgent/awesome-agent-skills",
+   "stars": 36060,
+   "pushed_at": "2026-10-20T14:56:48Z",
+   "created_at": "2025-10-28T08:55:32Z",
+   "description": "A curated collection of 1000+ agent skills from official dev teams and the community, compatible with Claude Code, Codex, Gemini CLI, Cursor, and more.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "awesome",
+    "awesome-list",
+    "claude-code",
+    "claude-code-skills",
+    "claude-skills",
+    "codex",
+    "codex-skills",
+    "cursor",
+    "cursor-skills",
+    "gemini-skills",
+    "opencode-skills",
+    "skills"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "OthmanAdi/planning-with-files": {
+   "full_name": "OthmanAdi/planning-with-files",
+   "stars": 27550,
+   "pushed_at": "2026-10-20T13:29:56Z",
+   "created_at": "2026-01-03T07:37:28Z",
+   "description": "Persistent file-based planning for AI coding agents and long-running tasks. Crash-proof markdown plans, session recovery after /clear and compaction, per-turn re-injection against context rot, determi",
+   "topics": [
+    "agent-skills",
+    "autonomous-agents",
+    "claude",
+    "claude-code",
+    "claude-code-skills",
+    "claude-skills",
+    "codex",
+    "coding-agent",
+    "context-engineering",
+    "context-rot",
+    "cursor",
+    "github-copilot",
+    "hermes-plugin",
+    "hermes-skill",
+    "llm-agents",
+    "long-running-agents",
+    "manus",
+    "multi-agent-systems",
+    "planning",
+    "session-recovery"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "nashsu/llm_wiki": {
+   "full_name": "nashsu/llm_wiki",
+   "stars": 20831,
+   "pushed_at": "2026-09-28T01:43:23Z",
+   "created_at": "2026-04-08T11:24:01Z",
+   "description": "LLM Wiki is a cross-platform desktop application that turns your documents into an organized, interlinked knowledge base — automatically. Instead of traditional RAG (retrieve-and-answer from scratch e",
+   "topics": [],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "ai-boost/awesome-prompts": {
+   "full_name": "ai-boost/awesome-prompts",
+   "stars": 9106,
+   "pushed_at": "2026-10-20T08:33:37Z",
+   "created_at": "2024-01-19T15:15:10Z",
+   "description": "Curated list of chatgpt prompts from the top-rated GPTs in the GPTs Store. Prompt Engineering, prompt attack & prompt protect. Advanced Prompt Engineering papers.",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "chatgpt",
+    "gpt4",
+    "gpts",
+    "gptstore",
+    "papers",
+    "prompt",
+    "prompt-engineering"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "trungdq88/Awesome-Black-Friday-Cyber-Monday": {
+   "full_name": "trungdq88/Awesome-Black-Friday-Cyber-Monday",
+   "stars": 7493,
+   "pushed_at": "2025-11-30T01:11:39Z",
+   "created_at": "2022-11-22T06:16:23Z",
+   "description": "Awesome apps, software, and SaaS deals on Black Friday.",
+   "topics": [],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "loopx-project/loopx": {
+   "full_name": "loopx-project/loopx",
+   "stars": 6377,
+   "pushed_at": "2026-10-20T18:32:34Z",
+   "created_at": "2026-05-31T14:58:56Z",
+   "description": "Local-first control plane and research workbench for long-horizon agents and teams. Durable goals, governed collaboration, and cited trajectory analysis.",
+   "topics": [
+    "agent-control-plane",
+    "agent-harness",
+    "agentic-software",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "local-first",
+    "long-horizon-agents",
+    "multi-agent",
+    "research-workbench",
+    "trajectory-analysis",
+    "typescript"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "0xNyk/awesome-hermes-agent": {
+   "full_name": "0xNyk/awesome-hermes-agent",
+   "stars": 5873,
+   "pushed_at": "2026-09-22T06:26:00Z",
+   "created_at": "2026-03-23T05:34:37Z",
+   "description": "Independent directory of useful skills, plugins, memory providers, tools, surfaces, and guides for Nous Research's open-source Hermes Agent.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "ai-tools",
+    "awesome",
+    "awesome-list",
+    "hermes-agent",
+    "mcp",
+    "memory",
+    "nous-research",
+    "skills"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "OpenBMB/PilotDeck": {
+   "full_name": "OpenBMB/PilotDeck",
+   "stars": 4820,
+   "pushed_at": "2026-10-20T09:26:43Z",
+   "created_at": "2026-05-22T06:50:28Z",
+   "description": "Task-oriented AI Agent productivity platform",
+   "topics": [],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "jamesmurdza/awesome-ai-devtools": {
+   "full_name": "jamesmurdza/awesome-ai-devtools",
+   "stars": 3983,
+   "pushed_at": "2026-08-27T15:25:27Z",
+   "created_at": "2023-08-03T09:36:57Z",
+   "description": "Curated list of AI-powered developer tools.",
+   "topics": [],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "tutti-os/tutti": {
+   "full_name": "tutti-os/tutti",
+   "stars": 3846,
+   "pushed_at": "2026-10-08T07:05:00Z",
+   "created_at": "2026-06-12T12:29:05Z",
+   "description": "Where people and agents build in tune.",
+   "topics": [
+    "agent-collaboration",
+    "agent-orchestration",
+    "agent-workspace",
+    "agentic-ai",
+    "agentic-workflow",
+    "ai-agents",
+    "ai-tools",
+    "ai-workspace",
+    "claude-code",
+    "codex",
+    "coding-agent",
+    "desktop-app",
+    "developer-tools",
+    "hermes-agent",
+    "local-first",
+    "macos-app",
+    "mcp",
+    "multi-agent",
+    "shared-context",
+    "vibe-coding"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "giancarloerra/SocratiCode": {
+   "full_name": "giancarloerra/SocratiCode",
+   "stars": 3346,
+   "pushed_at": "2026-10-15T22:21:08Z",
+   "created_at": "2026-02-26T16:12:26Z",
+   "description": "Enterprise-grade (40m+ LOC) codebase intelligence, zero-setup, local & private Plugin/Skill/Extension or MCP: hybrid semantic search, polyglot dependency graphs, symbol-level impact analysis & call-fl",
+   "topics": [
+    "ai",
+    "ai-assistant",
+    "ast",
+    "claude",
+    "claude-code",
+    "code-graph",
+    "codebase-intelligence",
+    "context-engine",
+    "docker",
+    "embeddings",
+    "gemini",
+    "gemini-cli-extension",
+    "mcp",
+    "openai",
+    "qdrant",
+    "semantic",
+    "semantic-search",
+    "vector-database",
+    "vector-embeddings",
+    "vector-search"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "peteromallet/desloppify": {
+   "full_name": "peteromallet/desloppify",
+   "stars": 3187,
+   "pushed_at": "2026-05-13T20:17:05Z",
+   "created_at": "2026-02-11T17:27:42Z",
+   "description": "Agent harness to make your slop code well-engineered and beautiful.",
+   "topics": [
+    "agent-harness"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "samugit83/redamon": {
+   "full_name": "samugit83/redamon",
+   "stars": 3169,
+   "pushed_at": "2026-10-19T22:05:44Z",
+   "created_at": "2025-12-29T14:59:18Z",
+   "description": "Open-source, self-hosted AI penetration testing framework: maps your attack surface into a graph, autonomously exploits it from a Kali sandbox with human approval gates, and opens PRs that fix what it",
+   "topics": [
+    "agentic-ai",
+    "ai",
+    "ai-pentesting",
+    "attack-surface-management",
+    "autonomous-agents",
+    "bug-bounty",
+    "cybersecurity",
+    "ethical-hacking",
+    "ethical-hacking-tools",
+    "exploitation",
+    "kali-linux",
+    "llm-agents",
+    "mcp",
+    "metasploit",
+    "neo4j",
+    "osint",
+    "penetration-testing",
+    "penetration-testing-tools",
+    "red-team",
+    "skills"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "microsoft/skills": {
+   "full_name": "microsoft/skills",
+   "stars": 3135,
+   "pushed_at": "2026-10-20T16:47:26Z",
+   "created_at": "2026-01-16T18:34:20Z",
+   "description": "Skills, MCP servers, Custom Agents, Agents.md for SDKs to ground Coding Agents",
+   "topics": [
+    "agent-skills",
+    "agents",
+    "azure",
+    "foundry",
+    "mcp",
+    "sdk",
+    "skills"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "docmd-io/docmd": {
+   "full_name": "docmd-io/docmd",
+   "stars": 2528,
+   "pushed_at": "2026-10-16T20:53:18Z",
+   "created_at": "2025-05-08T04:58:58Z",
+   "description": "Documentation compiler for humans and machines. One Markdown source to website, search, AI context, and knowledge formats together.",
+   "topics": [
+    "ai-skills",
+    "api",
+    "context-api",
+    "docker",
+    "docmd",
+    "documentation",
+    "i18n",
+    "javascript",
+    "markdown",
+    "mcp",
+    "nodejs",
+    "openapi",
+    "plugins",
+    "pwa",
+    "semantic-search",
+    "seo",
+    "static-site-generator",
+    "themes",
+    "typescript",
+    "version-control"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "Dicklesworthstone/mcp_agent_mail": {
+   "full_name": "Dicklesworthstone/mcp_agent_mail",
+   "stars": 2214,
+   "pushed_at": "2026-10-18T19:25:00Z",
+   "created_at": "2025-10-23T03:42:36Z",
+   "description": "Asynchronous coordination layer for AI coding agents: identities, inboxes, searchable threads, and advisory file leases over FastMCP + Git + SQLite",
+   "topics": [
+    "ai-agents",
+    "coordination",
+    "fastmcp",
+    "mcp",
+    "python"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "ratatui/awesome-ratatui": {
+   "full_name": "ratatui/awesome-ratatui",
+   "stars": 2048,
+   "pushed_at": "2026-10-19T20:50:21Z",
+   "created_at": "2023-12-06T18:45:45Z",
+   "description": "A curated list of TUI apps and libraries built with Ratatui",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "ratatui",
+    "rust",
+    "tui"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "a9gent/mindfs": {
+   "full_name": "a9gent/mindfs",
+   "stars": 1865,
+   "pushed_at": "2026-10-16T05:12:02Z",
+   "created_at": "2026-03-31T06:06:42Z",
+   "description": "Access your personal AI agents and workstation data anywhere, anytime through MindFS.",
+   "topics": [],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "Hiflylabs/awesome-dbt": {
+   "full_name": "Hiflylabs/awesome-dbt",
+   "stars": 1740,
+   "pushed_at": "2026-09-05T18:49:02Z",
+   "created_at": "2021-10-09T15:41:16Z",
+   "description": "A curated list of awesome dbt resources ",
+   "topics": [
+    "analytics-engineering",
+    "awesome",
+    "awesome-list",
+    "data-engineering",
+    "dbt"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "RongleCat/grok-app": {
+   "full_name": "RongleCat/grok-app",
+   "stars": 1472,
+   "pushed_at": "2026-10-19T03:27:31Z",
+   "created_at": "2026-07-23T16:43:40Z",
+   "description": "Open-source Grok App — desktop workbench (GUI) for the local Grok Build CLI: sessions, projects, media, automations. Tauri 2.",
+   "topics": [
+    "ai",
+    "desktop",
+    "gui",
+    "rust",
+    "tauri",
+    "tauri-v2",
+    "typescript"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "aklofas/kicad-happy": {
+   "full_name": "aklofas/kicad-happy",
+   "stars": 1462,
+   "pushed_at": "2026-10-15T00:10:28Z",
+   "created_at": "2026-03-09T06:19:59Z",
+   "description": "AI coding agent skills for KiCad electronics design. Works with Claude Code and OpenAI Codex. Analyze schematics, review PCB layouts, EMC pre-compliance, SPICE simulation, download datasheets, source ",
+   "topics": [
+    "ai-skills",
+    "bom-management",
+    "claude-code",
+    "codex",
+    "design-review",
+    "digikey",
+    "eda",
+    "electronics",
+    "emc",
+    "emc-compliance",
+    "gerber",
+    "hardware-design",
+    "jlcpcb",
+    "kicad",
+    "kicad-pcb",
+    "openai-codex",
+    "pcb-design",
+    "schematic-analysis",
+    "signal-integrity",
+    "spice-simulation"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "hotovo/aider-desk": {
+   "full_name": "hotovo/aider-desk",
+   "stars": 1460,
+   "pushed_at": "2026-10-20T14:46:55Z",
+   "created_at": "2025-01-07T22:08:01Z",
+   "description": "Platform for AI-powered software engineers",
+   "topics": [
+    "ai",
+    "ai-coding",
+    "ai-coding-tools",
+    "ai-developer-tools",
+    "ai-development",
+    "coding",
+    "electron-app"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "coollabsio/jean": {
+   "full_name": "coollabsio/jean",
+   "stars": 1349,
+   "pushed_at": "2026-10-20T12:12:28Z",
+   "created_at": "2026-01-23T07:59:41Z",
+   "description": "A dev environment for AI agents.",
+   "topics": [
+    "agent",
+    "ai",
+    "claude-code",
+    "git",
+    "parallel",
+    "worktree"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "Runfusion/Fusion": {
+   "full_name": "Runfusion/Fusion",
+   "stars": 1281,
+   "pushed_at": "2026-10-18T03:24:23Z",
+   "created_at": "2026-04-13T01:43:26Z",
+   "description": "Your Software Factory - build faster and better with multi node agents that work 24/7",
+   "topics": [
+    "agent",
+    "agentic-workflow",
+    "agents",
+    "llm",
+    "orchestration-framework"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "AgentsMesh/Pivo": {
+   "full_name": "AgentsMesh/Pivo",
+   "stars": 1106,
+   "pushed_at": "2025-08-10T09:39:12Z",
+   "created_at": "2025-07-20T10:48:58Z",
+   "description": "Task-focused programming environment designed for the right vibe.",
+   "topics": [],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "MobinX/awesome-mcp-list": {
+   "full_name": "MobinX/awesome-mcp-list",
+   "stars": 893,
+   "pushed_at": "2026-10-20T15:01:03Z",
+   "created_at": "2025-03-24T16:33:17Z",
+   "description": "A concise list for mcp servers",
+   "topics": [],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "dark-hxx/CLI-Manager": {
+   "full_name": "dark-hxx/CLI-Manager",
+   "stars": 805,
+   "pushed_at": "2026-10-20T03:04:45Z",
+   "created_at": "2026-03-12T12:18:12Z",
+   "description": "A multi-project AI CLI workspace for local terminals, SSH hosts, and mobile-assisted workflows",
+   "topics": [
+    "ai-cli",
+    "claude-code",
+    "codex",
+    "developer-tools",
+    "tauri-app",
+    "terminal"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "soaring-xiongkulu/easyaiot": {
+   "full_name": "soaring-xiongkulu/easyaiot",
+   "stars": 746,
+   "pushed_at": "2026-10-16T08:43:52Z",
+   "created_at": "2025-08-04T02:21:28Z",
+   "description": "我希望全世界都能使用这个系统，实现AI的真正0门槛，人人都能体验到AI带来的好处，而并不只是掌握在少数人手里。支持上千种垂直场景，支持AI模型定制化和AI算法定制化开发 深度融合，赋能万物智视：EasyAIoT 构筑了物联网设备（尤其是海量摄像头）的高效接入与管控网络。我们深度融合流媒体实时传输技术与前沿人工智能（AI），打造一体化服务核心。这套方案不仅打通了异构设备的互联互通，更将高清视频流与强",
+   "topics": [],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "umputun/agterm": {
+   "full_name": "umputun/agterm",
+   "stars": 684,
+   "pushed_at": "2026-10-20T17:10:22Z",
+   "created_at": "2026-06-21T18:04:52Z",
+   "description": "A genuinely good terminal",
+   "topics": [
+    "ai-agents",
+    "cli",
+    "terminal"
+   ],
+   "found_by": [
+    "multi-project AI workspace in:name,description,readme stars:>5"
+   ]
+  },
+  "byoungd/up": {
+   "full_name": "byoungd/up",
+   "stars": 69059,
+   "pushed_at": "2026-10-19T05:09:39Z",
+   "created_at": "2017-05-30T07:18:52Z",
+   "description": "韩先凯的人生进阶指南 人生进阶指南 AI时代生存指南 英语学习指南 离谱的人生 AI AI时代终身学习：AI、学习、创业与成长。",
+   "topics": [
+    "ai-literacy",
+    "chinese",
+    "english-learning",
+    "lifelong-learning",
+    "open-education",
+    "self-directed-learning",
+    "tutorial"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "KKKKhazix/khazix-skills": {
+   "full_name": "KKKKhazix/khazix-skills",
+   "stars": 21534,
+   "pushed_at": "2026-10-01T13:15:32Z",
+   "created_at": "2026-04-06T07:37:02Z",
+   "description": "数字生命卡兹克开源的 AI Skills 合集 | Agent Skills: leader（帮你定义目标）, neat-freak 洁癖, hv-analysis, khazix-writer & more — Claude Code, Codex & 40+ agents",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "claude",
+    "claude-code",
+    "codex",
+    "developer-tools",
+    "llm",
+    "skills",
+    "vibe-coding"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "jnMetaCode/agency-agents-zh": {
+   "full_name": "jnMetaCode/agency-agents-zh",
+   "stars": 21428,
+   "pushed_at": "2026-10-20T14:14:30Z",
+   "created_at": "2026-03-06T11:11:51Z",
+   "description": "🎭 277 个即插即用的 AI 专家角色 — 支持 Claude Code/Cursor/Copilot 等 20 种工具，覆盖工程/设计/营销/金融等 20 个部门。含 64 个中国市场原创智能体（小红书/抖音/微信/飞书/钉钉/Qt 上位机/机械设计）。搭配编排器 agency-orchestrator，一句话即可让多位专家按 DAG 自动协作。",
+   "topics": [
+    "agency-orchestrator",
+    "agent-definitions",
+    "ai-agents",
+    "ai-roles",
+    "chinese",
+    "claude",
+    "claude-code",
+    "copilot-agent",
+    "cursor-rules",
+    "deepseek",
+    "hermes-agent",
+    "llm",
+    "multi-agent",
+    "no-code",
+    "prompt-engineering",
+    "qwen",
+    "system-prompt",
+    "workbuddy",
+    "workflow"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "zhu1090093659/dsh-web": {
+   "full_name": "zhu1090093659/dsh-web",
+   "stars": 9116,
+   "pushed_at": "2026-10-20T13:06:59Z",
+   "created_at": "2026-08-12T05:15:20Z",
+   "description": "DeepSeek Harness (DSH) Web 插件聚合生态 · 万物皆插件，通过创意工坊分发｜｜DeepSeek Harness (DSH) Web Plugin Aggregation Ecosystem · Everything is a plugin, distributed via the Creative Workshop",
+   "topics": [
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "dsh-web",
+    "dsh-web-ui"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme",
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "yzfly/Awesome-MCP-ZH": {
+   "full_name": "yzfly/Awesome-MCP-ZH",
+   "stars": 7747,
+   "pushed_at": "2026-10-15T23:18:35Z",
+   "created_at": "2025-04-03T00:38:51Z",
+   "description": "MCP 资源精选， MCP指南，Claude MCP，MCP Servers, MCP Clients",
+   "topics": [
+    "claude",
+    "claude-mcp",
+    "deepseek",
+    "deepseek-mcp",
+    "mcp",
+    "mcp-clients",
+    "mcp-host",
+    "mcp-server",
+    "mcp-servers",
+    "mcp-servers-directory",
+    "mcp-tools",
+    "qwen-mcp"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme",
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "op7418/guizang-social-card-skill": {
+   "full_name": "op7418/guizang-social-card-skill",
+   "stars": 7605,
+   "pushed_at": "2026-07-01T16:39:11Z",
+   "created_at": "2026-05-27T12:05:05Z",
+   "description": "🪧 Claude Code / Codex skill — generate Xiaohongshu carousels & WeChat 21:9+1:1 cover pairs. Editorial × Swiss visual systems, 28 layouts, 10 themes, single-file HTML → PNG. 小红书图文 + 公众号封面对",
+   "topics": [
+    "agent-skill",
+    "ai-agent",
+    "anthropic",
+    "claude-code",
+    "claude-skill",
+    "codex",
+    "editorial-design",
+    "html-template",
+    "image-generation",
+    "playwright",
+    "rednote",
+    "social-cards",
+    "swiss-design",
+    "wechat",
+    "xiaohongshu"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "deusyu/harness-engineering": {
+   "full_name": "deusyu/harness-engineering",
+   "stars": 6157,
+   "pushed_at": "2026-09-26T13:33:02Z",
+   "created_at": "2026-03-23T16:35:38Z",
+   "description": "Harness Engineering 学习指南 — 从概念理解到独立实践的深度学习档案",
+   "topics": [],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "Hisn00w/ASu-skills": {
+   "full_name": "Hisn00w/ASu-skills",
+   "stars": 5843,
+   "pushed_at": "2026-10-19T03:29:55Z",
+   "created_at": "2026-08-12T07:12:05Z",
+   "description": "🚀面向求职与开发场景的实用 AI Skills 集合，支持简历优化、岗位投递、面试准备与开发提效。",
+   "topics": [],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "HughYau/qiushi-skill": {
+   "full_name": "HughYau/qiushi-skill",
+   "stars": 3819,
+   "pushed_at": "2026-10-01T09:00:18Z",
+   "created_at": "2026-03-25T10:24:01Z",
+   "description": "Qiushi-Skill: Build agents that investigate first, focus on the main contradiction, validate in practice, and keep pushing until the work is actually done. 求是Skill——从经典唯物辩证法与实践哲学中提炼出一条总原则和九大方法论工具武装AI大",
+   "topics": [
+    "ai-agents",
+    "methodology",
+    "skills",
+    "workflow"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "whiteguo233/OpenBiliClaw": {
+   "full_name": "whiteguo233/OpenBiliClaw",
+   "stars": 3514,
+   "pushed_at": "2026-10-20T18:23:39Z",
+   "created_at": "2026-03-07T13:46:10Z",
+   "description": "本地私有、开源的自进化跨平台 AI 内容发现 Agent：先理解你，再主动从 B站、小红书、抖音、YouTube、X、知乎、Reddit、微博等平台与开放 Web 寻找内容。（支持 deepseek harness 插件） | Local-first open-source cross-platform AI content discovery agent: understands you, th",
+   "topics": [
+    "ai-agent",
+    "bilibili",
+    "chrome-extension",
+    "content-discovery",
+    "cross-platform",
+    "deepseek-harness",
+    "douyin",
+    "dsh",
+    "dsh-plugin",
+    "llm",
+    "local-first",
+    "personal-ai",
+    "privacy-first",
+    "python",
+    "recommendation-system",
+    "self-hosted",
+    "typescript",
+    "xiaohongshu",
+    "youtube",
+    "zhihu"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "Weikezi-AI/CNote": {
+   "full_name": "Weikezi-AI/CNote",
+   "stars": 3393,
+   "pushed_at": "2026-08-03T03:55:49Z",
+   "created_at": "2021-07-30T07:56:03Z",
+   "description": "「CNote」一份涵盖大部分学习 C 语言所需要掌握的核心知识，致力于打造最易懂的 C语言入门教程，让天下没有难学的 C语言。（包含C语言教程、C语言精华文章）",
+   "topics": [],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "taishi-i/awesome-ChatGPT-repositories": {
+   "full_name": "taishi-i/awesome-ChatGPT-repositories",
+   "stars": 3315,
+   "pushed_at": "2026-10-20T15:47:42Z",
+   "created_at": "2023-04-02T14:00:07Z",
+   "description": "A curated list of open source GitHub repositories related to ChatGPT, the OpenAI API, and Codex. Searchable via Claude Code  and Codex skills.",
+   "topics": [
+    "agent",
+    "agent-skills",
+    "ai",
+    "awesome",
+    "awesome-list",
+    "chatgpt",
+    "codex",
+    "gpt-5",
+    "llm",
+    "openai",
+    "skills"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "Weikezi-AI/GoGuide": {
+   "full_name": "Weikezi-AI/GoGuide",
+   "stars": 3251,
+   "pushed_at": "2026-08-03T03:45:42Z",
+   "created_at": "2021-11-06T11:32:28Z",
+   "description": "「Go语言学习指南」一份涵盖大部分 Golang 程序员所需要掌握的核心知识，拥有 Go语言教程、Go开源书籍、Go语言入门教程、Go语言学习路线。零基础学习 Go语言、Go编程，首选 GoGuide。",
+   "topics": [
+    "git",
+    "go",
+    "golang",
+    "study"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "Simple-XX/SimpleKernel": {
+   "full_name": "Simple-XX/SimpleKernel",
+   "stars": 3212,
+   "pushed_at": "2026-03-20T18:11:15Z",
+   "created_at": "2018-03-07T03:36:04Z",
+   "description": "Interface-Driven OS Kernel for AI-Assisted Learning | 面向 AI 的操作系统学习项目",
+   "topics": [
+    "kernel",
+    "learning-by-doing"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "Minglink/dsh-infinite-gen-5": {
+   "full_name": "Minglink/dsh-infinite-gen-5",
+   "stars": 3183,
+   "pushed_at": "2026-10-20T05:27:52Z",
+   "created_at": "2026-08-15T15:47:15Z",
+   "description": "DeepSeek v4.1 flash 逆向工具（无限五代）     求 Star 收藏 ⭐欢迎大家提交项目的改进",
+   "topics": [
+    "deepseek",
+    "deepseek-harness"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "mikubaka88/CCFA-Skills": {
+   "full_name": "mikubaka88/CCFA-Skills",
+   "stars": 3179,
+   "pushed_at": "2026-10-20T11:32:09Z",
+   "created_at": "2026-06-04T06:47:10Z",
+   "description": "A skill family for shaping the research storyline of CCF-A papers.",
+   "topics": [],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "mcncarl/jianying-headless": {
+   "full_name": "mcncarl/jianying-headless",
+   "stars": 3138,
+   "pushed_at": "2026-10-20T09:02:12Z",
+   "created_at": "2026-09-15T11:51:15Z",
+   "description": "Private source preview: native Jianying drafts, isolated editing/export, and standalone Agent Skill.",
+   "topics": [],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "zenstory-ai/drama-skills": {
+   "full_name": "zenstory-ai/drama-skills",
+   "stars": 3133,
+   "pushed_at": "2026-10-20T17:07:59Z",
+   "created_at": "2026-07-16T16:11:19Z",
+   "description": "开源 AI 短剧/漫剧创作 skill 合集：剧本、角色资产、分镜 storyboard、图片/视频提示词、审查，适配 Claude Code 与 Codex | Open-source AI short drama / micro-drama skills for Claude Code & Codex: script, assets, storyboard, image & video pro",
+   "topics": [
+    "agent-skills",
+    "ai-short-drama",
+    "ai-video",
+    "aigc",
+    "claude-code",
+    "claude-code-skills",
+    "claude-skills",
+    "codex",
+    "comic-drama",
+    "micro-drama",
+    "prompt-engineering",
+    "screenwriting",
+    "script-generation",
+    "short-drama",
+    "storyboard",
+    "storyboarding",
+    "video-prompts",
+    "zenstory"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "OpenNSWM-Lab/FAROS": {
+   "full_name": "OpenNSWM-Lab/FAROS",
+   "stars": 3044,
+   "pushed_at": "2026-10-14T13:40:34Z",
+   "created_at": "2026-05-13T09:56:01Z",
+   "description": "A blueprint-driven AutoResearch runtime for orchestrating AI research workflows from idea generation and experiments to paper writing and peer review.",
+   "topics": [
+    "academic-research",
+    "academic-writing",
+    "agentic-workflow",
+    "ai-for-science",
+    "ai-scientist",
+    "ai4science",
+    "automated-research",
+    "autonomous-research",
+    "autoresearch",
+    "llm-agents",
+    "multi-agent",
+    "paper-generation",
+    "paper-writing",
+    "research-agent",
+    "research-automation",
+    "research-orchestration",
+    "research-workflow",
+    "scientific-discovery",
+    "scientific-workflow",
+    "workflow-orchestration"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "feitangyuan/onetake": {
+   "full_name": "feitangyuan/onetake",
+   "stars": 2766,
+   "pushed_at": "2026-10-13T03:31:43Z",
+   "created_at": "2026-09-26T05:35:17Z",
+   "description": "Motion films that never cut to the next slide: every beat grows out of the one before, one continuous camera, continuity measured by an oracle. Product launch films and feature demos, made with a codi",
+   "topics": [
+    "agent-skill",
+    "animation",
+    "canvas",
+    "claude-skill",
+    "launch-video",
+    "motion-graphics",
+    "video"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "jnMetaCode/agency-orchestrator": {
+   "full_name": "jnMetaCode/agency-orchestrator",
+   "stars": 2390,
+   "pushed_at": "2026-10-20T15:36:40Z",
+   "created_at": "2026-03-21T18:32:02Z",
+   "description": "🚀 One sentence → your one-person company of AI experts → complete deliverable in minutes. 276 CN + 184 EN + 5 more languages (ko/ru/pt-BR/id/ar) · zero-code YAML · auto-verified acceptance · Web Studi",
+   "topics": [
+    "agency-agents",
+    "agent-orchestration",
+    "ai-agents",
+    "autogen-alternative",
+    "claude",
+    "codex",
+    "copilot",
+    "crewai-alternative",
+    "cursor",
+    "deepseek",
+    "gemini-cli",
+    "langgraph-alternative",
+    "mcp-server",
+    "multi-agent",
+    "no-api-key",
+    "ollama",
+    "openai",
+    "orchestrator",
+    "workflow",
+    "yaml-workflow"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "huang-sir1/radiology-skills": {
+   "full_name": "huang-sir1/radiology-skills",
+   "stars": 2001,
+   "pushed_at": "2026-09-21T10:06:04Z",
+   "created_at": "2026-06-18T10:20:19Z",
+   "description": "",
+   "topics": [],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "tsingyuai/growth-lab": {
+   "full_name": "tsingyuai/growth-lab",
+   "stars": 1995,
+   "pushed_at": "2026-09-28T13:39:38Z",
+   "created_at": "2026-07-24T05:33:56Z",
+   "description": "An end-to-end growth tool that understands the product, fetch the data it needs, researches the market, executes campaigns, and reviews results to improve the next round of growth. 从代码到市场的开源端到端增长工具。理解",
+   "topics": [
+    "agentic-marketing",
+    "ai-agent",
+    "claude-code",
+    "codex",
+    "growth",
+    "growth-hacking",
+    "marketing-automation",
+    "open-source",
+    "seo",
+    "skills",
+    "xiaohongshu"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "dongshuyan/Awesome-Prompts": {
+   "full_name": "dongshuyan/Awesome-Prompts",
+   "stars": 1864,
+   "pushed_at": "2026-03-01T21:29:32Z",
+   "created_at": "2026-01-06T05:45:44Z",
+   "description": "分享一下自创以及打野得到的各种优质prompt",
+   "topics": [],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "feiskyer/claude-code-settings": {
+   "full_name": "feiskyer/claude-code-settings",
+   "stars": 1663,
+   "pushed_at": "2026-09-27T15:24:55Z",
+   "created_at": "2025-07-18T06:22:12Z",
+   "description": "Curated skills, sub-agents, and config templates that supercharge Claude Code — research, image gen, GitHub automation & more.",
+   "topics": [
+    "agentic-ai",
+    "agents",
+    "ai",
+    "claude-code",
+    "claude-code-agents",
+    "claude-code-plugins",
+    "claude-skills",
+    "codex",
+    "copilot",
+    "litellm",
+    "vibe-coding"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "Pluviobyte/rnskill": {
+   "full_name": "Pluviobyte/rnskill",
+   "stars": 1653,
+   "pushed_at": "2026-09-21T05:44:30Z",
+   "created_at": "2026-07-04T18:43:42Z",
+   "description": "雪踏乌云的 AI Agent Skills 集合",
+   "topics": [],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "yihong0618/gitblog": {
+   "full_name": "yihong0618/gitblog",
+   "stars": 1628,
+   "pushed_at": "2026-10-19T06:19:10Z",
+   "created_at": "2019-07-18T00:31:17Z",
+   "description": "People Die, but Long Live GitHub",
+   "topics": [],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "lixiaoxiao9888-create/manju-laoli-skill": {
+   "full_name": "lixiaoxiao9888-create/manju-laoli-skill",
+   "stars": 1540,
+   "pushed_at": "2026-10-20T15:35:43Z",
+   "created_at": "2026-08-15T08:00:57Z",
+   "description": "漫剧老李 AIGC 创作全流程 Skill · V7.4.25 多技能套装版（Short-Drama Director Suite）：1 总控 + 12 子技能 · 四层纵深——赛道分流 / 素材采风 / 剧本 / 资产 / 分镜 / 三大打戏引擎 / 投喂 / 质检全链路。六道前置锁 + I 画风锁 · 50 份规则库 · 机检 C1~C32 | H1~H12 + 六道投喂闸门 + P4.5 故",
+   "topics": [],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "boyang-hu/website-rebuild-skill": {
+   "full_name": "boyang-hu/website-rebuild-skill",
+   "stars": 1538,
+   "pushed_at": "2026-10-12T09:30:09Z",
+   "created_at": "2026-08-11T03:50:30Z",
+   "description": "复刻网站的 Agent Skill：抓只读镜像、从压缩代码逐行还原、自动比对验收。An agent skill that mirrors a website, rebuilds it from the minified code, and verifies the result with automated diffs.",
+   "topics": [
+    "agent-skills",
+    "ai-agents",
+    "claude",
+    "claude-code",
+    "codex",
+    "reverse-engineering",
+    "wayback-machine",
+    "web-archiving"
+   ],
+   "found_by": [
+    "AI 交接 in:name,description,readme"
+   ]
+  },
+  "ardeyouxipianyi/workbuddy2api-hub": {
+   "full_name": "ardeyouxipianyi/workbuddy2api-hub",
+   "stars": 2233,
+   "pushed_at": "2026-10-20T17:36:33Z",
+   "created_at": "2026-09-12T09:03:40Z",
+   "description": "WorkBuddy 国际国内多账号反代网关，支持 Codex / Claude Code / DSH与标准 OpenAI 客户端。",
+   "topics": [
+    "api-gateway",
+    "claude-code",
+    "codebuddy",
+    "codex",
+    "deepseek",
+    "openai-api",
+    "reverse-proxy",
+    "tencent",
+    "vibe-coding",
+    "workbuddy",
+    "workbuddy2api"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme",
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "taielab/awesome-hacking-lists": {
+   "full_name": "taielab/awesome-hacking-lists",
+   "stars": 1399,
+   "pushed_at": "2025-12-04T06:55:03Z",
+   "created_at": "2020-06-12T09:16:28Z",
+   "description": "A curated collection of top-tier penetration testing tools and productivity utilities across multiple domains. Join us to explore, contribute, and enhance your hacking toolkit!",
+   "topics": [
+    "agents",
+    "ai",
+    "aiagent",
+    "awesome-list",
+    "bounty-hunters",
+    "bug-bounty",
+    "bugbounty",
+    "bugbounty-tool",
+    "hacker",
+    "hacking",
+    "hacking-tool",
+    "hacking-tools",
+    "kali-scripts",
+    "llm",
+    "llm-inference",
+    "mcp",
+    "mcp-server",
+    "pentest-scripts",
+    "pentesting-tools",
+    "web"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme",
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "wentorai/Research-Claw": {
+   "full_name": "wentorai/Research-Claw",
+   "stars": 859,
+   "pushed_at": "2026-08-20T14:26:06Z",
+   "created_at": "2026-03-09T07:54:53Z",
+   "description": "In the AI era, why can't everyone be a Principal Investigator?",
+   "topics": [],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "ningbainb/deepseek-harness-desktop": {
+   "full_name": "ningbainb/deepseek-harness-desktop",
+   "stars": 849,
+   "pushed_at": "2026-10-06T18:35:48Z",
+   "created_at": "2026-08-13T19:50:01Z",
+   "description": "Open-source Windows desktop client and GUI for DeepSeek Harness — zero-setup installer with Codex, plugins, skills, SSH, mobile remote access, and 11 skins.",
+   "topics": [
+    "ai-agent",
+    "ai-coding-assistant",
+    "codex",
+    "deepseek",
+    "deepseek-harness",
+    "desktop-app",
+    "dsh",
+    "dsh-plugin",
+    "electron",
+    "electron-app",
+    "gui",
+    "open-source",
+    "plugin-system",
+    "plugins",
+    "remote-access",
+    "skills",
+    "ssh-client",
+    "windows",
+    "windows-desktop"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "YuJunZhiXue/StudyAnalysis-Skills": {
+   "full_name": "YuJunZhiXue/StudyAnalysis-Skills",
+   "stars": 639,
+   "pushed_at": "2026-03-16T16:52:53Z",
+   "created_at": "2026-01-20T08:42:35Z",
+   "description": "深度解析链接、文档或代码，生成“全能导师级”的教学笔记",
+   "topics": [],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "basionwang-bot/HermesPet": {
+   "full_name": "basionwang-bot/HermesPet",
+   "stars": 597,
+   "pushed_at": "2026-10-15T05:53:50Z",
+   "created_at": "2026-05-15T06:03:02Z",
+   "description": "让 AI 住在你 MacBook 的刘海里 · 零依赖开箱即用 · 多引擎并行的桌面 AI 伴侣（Swift 6 / SwiftUI / macOS 14+）",
+   "topics": [
+    "ai",
+    "chatgpt",
+    "chinese",
+    "claude",
+    "deepseek",
+    "desktop-app",
+    "dynamic-island",
+    "llm",
+    "macos",
+    "menu-bar-app",
+    "swift",
+    "swiftui"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "vibeinging/dsh-desktop": {
+   "full_name": "vibeinging/dsh-desktop",
+   "stars": 483,
+   "pushed_at": "2026-10-20T18:03:53Z",
+   "created_at": "2026-08-13T10:41:33Z",
+   "description": "DeepSeek Harness Desktop App: a local AI desktop workspace for DSH Sessions, projects, files, web research, plugins, and Office artifacts.",
+   "topics": [
+    "agentic-workflows",
+    "ai-agent",
+    "ai-workbench",
+    "data-analysis",
+    "deepseek-harness",
+    "desktop-app",
+    "dsh",
+    "dsh-plugin",
+    "electron",
+    "local-first",
+    "mcp",
+    "model-context-protocol",
+    "office-automation",
+    "react",
+    "typescript"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "bruc3van/awesome-dsh-plugin": {
+   "full_name": "bruc3van/awesome-dsh-plugin",
+   "stars": 437,
+   "pushed_at": "2026-10-20T14:06:32Z",
+   "created_at": "2026-08-13T13:24:25Z",
+   "description": "30 秒找到真正适合你的 DeepSeek Harness插件。每天自动抓取 GitHub 上的 `dsh-plugin` 项目并逐个复核：真实插件分类收录，蹭标签项目剔除。通过场景化分类、精选推荐、热度排行和图文导览，帮你快速看懂每个插件能做什么、适合谁，以及如何开始使用。欢迎 Star ，让好用的插件更快被发现。",
+   "topics": [
+    "awesome-list",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "shanggqm/codexU": {
+   "full_name": "shanggqm/codexU",
+   "stars": 357,
+   "pushed_at": "2026-10-19T09:50:09Z",
+   "created_at": "2026-06-30T06:47:15Z",
+   "description": "macOS desktop widget for OpenAI Codex usage, quota tracking, token usage, and today task board",
+   "topics": [
+    "chatgpt",
+    "codex",
+    "codex-cli",
+    "dashboard",
+    "desktop-widget",
+    "developer-tools",
+    "local-first",
+    "macos",
+    "macos-app",
+    "menu-bar-app",
+    "openai",
+    "openai-codex",
+    "quota-tracker",
+    "rate-limit",
+    "swift",
+    "swiftui",
+    "token-usage",
+    "usage-tracker"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "libukai/awesome-deepseek-harness": {
+   "full_name": "libukai/awesome-deepseek-harness",
+   "stars": 306,
+   "pushed_at": "2026-09-12T05:53:00Z",
+   "created_at": "2026-08-13T13:47:48Z",
+   "description": "DeepSeek Harness 终极指南：快速入门、资源推荐、精选插件与实用工具 ｜The Ultimate Guide to DeepSeek Harness: QuickStart, Resources, Plugins&Toolkit",
+   "topics": [
+    "agent",
+    "agent-harness",
+    "awesome-list",
+    "deepseek",
+    "deepseek-harness",
+    "developer-tools",
+    "dsh",
+    "dsh-plugin",
+    "plugins"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "imsai-sh/awesome-deepseek-harness-plugins": {
+   "full_name": "imsai-sh/awesome-deepseek-harness-plugins",
+   "stars": 302,
+   "pushed_at": "2026-10-20T17:26:13Z",
+   "created_at": "2026-08-14T05:53:47Z",
+   "description": "DeepSeek Harness plugin store, marketplace and hub — 11,000+ dsh plugins with search, rankings, install commands and a free public API. DeepSeek Harness 插件市场 / 插件商店：自动收集与格式校验，免费搜索 API。deepseek1024.com",
+   "topics": [
+    "awesome-list",
+    "catalog",
+    "deepseek",
+    "deepseek-harness",
+    "deepseek-harness-plugins",
+    "deepseek1024",
+    "dsh",
+    "dsh-1024store",
+    "dsh-bundle",
+    "dsh-plugin",
+    "dsh-plugin-market",
+    "dsh-plugin-verify",
+    "dsh-plugins",
+    "dsh-skill",
+    "marketplace",
+    "plugin-directory",
+    "plugin-hub",
+    "plugin-store",
+    "plugins",
+    "registry"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "Fisfzy/dsh-ego-browser": {
+   "full_name": "Fisfzy/dsh-ego-browser",
+   "stars": 272,
+   "pushed_at": "2026-09-28T15:18:34Z",
+   "created_at": "2026-08-07T08:13:54Z",
+   "description": "DSH（DeepSeek Harness）插件：把 ego-lite 浏览器（给 AI Agent 用的 Chromium）接入 HARNESS——13 个结构化 ego_* 工具（文本语义快照、语义定位点击、表单填充、截图、CDP 控制、任务空间隔离），内置 ego 运行时，Linux + Chrome 开箱即用，无需克隆官方仓库或手动构建。",
+   "topics": [
+    "agent-browser",
+    "browser-automation",
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "dsh-better-sidebar",
+    "dsh-plugin",
+    "dshfind",
+    "dshx",
+    "ego-lite"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "IllegalCreed/type-pal": {
+   "full_name": "IllegalCreed/type-pal",
+   "stars": 250,
+   "pushed_at": "2026-10-20T17:16:50Z",
+   "created_at": "2026-05-22T14:38:58Z",
+   "description": "用 TypeScript 从零重写《仙剑奇侠传》（1995），浏览器里能通关，附可视化编辑器 · A from-scratch TypeScript remake of PAL (1995) with a visual editor. Unofficial fan project.",
+   "topics": [
+    "browser-game",
+    "chinese-paladin",
+    "game-editor",
+    "game-engine",
+    "pal",
+    "react",
+    "remake",
+    "retro-games",
+    "rpg",
+    "typescript"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "leenkcool/Blue-Whale-Harness": {
+   "full_name": "leenkcool/Blue-Whale-Harness",
+   "stars": 196,
+   "pushed_at": "2026-09-12T07:29:56Z",
+   "created_at": "2026-08-13T14:34:04Z",
+   "description": "🐋 DeepSeek Harness 插件总目录 · The catalog of DSH plugins：1958 个仓库 / 1819 个真插件（Skills · MCP · Tools · UI · Orchestration），中英文搜索、分类筛选、STAR 排序 → leenkcool.github.io",
+   "topics": [
+    "agents",
+    "awesome",
+    "awesome-list",
+    "catalog",
+    "deepseek",
+    "deepseek-ai",
+    "deepseek-harness",
+    "deepseek-harness-plugin",
+    "deepseek-harness-plugins",
+    "directory",
+    "dsh",
+    "dsh-plugin",
+    "dsh-plugins",
+    "harness",
+    "harness-ai",
+    "mcp",
+    "plugin-catalog",
+    "plugin-marketplace",
+    "plugins",
+    "skills"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "echoVic/blade-code": {
+   "full_name": "echoVic/blade-code",
+   "stars": 181,
+   "pushed_at": "2026-10-13T10:38:27Z",
+   "created_at": "2025-05-30T10:08:27Z",
+   "description": "AI-powered CLI coding agent with 20+ built-in tools, MCP support, and multi-model providers",
+   "topics": [
+    "agent",
+    "ai",
+    "cli",
+    "code",
+    "llm",
+    "mcp",
+    "nodejs",
+    "skills",
+    "terminal",
+    "tools",
+    "typescript"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "beancookie/awesome-dsh-plugin": {
+   "full_name": "beancookie/awesome-dsh-plugin",
+   "stars": 169,
+   "pushed_at": "2026-10-20T04:48:51Z",
+   "created_at": "2026-08-14T09:35:25Z",
+   "description": "Awesome DeepSeek Harness (DSH) Plugin",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "kunpengtalk/PeakCode": {
+   "full_name": "kunpengtalk/PeakCode",
+   "stars": 167,
+   "pushed_at": "2026-09-22T13:24:29Z",
+   "created_at": "2026-05-21T10:40:11Z",
+   "description": "一个基于PiAgent的简约AI 编程工具。支持任务看板，AI自驱开发、Goal目标、实时流式传输、内置 Git、本地优先、保护隐私。",
+   "topics": [],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "czm15053/trellis-card": {
+   "full_name": "czm15053/trellis-card",
+   "stars": 129,
+   "pushed_at": "2026-09-17T08:41:34Z",
+   "created_at": "2026-08-06T09:36:05Z",
+   "description": "",
+   "topics": [],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "wh000wh000/awesome-claude-mods": {
+   "full_name": "wh000wh000/awesome-claude-mods",
+   "stars": 128,
+   "pushed_at": "2026-10-17T02:10:20Z",
+   "created_at": "2026-10-04T14:17:03Z",
+   "description": "Awesome Claude Mods — evidence-graded index of Claude Code mods, plugins and hooks. 20 languages, rebuilt every 2 hours.",
+   "topics": [
+    "anthropic",
+    "awesome",
+    "awesome-list",
+    "claude",
+    "claude-code",
+    "claude-code-plugin",
+    "claude-mods",
+    "cordis",
+    "developer-tools",
+    "hooks",
+    "mods",
+    "plugins"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "wei9966/SpectrAI": {
+   "full_name": "wei9966/SpectrAI",
+   "stars": 110,
+   "pushed_at": "2026-04-04T08:48:37Z",
+   "created_at": "2026-04-04T08:42:36Z",
+   "description": "光谱AI (SpectrAI) — 开源多会话 AI 编程桌面客户端，支持 Claude/Codex/Gemini 多 Provider 并行，内置 MCP 工具网关、技能模板、文件管理、Git 面板与终端。官网地址：https://www.spectraidev.com/",
+   "topics": [],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "CKang-J/Kith-space": {
+   "full_name": "CKang-J/Kith-space",
+   "stars": 101,
+   "pushed_at": "2026-09-09T17:27:43Z",
+   "created_at": "2026-07-10T03:42:56Z",
+   "description": "面向个人的本地多 Agent 协同工作空间。与拥有独立身份与持久记忆的 AI 队友深度协作：频道分工、任务指派、无限矢量画布与原生 MCP。A local-first multi-agent collaborative workspace.",
+   "topics": [
+    "agent-collaboration",
+    "ai-agents",
+    "electron",
+    "infinite-canvas",
+    "local-first",
+    "mcp",
+    "model-context-protocol",
+    "multi-agent",
+    "task-management",
+    "typescript"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme",
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "wgt19861219/godot-mcp-enhanced": {
+   "full_name": "wgt19861219/godot-mcp-enhanced",
+   "stars": 100,
+   "pushed_at": "2026-10-14T12:44:09Z",
+   "created_at": "2026-03-21T02:27:11Z",
+   "description": "Enhanced MCP server for Godot 4.5-4.7: 33 tools / 199 actions, 3-layer architecture (headless + editor + game bridge), secure sandbox, recording & frame-verify, cross-version CI.",
+   "topics": [
+    "ai",
+    "ai-agent",
+    "claude",
+    "claude-code",
+    "closed-loop",
+    "cursor",
+    "game-dev",
+    "game-development",
+    "gdscript",
+    "godot",
+    "godot-4",
+    "godot-engine",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "chnnasn/DeepSeek-Harness-Desktop": {
+   "full_name": "chnnasn/DeepSeek-Harness-Desktop",
+   "stars": 99,
+   "pushed_at": "2026-09-18T12:13:43Z",
+   "created_at": "2026-08-13T16:51:25Z",
+   "description": "",
+   "topics": [],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "aiarsenal/aiarsenal": {
+   "full_name": "aiarsenal/aiarsenal",
+   "stars": 92,
+   "pushed_at": "2026-10-16T18:25:31Z",
+   "created_at": "2026-07-25T02:05:22Z",
+   "description": "",
+   "topics": [],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "zituoguan/zituoguan": {
+   "full_name": "zituoguan/zituoguan",
+   "stars": 83,
+   "pushed_at": "2026-07-21T08:01:30Z",
+   "created_at": "2023-12-05T01:19:48Z",
+   "description": "",
+   "topics": [],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "gityuanbao/DSH-Plugins": {
+   "full_name": "gityuanbao/DSH-Plugins",
+   "stars": 79,
+   "pushed_at": "2026-08-16T13:24:18Z",
+   "created_at": "2026-08-15T11:51:39Z",
+   "description": "🔥 DeepSeek Harness 插件中文导航：热门项目、适用人群、安装命令、贴心 Tips 与避坑指南",
+   "topics": [
+    "ai-agents",
+    "awesome-list",
+    "chinese",
+    "deepseek",
+    "deepseek-harness",
+    "developer-tools",
+    "dsh-plugin",
+    "plugins"
+   ],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "sheng-jie/learn-cc-csharp": {
+   "full_name": "sheng-jie/learn-cc-csharp",
+   "stars": 76,
+   "pushed_at": "2026-02-24T11:08:42Z",
+   "created_at": "2026-01-30T04:08:22Z",
+   "description": "这个仓库是 https://github.com/shareAI-lab/learn-claude-code 的 .NET 移植版。原仓库以 Python 语言深入浅出地剖析了 Claude Code 的核心原理。为了方便 .NET 开发者学习掌握 Agent 的构建精髓，我们将其核心代码使用 C# 的最新特性进行了完整重写。",
+   "topics": [],
+   "found_by": [
+    "任务看板 AI in:name,description,readme"
+   ]
+  },
+  "Lake1059/FFmpegFreeUI": {
+   "full_name": "Lake1059/FFmpegFreeUI",
+   "stars": 8431,
+   "pushed_at": "2026-10-13T14:03:55Z",
+   "created_at": "2025-05-17T14:28:35Z",
+   "description": "3FUI 是 ffmpeg 在 Windows 上的轻度专业交互外壳，收录大量参数，界面美观，交互友好。此项目面向国内使用环境，让普通人也能够轻松压制视频和转换格式。",
+   "topics": [
+    "audio",
+    "audio-processing",
+    "ffmpeg",
+    "ffmpeg-gui",
+    "ffmpeg-windows",
+    "media-converter",
+    "video",
+    "video-processing"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "ArvinLovegood/go-stock": {
+   "full_name": "ArvinLovegood/go-stock",
+   "stars": 7889,
+   "pushed_at": "2026-10-19T12:15:04Z",
+   "created_at": "2024-12-17T04:46:28Z",
+   "description": "🦄🦄🦄AI赋能股票分析：AI加持的股票分析/选股工具。股票行情获取，AI热点资讯分析，AI资金/财务分析，涨跌报警推送。支持A股，港股，美股。支持市场整体/个股情绪分析，AI辅助选股等。数据全部保留在本地。支持DeepSeek，OpenAI， Ollama，LMStudio，AnythingLLM，硅基流动，火山方舟，阿里云百炼等平台或模型。",
+   "topics": [
+    "ai-tools",
+    "deepseek",
+    "golang",
+    "lmstudio",
+    "naiveui",
+    "ollama",
+    "openai",
+    "stock",
+    "wails"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "Mr-xn/Penetration_Testing_POC": {
+   "full_name": "Mr-xn/Penetration_Testing_POC",
+   "stars": 7523,
+   "pushed_at": "2026-10-20T14:13:14Z",
+   "created_at": "2019-07-24T03:37:55Z",
+   "description": "渗透测试有关的POC、EXP、脚本、提权、小工具等---About penetration-testing python-script poc getshell csrf xss cms php-getshell domainmod-xss csrf-webshell cobub-razor cve rce sql sql-poc poc-exp bypass oa-getshell cve-cm",
+   "topics": [
+    "authentication-bypass",
+    "bypass",
+    "cobalt-strike",
+    "csrf",
+    "csrf-webshell",
+    "cve",
+    "cve-cms",
+    "exploit",
+    "getshell",
+    "oa-getshell",
+    "penetration-testing",
+    "penetration-testing-poc",
+    "php-bypass",
+    "poc",
+    "poc-exp",
+    "rce",
+    "sql-getshell",
+    "sql-poc",
+    "thinkphp"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "AlexAnys/awesome-openclaw-usecases-zh": {
+   "full_name": "AlexAnys/awesome-openclaw-usecases-zh",
+   "stars": 4447,
+   "pushed_at": "2026-07-12T10:14:25Z",
+   "created_at": "2026-02-23T02:20:51Z",
+   "description": "🇨🇳 OpenClaw中文用例大全 | 50个真实场景 | 国内特色 + 海外案例的国内适配 | 自动化办公·内容创作·运维·AI助理·知识管理 | 新手友好 ",
+   "topics": [
+    "ai-agent",
+    "ai-assistant",
+    "ai-automation",
+    "ai-tools",
+    "automation",
+    "awesome-list",
+    "chinese",
+    "claude",
+    "content-creation",
+    "devops",
+    "hermes",
+    "knowledge-management",
+    "llm",
+    "openclaw",
+    "personal-assistant",
+    "productivity",
+    "self-hosting",
+    "use-cases",
+    "workflow-automation",
+    "zh-cn"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "guanguans/favorite-link": {
+   "full_name": "guanguans/favorite-link",
+   "stars": 3353,
+   "pushed_at": "2026-10-13T18:55:08Z",
+   "created_at": "2018-08-29T02:18:05Z",
+   "description": "❤️ 每天收集喜欢的开源项目。",
+   "topics": [
+    "awesome",
+    "awesome-links",
+    "awesome-list",
+    "awesome-lists",
+    "feed",
+    "feed-reader",
+    "feeds",
+    "link",
+    "links",
+    "rss-aggregator",
+    "rss-feed",
+    "rss-feed-parser",
+    "rss-generator",
+    "rss-reader"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "data-infra/cube-studio": {
+   "full_name": "data-infra/cube-studio",
+   "stars": 2561,
+   "pushed_at": "2026-10-12T12:57:12Z",
+   "created_at": "2024-07-02T03:06:50Z",
+   "description": "cubestudio开源云原生一站式机器学习/深度学习/大模型AI平台/MaaS/mlops/人工智能平台/训推平台，算法全链路流程，多租户，算力租赁平台，token中转，拖拉拽任务流pipeline编排，多机多卡分布式训练，超参搜索，推理服务，VGPU虚拟化，云边端协同，边缘计算，自动化标注平台，deepseek等大模型sft微调/奖励模型/强化学习训练，vllm/ollama/mindie大模",
+   "topics": [
+    "ai-platform",
+    "ascend",
+    "automl",
+    "cube-studio",
+    "cubestudio",
+    "deepseek",
+    "inference",
+    "kubernetes",
+    "llmops",
+    "maas",
+    "machine-learning",
+    "mlops",
+    "npu",
+    "pipeline",
+    "vgpu",
+    "workflow"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "KsanaDock/Microverse": {
+   "full_name": "KsanaDock/Microverse",
+   "stars": 2500,
+   "pushed_at": "2026-04-10T00:54:43Z",
+   "created_at": "2025-10-09T08:52:25Z",
+   "description": "A god-simulation sandbox game built on Godot 4 as a multi-agent AI social simulation system. In this virtual world, AI characters possess independent thinking and memory, capable of autonomous social ",
+   "topics": [
+    "ai-game",
+    "ai-world-simulation",
+    "godot",
+    "multi-agent"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "overmind1980/oeasy-python-tutorial": {
+   "full_name": "overmind1980/oeasy-python-tutorial",
+   "stars": 2360,
+   "pushed_at": "2026-08-20T05:30:20Z",
+   "created_at": "2021-08-04T02:13:35Z",
+   "description": "良心的 Python 教程，面向零基础初学者简明易懂的 Python3 入门基础课程。在linux+vim生产力环境下，从浅入深，从简单程序学到网络爬虫。可以配合蓝桥云上实验环境操作。",
+   "topics": [
+    "learn-python",
+    "linux",
+    "python",
+    "tutorial",
+    "unicode",
+    "vim"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "babygoton/WorkDaddy": {
+   "full_name": "babygoton/WorkDaddy",
+   "stars": 2145,
+   "pushed_at": "2026-10-20T02:34:49Z",
+   "created_at": "2026-08-18T14:59:27Z",
+   "description": "WorkBuddy、CodeBuddy 桌面端增强助手：签到猫猫旅行成长计划查询、多账号独立备份、点切即用；免打扰模式让 AI 无人值守跑长任务；跨账号会话迁移、异常中断自动续接；暂存/快捷提示词；毛玻璃主题与更多实用功能。",
+   "topics": [
+    "codebuddy",
+    "codebuddy-cn",
+    "workbuddy",
+    "workbuddy-ai"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "continew-org/continew-admin": {
+   "full_name": "continew-org/continew-admin",
+   "stars": 2141,
+   "pushed_at": "2026-10-20T02:31:08Z",
+   "created_at": "2022-12-08T15:26:44Z",
+   "description": "🔥Almost最佳后端规范🔥页面现代美观，且专注设计与代码细节的高质量多租户中后台管理系统框架。开箱即用，持续迭代优化，持续提供舒适的开发体验。当前采用技术栈：SpringBoot v3.4.x (Java17)、Vue3 & ArcoDesign、TS、Vite5 、SaToken、MyBatisPlus、Redisson、FastExcel、CosId、JetCache、JustAuth、Cr",
+   "topics": [
+    "arco-design",
+    "java17",
+    "justauth",
+    "mybatis-plus",
+    "redisson",
+    "sa-token",
+    "spring-boot3",
+    "typescript",
+    "vue3"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "chenyl8848/great-open-source-project": {
+   "full_name": "chenyl8848/great-open-source-project",
+   "stars": 1788,
+   "pushed_at": "2026-10-19T14:28:24Z",
+   "created_at": "2023-01-31T08:35:31Z",
+   "description": "收集整理 Github、Gitee 上优秀的开源项目。",
+   "topics": [
+    "gitee",
+    "github",
+    "markdown",
+    "open-source"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "gitcoffee-os/postbot": {
+   "full_name": "gitcoffee-os/postbot",
+   "stars": 1551,
+   "pushed_at": "2026-10-20T14:56:12Z",
+   "created_at": "2025-05-30T16:05:36Z",
+   "description": "PostBot 内容同步助手 一款开源的多平台内容同步分发生产力工具。 支持将文章、笔记、动态、图片、视频、音频等内容，一键同步发布至主流媒体平台。覆盖微信/微博/今日头条/小红书/知乎/百家号/企鹅号/视频号/抖音/快手/哔哩哔哩（B站）等国内主流媒体平台，可轻松扩展兼容 X（Twitter）、Facebook、Instagram、TikTok、YouTube、LinkedIn 等国际媒体平台。",
+   "topics": [
+    "article",
+    "audio",
+    "automation",
+    "blog",
+    "cms",
+    "content",
+    "html",
+    "image-text",
+    "markdown",
+    "marketing",
+    "marketing-automation",
+    "media",
+    "multiplatform",
+    "note",
+    "podcast",
+    "productivity-tools",
+    "social-media",
+    "video"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "RTGS2017/NagaAgent": {
+   "full_name": "RTGS2017/NagaAgent",
+   "stars": 1542,
+   "pushed_at": "2026-08-11T07:55:16Z",
+   "created_at": "2025-04-20T02:02:50Z",
+   "description": "A simple yet powerful agent framework for personal assistants, designed to enable intelligent interaction, multi-agent collaboration, and seamless tool integration.",
+   "topics": [
+    "agentic-ai",
+    "agents",
+    "mcp",
+    "mcp-client",
+    "openai",
+    "openclaw",
+    "toolcall"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "wikieden/Freedom-To-Chatgpt-Claude-Agent": {
+   "full_name": "wikieden/Freedom-To-Chatgpt-Claude-Agent",
+   "stars": 1400,
+   "pushed_at": "2026-09-01T07:38:19Z",
+   "created_at": "2023-02-11T09:22:53Z",
+   "description": "ChatGPT调教指南|咒语指南|聊天提示词指南|学习指南",
+   "topics": [
+    "chatgpt",
+    "chatgpt-prompts",
+    "chatgpt3",
+    "openai"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "fastapiadmin/FastapiAdmin": {
+   "full_name": "fastapiadmin/FastapiAdmin",
+   "stars": 1228,
+   "pushed_at": "2026-10-18T09:45:23Z",
+   "created_at": "2025-01-28T10:42:23Z",
+   "description": "FastapiAdmin 是一套完全开源的快速开发平台，提供免费使用。它结合了现代、高性能的技术栈，后端采用Fastapi + SQLAlchemy，前端采用基于 vue3 + typescript + vite + pinia + Element-Plus。旨在帮助开发者快速搭建高质量的中后台系统。",
+   "topics": [
+    "fastapi",
+    "fastpiadmin",
+    "uniapp",
+    "vitepress",
+    "vue3"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "YSGStudyHards/Awesome-Tools": {
+   "full_name": "YSGStudyHards/Awesome-Tools",
+   "stars": 1200,
+   "pushed_at": "2026-10-16T17:13:21Z",
+   "created_at": "2024-04-20T14:34:31Z",
+   "description": "🛠Awesome Tools，程序员常用高效实用工具、软件资源精选，办公效率提升利器（A Curated Collection of High-Efficiency and Practical Tools and Software Resources for Programmers to Boost Office Productivity）。",
+   "topics": [
+    "awesome",
+    "awesome-macos",
+    "awesome-tools",
+    "awesome-windows",
+    "mac-tools",
+    "tools",
+    "windows-tools"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "Eternaldeath/AIProductHome": {
+   "full_name": "Eternaldeath/AIProductHome",
+   "stars": 1186,
+   "pushed_at": "2026-10-18T03:20:06Z",
+   "created_at": "2023-04-15T12:10:53Z",
+   "description": "Collect various AI products | 搜集各种 AI 工具和产品",
+   "topics": [
+    "ai",
+    "business",
+    "product"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "shizq123/BIKA": {
+   "full_name": "shizq123/BIKA",
+   "stars": 921,
+   "pushed_at": "2026-10-15T11:11:19Z",
+   "created_at": "2022-12-01T10:57:30Z",
+   "description": "第三方哔咔漫画",
+   "topics": [
+    "android",
+    "bika",
+    "kotlin",
+    "picacg"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "laolaoshiren/claude-code-skills-zh": {
+   "full_name": "laolaoshiren/claude-code-skills-zh",
+   "stars": 894,
+   "pushed_at": "2026-10-20T14:08:54Z",
+   "created_at": "2026-04-14T09:08:18Z",
+   "description": "面向中文开发者的 Claude Code Skills / Agents / Plugins 精选与原创技能库｜按场景分类｜复制即装｜持续更新",
+   "topics": [
+    "ai-agent",
+    "awesome-list",
+    "claude-code",
+    "claude-skills",
+    "developer-tools",
+    "prompt-engineering",
+    "skills"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "AISBench/benchmark": {
+   "full_name": "AISBench/benchmark",
+   "stars": 859,
+   "pushed_at": "2026-10-16T06:52:49Z",
+   "created_at": "2025-10-15T08:55:27Z",
+   "description": "AISBench Benchmark is a model evaluation tool built on OpenCompass, compatible with OpenCompass’s configuration system, dataset structure, and model backend implementation, while extending support for",
+   "topics": [],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "liominsb/Antigravity-Chinese-Localization": {
+   "full_name": "liominsb/Antigravity-Chinese-Localization",
+   "stars": 680,
+   "pushed_at": "2026-10-16T06:40:09Z",
+   "created_at": "2026-05-25T01:35:04Z",
+   "description": "antigravity一键汉化",
+   "topics": [],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "uhub/awesome-css": {
+   "full_name": "uhub/awesome-css",
+   "stars": 672,
+   "pushed_at": "2026-10-14T13:05:43Z",
+   "created_at": "2015-08-12T19:20:26Z",
+   "description": "A curated list of awesome CSS frameworks, libraries and software.",
+   "topics": [
+    "awesome",
+    "awesome-list",
+    "css",
+    "curated-list",
+    "list",
+    "resources"
+   ],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "WW-AI-Lab/openclaw-office": {
+   "full_name": "WW-AI-Lab/openclaw-office",
+   "stars": 646,
+   "pushed_at": "2026-06-12T12:57:27Z",
+   "created_at": "2026-02-27T15:06:30Z",
+   "description": "OpenClaw Multi-Agent 系统的可视化监控与 Skills 开发平台。将 AI 聊天机器人进化为可编程的 Skills 系统——创建、开发、调试和部署可复用的技能，搭配实时虚拟办公室仪表盘监控 Agent 协作。",
+   "topics": [],
+   "found_by": [
+    "智能体 任务管理 in:name,description,readme"
+   ]
+  },
+  "builderz-labs/mission-control": {
+   "full_name": "builderz-labs/mission-control",
+   "stars": 6374,
+   "pushed_at": "2026-10-19T00:32:40Z",
+   "created_at": "2026-02-13T04:06:19Z",
+   "description": "Self-hosted control plane for AI agents: dispatch tasks, review runs, track spend, and operate OpenClaw, Claude Code, Codex, and other runtimes.",
+   "topics": [
+    "agent-observability",
+    "agent-operations",
+    "agent-orchestration",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "developer-tools",
+    "mcp",
+    "nextjs",
+    "open-source",
+    "openclaw",
+    "self-hosted",
+    "sqlite",
+    "task-management",
+    "typescript"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "amplifthq/openmeld": {
+   "full_name": "amplifthq/openmeld",
+   "stars": 1387,
+   "pushed_at": "2026-10-20T18:24:48Z",
+   "created_at": "2026-06-24T08:05:12Z",
+   "description": "The open-source collaboration system for people and AI agents. Share context, coordinate tasks, and work in parallel with your team, cloud agents, Codex, Claude Code, Grok, Grok Bot, OpenCode, Antigra",
+   "topics": [
+    "agent-client-protocol",
+    "agent-orchestration",
+    "agent-skills",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "cursor",
+    "grok",
+    "grok-bot",
+    "human-ai-collaboration",
+    "knowledge-base",
+    "mcp",
+    "multi-agent",
+    "opencode",
+    "openmeld",
+    "task-management",
+    "team-collaboration",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "Chorus-AIDLC/Chorus": {
+   "full_name": "Chorus-AIDLC/Chorus",
+   "stars": 1206,
+   "pushed_at": "2026-10-20T12:12:46Z",
+   "created_at": "2026-02-04T06:56:16Z",
+   "description": "The Agent Harness for AI-Human Collaboration, inspired by the AI-DLC (AI-Driven Development Lifecycle)",
+   "topics": [
+    "agent-harness",
+    "ai-agents",
+    "ai-dlc",
+    "claude-code",
+    "harness",
+    "kanban",
+    "multi-agent",
+    "task-management"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "matthiasn/lotti": {
+   "full_name": "matthiasn/lotti",
+   "stars": 1199,
+   "pushed_at": "2026-10-20T17:36:56Z",
+   "created_at": "2016-03-16T15:01:59Z",
+   "description": "A private logbook with a staff of personal AI assistants. Agents read what you record and propose what to do next — you approve the changes. End-to-end encrypted sync between your own devices — server",
+   "topics": [
+    "agentic",
+    "agentic-ai",
+    "agentic-workflow",
+    "ai",
+    "ai-agents",
+    "android-app",
+    "end-to-end-encryption",
+    "flutter",
+    "health",
+    "ios",
+    "journaling",
+    "linux-app",
+    "local-first",
+    "macos",
+    "matrix",
+    "privacy",
+    "speech-recognition",
+    "task-management",
+    "task-manager",
+    "time-tracker"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "BradGroux/veritas-kanban": {
+   "full_name": "BradGroux/veritas-kanban",
+   "stars": 843,
+   "pushed_at": "2026-10-19T23:18:03Z",
+   "created_at": "2026-01-26T08:35:20Z",
+   "description": "Lightweight orchestration harness built for your AI agents. The unfiltered truth about where your project stands. ",
+   "topics": [
+    "agents",
+    "ai-agents",
+    "codex",
+    "design-thinking",
+    "developer-tools",
+    "devops",
+    "devops-tools",
+    "hermes",
+    "kanban",
+    "local-first",
+    "openclaw",
+    "pino",
+    "project-management",
+    "react",
+    "scrum",
+    "scrum-board",
+    "task-management",
+    "task-manager",
+    "typescript",
+    "vite"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "dongshuyan/compass-skills": {
+   "full_name": "dongshuyan/compass-skills",
+   "stars": 758,
+   "pushed_at": "2026-10-19T03:20:47Z",
+   "created_at": "2026-06-15T06:28:04Z",
+   "description": "司南：个性化 AI 任务总控 Skills 系统 /COMPASS: Personal Alignment Skills OS for AI Agents",
+   "topics": [
+    "agent-memory",
+    "agent-skill",
+    "agent-skills",
+    "ai-agents",
+    "ai-coding-agent",
+    "ai-skills",
+    "claude-code",
+    "claude-skills",
+    "codex-skills",
+    "developer-tools",
+    "local-first",
+    "openai-codex",
+    "personal-ai",
+    "prompt-engineering",
+    "skill-md",
+    "skill-md-skillsmp",
+    "skills-sh",
+    "skillsmp",
+    "task-management",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "saltbo/agent-kanban": {
+   "full_name": "saltbo/agent-kanban",
+   "stars": 493,
+   "pushed_at": "2026-10-02T09:04:35Z",
+   "created_at": "2026-03-20T19:37:48Z",
+   "description": "An agent-first task board, Take human out of the loop.",
+   "topics": [
+    "agent-orchestration",
+    "ai-agents",
+    "ai-coding-agent",
+    "claude-code",
+    "cloudflare-pages",
+    "codex",
+    "developer-tools",
+    "ed25519",
+    "gemini-cli",
+    "kanban",
+    "multi-agent",
+    "task-management"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "CronusL-1141/AI-company": {
+   "full_name": "CronusL-1141/AI-company",
+   "stars": 372,
+   "pushed_at": "2026-10-11T17:07:24Z",
+   "created_at": "2026-03-12T03:58:24Z",
+   "description": "Multi-agent team operating system for Claude Code. 108 MCP tools, 40+ agent templates, 10 lifecycle hooks, 7 pipeline workflows. Persistent teams, structured meetings, task wall, real-time React dashb",
+   "topics": [
+    "agent-framework",
+    "agent-orchestration",
+    "ai-agents",
+    "autonomous-agents",
+    "claude",
+    "claude-code",
+    "claude-code-plugin",
+    "dashboard",
+    "fastapi",
+    "mcp",
+    "mcp-server",
+    "meeting-system",
+    "multi-agent-system",
+    "pipeline-workflow",
+    "python",
+    "react",
+    "sqlite",
+    "task-management",
+    "team-collaboration",
+    "typescript"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "theexperiencecompany/gaia": {
+   "full_name": "theexperiencecompany/gaia",
+   "stars": 313,
+   "pushed_at": "2026-10-20T12:21:23Z",
+   "created_at": "2025-07-08T18:12:37Z",
+   "description": "Your proactive personal AI assistant for daily life",
+   "topics": [
+    "ai-agents",
+    "artificial-intelligence",
+    "assistant-chat-bots",
+    "automation",
+    "calendar",
+    "chatbots",
+    "context-aware",
+    "digital-assistant",
+    "email",
+    "llm",
+    "personal-ai",
+    "personal-assistant",
+    "personal-productivity",
+    "productivity",
+    "python",
+    "selfhosted",
+    "task-management",
+    "typescript",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "hasanyilmaz/operon": {
+   "full_name": "hasanyilmaz/operon",
+   "stars": 262,
+   "pushed_at": "2026-10-20T16:10:52Z",
+   "created_at": "2026-05-19T23:22:52Z",
+   "description": "Task management system for humans and agents in Obsidian.",
+   "topics": [
+    "ai-agents",
+    "calendar",
+    "kanban",
+    "local-first",
+    "markdown",
+    "obsidian",
+    "obsidian-plugin",
+    "obsidian-tasks",
+    "operon",
+    "productivity",
+    "project-management",
+    "task-management",
+    "time-tracking",
+    "typescript"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "antopolskiy/kanban-md": {
+   "full_name": "antopolskiy/kanban-md",
+   "stars": 225,
+   "pushed_at": "2026-10-05T20:52:24Z",
+   "created_at": "2026-02-07T13:09:55Z",
+   "description": "File-based kanban board for autonomous agentic loop. CLI and TUI for multi-agent workflows. Skills included.",
+   "topics": [
+    "agent-loops",
+    "agent-skills",
+    "ai-agents",
+    "cli",
+    "developer-tools",
+    "go",
+    "kanban",
+    "loops",
+    "markdown",
+    "multi-agent",
+    "project-management",
+    "task-management",
+    "terminal",
+    "tui"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "PerpetualSoftware/pad": {
+   "full_name": "PerpetualSoftware/pad",
+   "stars": 195,
+   "pushed_at": "2026-10-20T18:30:35Z",
+   "created_at": "2026-03-26T13:39:22Z",
+   "description": "Project Management for the agent era",
+   "topics": [
+    "agent-era",
+    "agent-tools",
+    "ai-agents",
+    "claude-code",
+    "cli",
+    "codex",
+    "cursor",
+    "developer-tools",
+    "golang",
+    "issue-tracker",
+    "local-first",
+    "markdown",
+    "mcp-server",
+    "open-source",
+    "project-management",
+    "self-hosted",
+    "sqlite",
+    "sveltekit",
+    "task-management",
+    "windsurf"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "elkar-ai/elkar-a2a": {
+   "full_name": "elkar-ai/elkar-a2a",
+   "stars": 152,
+   "pushed_at": "2025-05-21T06:37:39Z",
+   "created_at": "2025-04-30T07:10:48Z",
+   "description": "Elkar - Task management for AI Agents, ready for Agent2Agent (A2A) protocol",
+   "topics": [
+    "a2a",
+    "a2a-protocol",
+    "agent2agent",
+    "ai-agent",
+    "ai-agents",
+    "llm",
+    "task-management"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "krodak/clickup-cli": {
+   "full_name": "krodak/clickup-cli",
+   "stars": 125,
+   "pushed_at": "2026-10-20T13:44:20Z",
+   "created_at": "2026-02-23T11:35:04Z",
+   "description": "ClickUp CLI for AI agents",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "cli",
+    "clickup",
+    "codex",
+    "developer-tools",
+    "productivity",
+    "project-management",
+    "task-management",
+    "terminal",
+    "typescript"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "Agent-Field/plandb": {
+   "full_name": "Agent-Field/plandb",
+   "stars": 107,
+   "pushed_at": "2026-09-24T16:56:18Z",
+   "created_at": "2026-03-04T13:36:26Z",
+   "description": "The issue tracker your AI agents are missing. Think Linear or Jira, but for your Claude Code..",
+   "topics": [
+    "agent-coordination",
+    "agentic",
+    "ai-agents",
+    "autonomous-agents",
+    "cli",
+    "dependency-graph",
+    "developer-tools",
+    "issue-tracker",
+    "llm",
+    "mcp",
+    "multi-agent",
+    "orchestration",
+    "rust",
+    "sqlite",
+    "task-graph",
+    "task-management"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "ayanamislover/AyanamiTaskManager": {
+   "full_name": "ayanamislover/AyanamiTaskManager",
+   "stars": 104,
+   "pushed_at": "2026-10-20T09:32:14Z",
+   "created_at": "2026-08-08T06:31:49Z",
+   "description": "Local-first task and context manager for multi-agent AI development workflows.",
+   "topics": [
+    "ai-agents",
+    "developer-tools",
+    "electron",
+    "local-first",
+    "mcp",
+    "multi-agent",
+    "sqlite",
+    "task-management",
+    "typescript"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "sirsjg/flux": {
+   "full_name": "sirsjg/flux",
+   "stars": 104,
+   "pushed_at": "2026-09-09T09:18:22Z",
+   "created_at": "2026-01-07T13:24:44Z",
+   "description": "Ship with less chaos. Flux is a fast, simple Kanban board with MCP integration so your LLMs can help run the show.",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "kanban",
+    "task-management",
+    "workflow"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "rasimme/FlowBoard": {
+   "full_name": "rasimme/FlowBoard",
+   "stars": 96,
+   "pushed_at": "2026-10-13T09:03:35Z",
+   "created_at": "2026-02-14T12:00:13Z",
+   "description": "Local-first project management and persistent context for OpenClaw, Claude Code, Codex, Cursor, and multi-agent coding workflows.",
+   "topics": [
+    "agent-workspace",
+    "ai-agent-project-management",
+    "ai-agents",
+    "ai-coding-agents",
+    "claude-code",
+    "codex",
+    "cursor",
+    "event-sourcing",
+    "kanban",
+    "local-first",
+    "multi-agent",
+    "nodejs",
+    "openclaw",
+    "openclaw-plugin",
+    "project-management",
+    "react",
+    "self-hosted",
+    "spec-driven-development",
+    "task-management",
+    "telegram"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "vstorm-co/pydantic-ai-todo": {
+   "full_name": "vstorm-co/pydantic-ai-todo",
+   "stars": 76,
+   "pushed_at": "2026-10-11T01:31:41Z",
+   "created_at": "2025-12-23T03:38:54Z",
+   "description": "Task Planning and Tracking toolset for Pydantic AI agents, enabling hierarchical task management with subtasks, PostgreSQL storage for multi-tenancy, and an event system for webhooks and callbacks. ",
+   "topics": [
+    "ai",
+    "ai-agent-framework",
+    "ai-agents",
+    "anthropic",
+    "autonomous-agents",
+    "chatgpt",
+    "deepagents",
+    "gemini",
+    "llm",
+    "llm-reasoning",
+    "pydantic",
+    "pydantic-ai",
+    "pydantic-deep",
+    "python",
+    "task-management",
+    "todo",
+    "toolset",
+    "vstorm"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "superplan-md/superplan-plugin": {
+   "full_name": "superplan-md/superplan-plugin",
+   "stars": 75,
+   "pushed_at": "2026-05-06T09:36:44Z",
+   "created_at": "2026-03-19T07:31:53Z",
+   "description": "Superplan is a CLI-first execution system that forces AI agents into step-by-step task workflows instead of drift-prone chat-based work.",
+   "topics": [
+    "agent-workflow",
+    "ai-agents",
+    "automation",
+    "cli",
+    "dev-tooling",
+    "developer-tools",
+    "execution-engine",
+    "markdown",
+    "planning",
+    "productivity",
+    "task-management",
+    "task-runner",
+    "workflow"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "taskade/taskade": {
+   "full_name": "taskade/taskade",
+   "stars": 70,
+   "pushed_at": "2026-09-18T06:14:20Z",
+   "created_at": "2026-02-19T00:19:50Z",
+   "description": "The AI-native workspace platform. Projects remember. Agents think. Automations execute. One prompt to production — bug reports & feature requests welcome.",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "ai-app-builder",
+    "automation",
+    "chatbot",
+    "collaboration",
+    "generative-ai",
+    "llm",
+    "low-code",
+    "mcp",
+    "no-code",
+    "notion-alternative",
+    "productivity",
+    "project-management",
+    "real-time",
+    "task-management",
+    "taskade",
+    "vibe-coding",
+    "workflow",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "0xenzyme/agent-harness": {
+   "full_name": "0xenzyme/agent-harness",
+   "stars": 49,
+   "pushed_at": "2026-10-16T06:40:34Z",
+   "created_at": "2026-06-21T08:25:12Z",
+   "description": "Adapter-driven control plane for coding-agent work: tasks, goals, run DAGs, gates, verification, and state sync.",
+   "topics": [
+    "agent-harness",
+    "agent-orchestration",
+    "ai-agents",
+    "automation",
+    "cli",
+    "codex",
+    "codex-plugin",
+    "coding-agents",
+    "developer-tools",
+    "productivity",
+    "task-management",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "xopcai/xopc": {
+   "full_name": "xopcai/xopc",
+   "stars": 39,
+   "pushed_at": "2026-10-20T17:25:51Z",
+   "created_at": "2026-04-12T02:54:31Z",
+   "description": "Open-source, local-first personal AI. Chat with Ada, delegate tasks, and work with files and projects using cloud or local models.",
+   "topics": [
+    "ai-agents",
+    "ai-assistant",
+    "ai-memory",
+    "automation",
+    "browser-automation",
+    "byok",
+    "cli",
+    "desktop-app",
+    "knowledge-management",
+    "local-ai",
+    "local-first",
+    "mcp",
+    "ollama",
+    "open-source",
+    "personal-ai",
+    "productivity",
+    "self-hosted",
+    "task-management",
+    "typescript",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "topic:ai-agents topic:task-management"
+   ]
+  },
+  "usekaneo/kaneo": {
+   "full_name": "usekaneo/kaneo",
+   "stars": 9534,
+   "pushed_at": "2026-10-20T07:00:47Z",
+   "created_at": "2024-12-31T08:25:09Z",
+   "description": "🎯 All you need. Nothing you don't. Open source project management that works for you, not against you.",
+   "topics": [
+    "hono",
+    "issue-management",
+    "issue-tracker",
+    "jira-alternative",
+    "kanban",
+    "linear-alternative",
+    "mcp",
+    "project-management",
+    "react",
+    "self-hosted",
+    "typescript"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "nimbalyst/nimbalyst": {
+   "full_name": "nimbalyst/nimbalyst",
+   "stars": 1946,
+   "pushed_at": "2026-10-19T19:03:08Z",
+   "created_at": "2025-10-30T21:28:59Z",
+   "description": "Nimbalyst - The open-source visual workspace for Claude Code, Codex, and OpenCode. Run multiple coding agents in parallel, edit their work visually in markdown, mockups, and diagrams, and track tasks.",
+   "topics": [
+    "agentic-ai",
+    "agentic-ide",
+    "ai-agents",
+    "ai-coding-assistant",
+    "claude-code",
+    "codex",
+    "coding-agent",
+    "developer-tools",
+    "electron",
+    "ide",
+    "kanban",
+    "markdown-editor",
+    "mcp",
+    "multi-agent-systems",
+    "opencode",
+    "worktree-manager",
+    "wysiwyg-editor"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "markrai/scrumboy": {
+   "full_name": "markrai/scrumboy",
+   "stars": 445,
+   "pushed_at": "2026-10-19T22:38:43Z",
+   "created_at": "2026-03-22T00:37:42Z",
+   "description": "Self-hosted project management • Customizable boards • Cross-project workload and flow analytics • Calendar/Agenda • Sticky-note wall • Imports/Backups • Email notifications • MCP/Agent automation",
+   "topics": [
+    "agile",
+    "ai-integration",
+    "collaboration",
+    "docker",
+    "go",
+    "golang",
+    "i18n",
+    "kanban",
+    "mcp",
+    "mcp-server",
+    "oidc",
+    "pixel",
+    "project-management",
+    "pwa",
+    "scrum",
+    "self-hosted",
+    "sqlite"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "romenkova/doska": {
+   "full_name": "romenkova/doska",
+   "stars": 244,
+   "pushed_at": "2026-10-19T20:51:52Z",
+   "created_at": "2026-06-16T22:19:23Z",
+   "description": "Doska is a clean, local-first kanban app with a Markdown editor and optional sync to a folder or server.",
+   "topics": [
+    "kanban",
+    "kanban-board",
+    "local-first",
+    "markdown",
+    "mcp",
+    "offline-first",
+    "pwa",
+    "react",
+    "self-hosting",
+    "task-management",
+    "tauri",
+    "typescript",
+    "vite"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "kanban-rs/kanban": {
+   "full_name": "kanban-rs/kanban",
+   "stars": 181,
+   "pushed_at": "2026-10-18T22:45:16Z",
+   "created_at": "2025-10-10T02:33:46Z",
+   "description": "Terminal based project management",
+   "topics": [
+    "agile",
+    "clap",
+    "clap-rs",
+    "cli",
+    "kanban",
+    "mcp",
+    "productivity",
+    "project",
+    "project-management",
+    "projects",
+    "ratatui",
+    "ratatui-rs",
+    "rust",
+    "scrum",
+    "task",
+    "task-management",
+    "task-manager",
+    "terminal",
+    "tui"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "Lexus2016/claude-code-studio": {
+   "full_name": "Lexus2016/claude-code-studio",
+   "stars": 144,
+   "pushed_at": "2026-10-13T13:40:51Z",
+   "created_at": "2026-02-21T12:32:11Z",
+   "description": "A fully functional web workspace for Claude Code CLI—chat, Kanban task board, task scheduling, multi-agent orchestration, MCP servers, skills, remote access (Web, SSH, Telegram), projects, and real-ti",
+   "topics": [
+    "ai",
+    "ai-agents",
+    "claude",
+    "claude-code",
+    "kanban",
+    "mcp",
+    "multiagent-systems",
+    "orchestrator",
+    "scheduler",
+    "skills",
+    "studo",
+    "subagents",
+    "trello-like"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "willdady/platypus": {
+   "full_name": "willdady/platypus",
+   "stars": 123,
+   "pushed_at": "2026-10-20T07:28:57Z",
+   "created_at": "2025-06-15T08:08:10Z",
+   "description": "Self-hosted AI Agents for your whole team — on your infrastructure, your models, around the clock.",
+   "topics": [
+    "a2a",
+    "a2a-client",
+    "agent",
+    "ai",
+    "ai-agent",
+    "ai-assistant",
+    "ai-tools",
+    "kanban",
+    "llm-ui",
+    "mcp",
+    "self-hosted",
+    "ui",
+    "webui"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "ShadowWalker2014/open-sunsama": {
+   "full_name": "ShadowWalker2014/open-sunsama",
+   "stars": 109,
+   "pushed_at": "2026-10-20T18:16:47Z",
+   "created_at": "2026-01-29T23:27:33Z",
+   "description": "Open-source Sunsama alternative: a daily planner with kanban, time blocking, and focus mode that Claude and ChatGPT can use. One-click MCP connector (OAuth), REST API, web/desktop/mobile apps, self-ho",
+   "topics": [
+    "ai",
+    "calendar",
+    "chatgpt",
+    "claude",
+    "cursor",
+    "daily-planner",
+    "kanban",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "open-source",
+    "productivity",
+    "react",
+    "self-hosted",
+    "sunsama-alternative",
+    "task-management",
+    "task-manager",
+    "time-blocking",
+    "todo-app",
+    "typescript"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "idimetrix/idimetrix": {
+   "full_name": "idimetrix/idimetrix",
+   "stars": 104,
+   "pushed_at": "2026-07-10T13:51:00Z",
+   "created_at": "2024-09-02T18:47:13Z",
+   "description": "Planoda — the AI-native work platform that replaces Linear, ClickUp, Monday & Trello. Issues, boards, roadmaps & automations on one schema, with AI agents that propose and humans who approve. Try the ",
+   "topics": [
+    "ai-agents",
+    "clickup-alternative",
+    "idimetrix",
+    "issue-tracker",
+    "kanban",
+    "linear-alternative",
+    "mcp",
+    "monday-alternative",
+    "open-source",
+    "planoda",
+    "project-management",
+    "saas",
+    "trello-alternative",
+    "work-management"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "MathiasDrizzy/lazymark": {
+   "full_name": "MathiasDrizzy/lazymark",
+   "stars": 95,
+   "pushed_at": "2026-10-18T02:52:55Z",
+   "created_at": "2026-09-29T22:57:04Z",
+   "description": "Lazy markdown notes, tasks and a Kanban board in your terminal. With a sleepy sloth.",
+   "topics": [
+    "bubbletea",
+    "cli",
+    "golang",
+    "kanban",
+    "markdown",
+    "mcp",
+    "notes",
+    "terminal",
+    "tui"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "automagik-dev/forge": {
+   "full_name": "automagik-dev/forge",
+   "stars": 92,
+   "pushed_at": "2025-12-19T01:15:09Z",
+   "created_at": "2025-07-22T18:04:08Z",
+   "description": "The Vibe Coding++™ platform - orchestrate multiple AI agents, experiment with isolated attempts, ship code you understand. Multi-agent kanban with MCP integration.",
+   "topics": [
+    "agents",
+    "ai",
+    "ai-coding",
+    "automagik",
+    "claude-code",
+    "coding-agents",
+    "cursor",
+    "developer-tools",
+    "gemini",
+    "git-worktree",
+    "hacktoberfest",
+    "kanban",
+    "mcp",
+    "multi-agent",
+    "open-source",
+    "project-management",
+    "rust",
+    "task-management",
+    "typescript",
+    "vibe-coding"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "jztan/redmine-mcp-server": {
+   "full_name": "jztan/redmine-mcp-server",
+   "stars": 86,
+   "pushed_at": "2026-10-19T21:14:02Z",
+   "created_at": "2025-05-25T01:18:59Z",
+   "description": "MCP server connecting AI assistants to Redmine: issues, projects, wikis, time tracking, agile boards, and CRM, with OAuth2 multi-user support",
+   "topics": [
+    "agent",
+    "agentic-ai",
+    "agentic-workflow",
+    "chatgpt",
+    "claude",
+    "claude-code",
+    "codex",
+    "cursor",
+    "kanban",
+    "mcp",
+    "mcp-servers",
+    "mcp-tools",
+    "model-context-protocol",
+    "oauth2",
+    "project-management",
+    "python",
+    "redmine",
+    "time-tracking",
+    "vscode"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "shiquda/roadmap-skill": {
+   "full_name": "shiquda/roadmap-skill",
+   "stars": 82,
+   "pushed_at": "2026-03-18T12:07:37Z",
+   "created_at": "2026-02-10T06:56:13Z",
+   "description": "Shared roadmap for humans and AI Agents. Visual kanban and graph for you, Skills and MCP server for Agents. Support Claude Code, Codex, Cursor, OpenCode and more!",
+   "topics": [
+    "agent",
+    "claude-code",
+    "codex",
+    "cursor",
+    "kanban",
+    "mcp",
+    "opencode",
+    "project-management",
+    "skill",
+    "typescript"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "OneMana-Soft/OneCamp-fe": {
+   "full_name": "OneMana-Soft/OneCamp-fe",
+   "stars": 69,
+   "pushed_at": "2026-10-19T15:24:23Z",
+   "created_at": "2026-02-28T21:55:19Z",
+   "description": "OneCamp: self-hosted all-in-one workspace (chat, tasks, video calls, docs, calendar & AI)",
+   "topics": [
+    "ai-agents",
+    "calendar",
+    "collaboration",
+    "kanban",
+    "knowledge-base",
+    "mcp",
+    "nextjs",
+    "notion-alternative",
+    "project-management",
+    "react",
+    "self-hosted",
+    "slack-alternative",
+    "team-chat",
+    "typescript",
+    "video-conferencing",
+    "whiteboard",
+    "workspace",
+    "zoom-alternative"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "bradrisse/kanban-mcp": {
+   "full_name": "bradrisse/kanban-mcp",
+   "stars": 62,
+   "pushed_at": "2025-03-26T04:30:30Z",
+   "created_at": "2025-03-08T22:56:17Z",
+   "description": "MCP Kanban is a specialized middleware designed to facilitate interaction between Large Language Models (LLMs) and Planka, a Kanban board application. It serves as an intermediary layer that provides ",
+   "topics": [
+    "cursor",
+    "kanban",
+    "llm",
+    "mcp",
+    "mcp-server"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "anubissbe/ProjectHub-Mcp": {
+   "full_name": "anubissbe/ProjectHub-Mcp",
+   "stars": 47,
+   "pushed_at": "2026-03-30T15:54:53Z",
+   "created_at": "2025-06-13T16:30:55Z",
+   "description": "🚀 Enterprise-grade task management web interface with time tracking, workflow templates, dependency visualization, team collaboration, and analytics dashboard. Built with React, TypeScript, and Postgr",
+   "topics": [
+    "analytics",
+    "collaboration",
+    "dashboard",
+    "docker",
+    "kanban",
+    "mcp",
+    "postgresql",
+    "project-management",
+    "react",
+    "task-management",
+    "typescript",
+    "websocket"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "Latand/delegatus": {
+   "full_name": "Latand/delegatus",
+   "stars": 33,
+   "pushed_at": "2026-10-20T18:32:32Z",
+   "created_at": "2026-07-03T13:17:32Z",
+   "description": "Hand your software work to Claude Code, Codex and GitHub Copilot agents and steer it from a local board, in the browser or on your phone.",
+   "topics": [
+    "agent-orchestration",
+    "ai-agents",
+    "claude-code",
+    "code-review",
+    "codex",
+    "codex-cli",
+    "coding-agents",
+    "developer-tools",
+    "git-worktree",
+    "github-copilot",
+    "kanban",
+    "mcp",
+    "multi-agent",
+    "orchestrator",
+    "self-hosted"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "yaront1111/Moe-s-Tavern": {
+   "full_name": "yaront1111/Moe-s-Tavern",
+   "stars": 33,
+   "pushed_at": "2026-10-20T18:22:37Z",
+   "created_at": "2026-02-02T14:24:47Z",
+   "description": "AI agent task board for Claude Code, Codex, Gemini CLI and Grok Build: plan, approve, build and review inside JetBrains or VS Code, with state in .moe/ in your repo",
+   "topics": [
+    "agent-orchestration",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "developer-tools",
+    "gemini-cli",
+    "jetbrains-plugin",
+    "kanban",
+    "mcp",
+    "mcp-server",
+    "task-board",
+    "vscode-extension"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "defremont/Shipyard": {
+   "full_name": "defremont/Shipyard",
+   "stars": 29,
+   "pushed_at": "2026-10-09T17:54:52Z",
+   "created_at": "2026-03-09T15:05:47Z",
+   "description": "Local-first command center for software projects: tasks, Git, terminals, and coding agents (Claude Code, Codex, Gemini CLI…) in one desktop workspace.",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "coding-agents",
+    "dashboard",
+    "developer-tools",
+    "electron",
+    "git-worktree",
+    "kanban",
+    "local-first",
+    "mcp",
+    "productivity",
+    "react",
+    "task-management",
+    "task-manager",
+    "terminal",
+    "typescript"
+   ],
+   "found_by": [
+    "topic:kanban topic:mcp"
+   ]
+  },
+  "yulmucoffee/artiboard": {
+   "full_name": "yulmucoffee/artiboard",
+   "stars": 5,
+   "pushed_at": "2026-10-19T13:37:29Z",
+   "created_at": "2026-10-19T09:14:49Z",
+   "description": "A shared task board for people and their Claude agents, built as one claude.ai artifact. Views drawn by code, not tokens.",
+   "topics": [
+    "artifacts",
+    "claude-code",
+    "claude-skills",
+    "kanban",
+    "multi-agent",
+    "task-board"
+   ],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "kirgx/task-rail": {
+   "full_name": "kirgx/task-rail",
+   "stars": 3,
+   "pushed_at": "2026-10-20T18:32:53Z",
+   "created_at": "2026-10-20T16:38:38Z",
+   "description": "Compact Windows task board with an MCP bridge for coding agents",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "chillrain666/quadrant-md": {
+   "full_name": "chillrain666/quadrant-md",
+   "stars": 1,
+   "pushed_at": "2026-10-20T17:53:16Z",
+   "created_at": "2026-10-20T17:10:15Z",
+   "description": "Markdown-first todo system for humans and AI agents: P×U nine-grid board, inbox / someday / watch tracks, one line per task.",
+   "topics": [
+    "ai-agents",
+    "eisenhower-matrix",
+    "fastapi",
+    "local-first",
+    "markdown",
+    "plain-text",
+    "productivity",
+    "react",
+    "task-manager",
+    "todo"
+   ],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "zzw09773/agent-board": {
+   "full_name": "zzw09773/agent-board",
+   "stars": 0,
+   "pushed_at": "2026-10-20T16:15:09Z",
+   "created_at": "2026-10-20T07:01:45Z",
+   "description": "MCP message board + task table that lets AI agents from different vendors hand work to each other",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "jiva-studio/tandm-tasks": {
+   "full_name": "jiva-studio/tandm-tasks",
+   "stars": 0,
+   "pushed_at": "2026-10-19T13:19:55Z",
+   "created_at": "2026-10-19T13:19:54Z",
+   "description": "Visual task board and real-time execution dashboard for AI agents",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "Simon-Wong-hjz/switch": {
+   "full_name": "Simon-Wong-hjz/switch",
+   "stars": 0,
+   "pushed_at": "2026-10-20T03:24:54Z",
+   "created_at": "2026-10-19T10:09:13Z",
+   "description": "A local task board for managing delegated work across coding agent sessions.",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "4getkun/Poke_Agent": {
+   "full_name": "4getkun/Poke_Agent",
+   "stars": 0,
+   "pushed_at": "2026-10-20T18:22:16Z",
+   "created_at": "2026-10-20T08:21:24Z",
+   "description": "Experimental native Windows task board for supervising LLM agents; local SQLite history and opt-in MCP. Windows derivative of tRidha/pokegents.",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "hume-n/agent-crew": {
+   "full_name": "hume-n/agent-crew",
+   "stars": 0,
+   "pushed_at": "2026-10-20T13:13:18Z",
+   "created_at": "2026-10-20T13:13:17Z",
+   "description": "Turn your Claude Code sessions into a crew: named agents with jobs, a shared task board, notes they return to after a clear, and guards against common slips.",
+   "topics": [],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "Nikospy/tsk-viewer": {
+   "full_name": "Nikospy/tsk-viewer",
+   "stars": 0,
+   "pushed_at": "2026-10-20T11:51:17Z",
+   "created_at": "2026-10-19T08:04:25Z",
+   "description": "macOS menu bar app for the tsk board: tasks waiting for you, answers sent straight to the agent's Herdr pane. Herdr plugin.",
+   "topics": [
+    "herdr-plugin",
+    "macos",
+    "tsk"
+   ],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "rivera95673/tsk": {
+   "full_name": "rivera95673/tsk",
+   "stars": 0,
+   "pushed_at": "2026-10-20T09:10:56Z",
+   "created_at": "2026-10-20T09:10:37Z",
+   "description": "tsk, a Linear alternative that stays in the terminal: a shared task board for you and your agents. TUI for you, CLI for them.",
+   "topics": [
+    "cli",
+    "herdr",
+    "herdr-plugin",
+    "productivity",
+    "rust",
+    "task-manager",
+    "terminal",
+    "tui"
+   ],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "pranjal-joshi/claude-crew": {
+   "full_name": "pranjal-joshi/claude-crew",
+   "stars": 0,
+   "pushed_at": "2026-10-20T18:32:58Z",
+   "created_at": "2026-10-20T12:56:59Z",
+   "description": "Mission control for a crew of Claude Code agents: one per SDLC stage, a task board, triggers (cron, events, watches, webhooks), parallel git worktrees and a review gate. One Python file, zero deps.",
+   "topics": [
+    "agent-orchestration",
+    "ai-agents",
+    "ai-coding",
+    "anthropic",
+    "automation",
+    "claude",
+    "claude-code",
+    "coding-agents",
+    "cron",
+    "developer-tools",
+    "git-worktree",
+    "kanban",
+    "llm",
+    "multi-agent"
+   ],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "Love-L/ai-dev-platform-mvp": {
+   "full_name": "Love-L/ai-dev-platform-mvp",
+   "stars": 0,
+   "pushed_at": "2026-10-20T10:39:01Z",
+   "created_at": "2026-10-20T03:15:54Z",
+   "description": "ACE (AI Collaboration Engine) - One-stop AI dev workflow desktop app: requirements -> PRD -> task board -> agent sessions -> cost tracking. Skills evolve with your projects via versioned templates. Lo",
+   "topics": [
+    "ai",
+    "claude",
+    "desktop-app",
+    "llm",
+    "local-first",
+    "prd",
+    "react",
+    "rust",
+    "sqlite",
+    "tauri"
+   ],
+   "found_by": [
+    "agent task board created:>2026-10-18"
+   ]
+  },
+  "cfanzx/dsh-compact-relay": {
+   "full_name": "cfanzx/dsh-compact-relay",
+   "stars": 2,
+   "pushed_at": "2026-10-20T15:25:19Z",
+   "created_at": "2026-10-20T11:09:40Z",
+   "description": "DeepSeek Harness 输入框上下文状态指示与管理插件：实时显示容量占用，支持压缩前预览确认、九段式会话交接与关键消息锁定。 · Context indicator plugin for DSH: occupancy monitoring, preview-then-confirm compaction, 9-section handoff, and message pinning.",
+   "topics": [
+    "compaction",
+    "context-management",
+    "context-window",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "handoff"
+   ],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "greatfreedom/handoffd": {
+   "full_name": "greatfreedom/handoffd",
+   "stars": 1,
+   "pushed_at": "2026-10-20T01:36:48Z",
+   "created_at": "2026-10-19T17:15:46Z",
+   "description": "handoffd — Automatically hand off to a fresh Claude Code session before context runs out（上下文快满时，自动交接给新的 Claude Code 会话）",
+   "topics": [
+    "ai-agents",
+    "claude-code",
+    "claude-code-hooks",
+    "claude-code-plugin",
+    "macos",
+    "session-handoff",
+    "warp-terminal"
+   ],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "qurs/cc-autohandoff": {
+   "full_name": "qurs/cc-autohandoff",
+   "stars": 1,
+   "pushed_at": "2026-10-20T17:48:26Z",
+   "created_at": "2026-10-19T21:40:09Z",
+   "description": "Claude Code Auto-handoff session at 120k context plugin",
+   "topics": [],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "ziucode/agent-session-bridge": {
+   "full_name": "ziucode/agent-session-bridge",
+   "stars": 1,
+   "pushed_at": "2026-10-19T08:21:53Z",
+   "created_at": "2026-10-19T06:58:14Z",
+   "description": "Resume coding tasks across Claude Code, Codex, and Cursor. Local session discovery and reviewable context handoffs.",
+   "topics": [
+    "agent-skills",
+    "claude-code",
+    "codex",
+    "context-management",
+    "cursor",
+    "developer-tools",
+    "python",
+    "session-handoff"
+   ],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "QXLY-Scholar-AI/context-handoff": {
+   "full_name": "QXLY-Scholar-AI/context-handoff",
+   "stars": 0,
+   "pushed_at": "2026-10-20T10:27:04Z",
+   "created_at": "2026-10-20T10:26:38Z",
+   "description": "",
+   "topics": [],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "dataking5d/context-handoff": {
+   "full_name": "dataking5d/context-handoff",
+   "stars": 0,
+   "pushed_at": "2026-10-20T07:22:21Z",
+   "created_at": "2026-10-20T07:13:26Z",
+   "description": "把当前会话的关键上下文蒸馏成结构化 markdown 交接文档，供新会话冷启动接手",
+   "topics": [],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "CLBF5201314/codex-context-handoff": {
+   "full_name": "CLBF5201314/codex-context-handoff",
+   "stars": 0,
+   "pushed_at": "2026-10-20T17:54:42Z",
+   "created_at": "2026-10-20T17:19:40Z",
+   "description": "精简迁移：Codex 完整接续技能与跨平台全局指令安装器，先验收接管，再归档源任务。",
+   "topics": [],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "Ptothez/chat-handoff-skill": {
+   "full_name": "Ptothez/chat-handoff-skill",
+   "stars": 0,
+   "pushed_at": "2026-10-19T06:07:51Z",
+   "created_at": "2026-10-19T06:07:32Z",
+   "description": "Manually preserve original conversations locally so multiple agents can find context and continue the work.",
+   "topics": [],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "lyh704791411-a11y/dsh-project-handoff": {
+   "full_name": "lyh704791411-a11y/dsh-project-handoff",
+   "stars": 0,
+   "pushed_at": "2026-10-20T10:02:56Z",
+   "created_at": "2026-10-20T04:41:40Z",
+   "description": "DSH host plugin: counts automatic context compactions and injects one short project-handoff notice per turn.",
+   "topics": [
+    "compaction",
+    "context-compaction",
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "handoff",
+    "plugin"
+   ],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "hasuwini77/fresh-ctx": {
+   "full_name": "hasuwini77/fresh-ctx",
+   "stars": 0,
+   "pushed_at": "2026-10-19T13:04:39Z",
+   "created_at": "2026-10-19T09:54:40Z",
+   "description": "Automatic context handoff for Claude Code: at 35% context, write a handoff, /clear, resubmit — no manual steps.",
+   "topics": [],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "S4kuzy0/agent-context-bridge": {
+   "full_name": "S4kuzy0/agent-context-bridge",
+   "stars": 0,
+   "pushed_at": "2026-10-19T14:11:28Z",
+   "created_at": "2026-10-19T03:59:55Z",
+   "description": "Local shared rules, skills, handoff and project-memory context for Codex and DeepSeek Harness",
+   "topics": [],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "vimtro/grok-context-manager": {
+   "full_name": "vimtro/grok-context-manager",
+   "stars": 0,
+   "pushed_at": "2026-10-19T14:24:40Z",
+   "created_at": "2026-10-19T11:25:31Z",
+   "description": "Local-first context checkpoints, memory archives, and compact handoffs for Cursor Grok Bot teams. Open-source CLI, dashboard, and MCP tools.",
+   "topics": [],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "softbros-de/kontextkit-lite": {
+   "full_name": "softbros-de/kontextkit-lite",
+   "stars": 0,
+   "pushed_at": "2026-10-20T15:03:07Z",
+   "created_at": "2026-10-20T15:03:01Z",
+   "description": "Nie wieder alles neu erklären: /handoff und /pickup für Claude Code, Codex, Cursor und GitHub Copilot. Kostenlos, MIT-Lizenz, läuft lokal.",
+   "topics": [
+    "agents-md",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "context",
+    "copilot",
+    "cursor",
+    "handoff"
+   ],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "Du1eks/lane-tracker": {
+   "full_name": "Du1eks/lane-tracker",
+   "stars": 0,
+   "pushed_at": "2026-10-19T20:02:55Z",
+   "created_at": "2026-10-19T16:15:26Z",
+   "description": "Claude Code plugin: per-project lanes for parallel Claude sessions (orchestrator + lanes board, context bars, handoff/sleep/wake)",
+   "topics": [],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "bernardfernandez28/project-os-for-codex": {
+   "full_name": "bernardfernandez28/project-os-for-codex",
+   "stars": 0,
+   "pushed_at": "2026-10-19T21:13:52Z",
+   "created_at": "2026-10-19T21:13:37Z",
+   "description": "Open-source control plane for Codex projects: Git-backed context, visible agent progress, scoped MCP access, resumable work, and safe handoffs.",
+   "topics": [
+    "agent-handoff",
+    "ai-agents",
+    "ai-coding",
+    "ai-project-management",
+    "codex",
+    "codex-cli",
+    "context-engineering",
+    "developer-tools",
+    "git",
+    "knowledge-base",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "open-source",
+    "project-management",
+    "project-tracker",
+    "react",
+    "self-hosted",
+    "typescript",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "ruthmoore20/project-os-for-codex": {
+   "full_name": "ruthmoore20/project-os-for-codex",
+   "stars": 0,
+   "pushed_at": "2026-10-20T04:46:06Z",
+   "created_at": "2026-10-20T04:45:43Z",
+   "description": "Open-source control plane for Codex projects: Git-backed context, visible agent progress, scoped MCP access, resumable work, and safe handoffs.",
+   "topics": [
+    "agent-handoff",
+    "ai-agents",
+    "ai-coding",
+    "ai-project-management",
+    "codex",
+    "codex-cli",
+    "context-engineering",
+    "developer-tools",
+    "git",
+    "knowledge-base",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "open-source",
+    "project-management",
+    "project-tracker",
+    "react",
+    "self-hosted",
+    "typescript",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "CarolynLarsson/project-os-for-codex": {
+   "full_name": "CarolynLarsson/project-os-for-codex",
+   "stars": 0,
+   "pushed_at": "2026-10-19T20:46:15Z",
+   "created_at": "2026-10-19T20:46:00Z",
+   "description": "Open-source control plane for Codex projects: Git-backed context, visible agent progress, scoped MCP access, resumable work, and safe handoffs.",
+   "topics": [
+    "agent-handoff",
+    "ai-agents",
+    "ai-coding",
+    "ai-project-management",
+    "codex",
+    "codex-cli",
+    "context-engineering",
+    "developer-tools",
+    "git",
+    "knowledge-base",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "open-source",
+    "project-management",
+    "project-tracker",
+    "react",
+    "self-hosted",
+    "typescript",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  },
+  "kumar45409/project-os-for-codex": {
+   "full_name": "kumar45409/project-os-for-codex",
+   "stars": 0,
+   "pushed_at": "2026-10-19T06:15:43Z",
+   "created_at": "2026-10-19T06:15:28Z",
+   "description": "Open-source control plane for Codex projects: Git-backed context, visible agent progress, scoped MCP access, resumable work, and safe handoffs.",
+   "topics": [
+    "agent-handoff",
+    "ai-agents",
+    "ai-coding",
+    "ai-project-management",
+    "codex",
+    "codex-cli",
+    "context-engineering",
+    "developer-tools",
+    "git",
+    "knowledge-base",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "open-source",
+    "project-management",
+    "project-tracker",
+    "react",
+    "self-hosted",
+    "typescript",
+    "workflow-automation"
+   ],
+   "found_by": [
+    "handoff context created:>2026-10-18"
+   ]
+  }
+ }
+}

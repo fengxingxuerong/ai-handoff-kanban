@@ -260,6 +260,27 @@ def test_temperature_retry_still_failing(no_sleep):
         stub.stop()
 
 
+def test_temperature_retry_empty_content_is_a_failure(no_sleep):
+    """400 → 用 temp=1 重试，重试返回 200 但 content 空：依然算失败。
+
+    推理型模型在 temp=1 重试分支同样可能烧光 max_tokens 返回空 ——
+    这条分支 2026-10-19 前只做了"换个温度重试"，没做空回复检查。
+    """
+    import app.llm as llm
+    from llm_stub import StubLLM
+
+    stub = StubLLM().start()
+    try:
+        stub.push_status_body(400, "invalid temperature value: only 1 is allowed")
+        stub.push_text("")
+        cfg = {"ai": {"endpoints": [stub.endpoint("端点甲")], "active_model": "stub-model"}}
+        with pytest.raises(llm.LLMError) as e:
+            _chat(cfg)
+        assert "temp=1 重试返回为空" in str(e.value), str(e.value)
+    finally:
+        stub.stop()
+
+
 def _usage_lines() -> list[dict]:
     import app.llm as llm
 

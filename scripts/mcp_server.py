@@ -28,6 +28,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
+from urllib.parse import quote
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
@@ -115,6 +116,13 @@ OMIT_SECTIONS_SCHEMA = {
     "description": "裁掉这些小节以省上下文："
                    + "、".join(f"{k}={v}" for k, v in kanban._SECTION_CN.items())
                    + "。默认全给；裁掉什么会在正文开头留一行说明，别让接手方误读成\"没有\"。",
+}
+
+CONTEXT_SECTIONS_SCHEMA = {
+    "type": "array", "items": {"type": "string", "enum": list(kanban.CONTEXT_SECTIONS)},
+    "description": "只返回这些小节（project 与元数据始终返回）："
+                   + "、".join(kanban.CONTEXT_SECTIONS)
+                   + "。不传 = 全量；传空数组 = 一个可选小节都不要。",
 }
 
 
@@ -449,6 +457,19 @@ def t_update_task(args: dict) -> str:
         f"（所属项目 {info.get('project', '')}）{why}{tail}{unblock}", args)
 
 
+def _blocked_mark(t: dict) -> str:
+    """「现在可以做」条目上的阻塞标记。
+
+    状态=阻塞的任务也会出现在可做列表里（先解阻塞也算推进，与 /today 同口径），
+    但必须带出来 —— 2026-10-19 实测：不带标记时代理把它当普通待办直接开工，
+    而同一条任务在 /today、交接行里都带着阻塞标记。
+    """
+    if t.get("status") != "阻塞":
+        return ""
+    reason = t.get("blocked_reason") or ""
+    return f" · ⛔ 阻塞中{'：' + reason if reason else ''}（先解阻塞，别直接开工）"
+
+
 def t_next_task(args: dict) -> str:
     """现在就能动手的任务：接手时先问这个，别一上来挑个被前置挡住的"""
     pid = args.get("project_id") or ""
@@ -467,7 +488,8 @@ def t_next_task(args: dict) -> str:
     if ready:
         for t in ready:
             refs = ("（" + "、".join(t.get("refs") or []) + "）") if t.get("refs") else ""
-            lines.append(f"- [{t['id']}] {t['title']} · {t.get('priority')}{refs}")
+            lines.append(f"- [{t['id']}] {t['title']} · {t.get('priority')}{refs}"
+                         + _blocked_mark(t))
     elif data["done"] == data["total"]:
         lines.append(f"- 全部 {data['total']} 条任务都已完成，没有待办。")
     elif review and data["done"] + len(review) == data["total"]:
@@ -479,11 +501,16 @@ def t_next_task(args: dict) -> str:
         lines.append("- 没有可以直接开工的任务（都在等前置）")
     if blocked:
         lines.append("")
-        lines.append("被前置挡住：")
+        lines.append("被前置挡住 / 阻塞中：")
         for t in blocked:
+            bits = []
             waiting = t.get("waiting_for") or []
             if waiting:
-                lines.append(f"- {t['title']}（等：{'、'.join(waiting)}）")
+                bits.append("等：" + "、".join(waiting))
+            if t.get("status") == "阻塞" and t.get("blocked_reason"):
+                bits.append("阻塞原因：" + t["blocked_reason"])
+            tail = f"（{'；'.join(bits)}）" if bits else ""
+            lines.append(f"- {t['title']}{tail}")
     return _agent_text("\n".join(lines), args)
 
 
@@ -548,32 +575,50 @@ def t_agents_md(args: dict) -> str:
 
 
 def t_context(args: dict) -> str:
-    """机器可读接手包：一次拿到背景/交接说明/可执行任务/代码现实/就绪度"""
+    """机器可读接手包：一次拿到背景/交接说明/可执行任务/代码现实/就绪度
+
+    `sections` / `since` 原样透传给 `/api/context/{pid}` —— 切片与增量的判定只有
+    `app.context_slice` 一份实现，MCP 不重算（重算就会出现"工具说变了、界面说没变"）。
+    """
     pid = args.get("project_id") or ""
+    sections = args.get("sections")
+    since = args.get("since") or None
     # 不再自己 _find() 判存在：project_context 找不到会 404，而 _find 是**又一整份读盘**
-    ctx = kanban.project_context(pid, redact=_redact_arg(args))
+    ctx = kanban.project_context(pid, redact=_redact_arg(args),
+                                 sections=sections, since=since)
+    meta = ctx.get("slice") or {}
     parts = [
         f"【{ctx['project']['name']}】接手上下文（{ctx['generated_at']}）",
         f"状态：{ctx['project']['status']}（进度 {ctx['project']['progress']}%）| 优先级：{ctx['project']['priority']} | 标签：{'、'.join(ctx['project'].get('tags') or []) or '无'}",
     ]
-    cr = ctx.get("code_reality") or {}
-    if cr.get("available"):
-        parts.append(f"代码现实：分支 {cr.get('branch') or '—'}，最近提交 {cr.get('last_commit_at') or '—'}（{cr.get('days_since_commit')} 天前），未提交文件 {cr.get('uncommitted_files')} 个")
-    else:
-        # 读不到要说出来：以前整行不出现，"没填路径"和"git 坏了"看起来一模一样
-        parts.append(f"代码现实：不可用（{cr.get('reason') or '未知原因'}）")
+    if meta.get("delta"):
+        parts.append(
+            f"增量模式：自 {meta.get('since')} 以来只列变化条目"
+            f"（任务 {meta.get('changed_tasks', 0)} 条 / 记忆 {meta.get('changed_memories', 0)} 条）；"
+            "start_here、代码现实与就绪度不随 since 缩水")
+    if meta.get("omitted"):
+        parts.append("本次省略小节：" + "、".join(meta["omitted"]))
+    cr = ctx.get("code_reality")
+    if cr is not None:
+        if cr.get("available"):
+            parts.append(f"代码现实：分支 {cr.get('branch') or '—'}，最近提交 {cr.get('last_commit_at') or '—'}（{cr.get('days_since_commit')} 天前），未提交文件 {cr.get('uncommitted_files')} 个")
+        else:
+            # 读不到要说出来：以前整行不出现，"没填路径"和"git 坏了"看起来一模一样
+            parts.append(f"代码现实：不可用（{cr.get('reason') or '未知原因'}）")
     if ctx["project"].get("background"):
         parts.append("项目背景：" + ctx["project"]["background"])
     if ctx["project"].get("handoff_note"):
         parts.append("交接说明（务必先读）：" + ctx["project"]["handoff_note"])
     if ctx["project"].get("next_action"):
         parts.append("下一步行动：" + ctx["project"]["next_action"])
-    mems = ctx.get("memories") or []
-    if mems:
-        parts.append("项目记忆（决策/坑/约定，接手时自动带上）：")
-        parts += [f"  - [{m.get('type')}] {m.get('text')}" for m in mems]
+    if "memories" in ctx:
+        mems = ctx.get("memories") or []
+        if mems:
+            parts.append("项目记忆（决策/坑/约定，接手时自动带上）：")
+            parts += [f"  - [{m.get('type')}] {m.get('text')}" for m in mems]
     def _task_line(t: dict) -> str:
-        """MCP 接手包也要带验收标准；只报标题会让新智能体知道做什么、不知道做到哪算完。"""
+        """MCP 接手包也要带验收标准；只报标题会让新智能体知道做什么、不知道做到哪算完。
+        阻塞中的任务带 ⛔ 标记与原因（同 kanban_next_task 口径，别直接开工）。"""
         bits = [t["title"], f"（{t.get('priority', '中')}）"]
         refs = t.get("refs") or []
         if refs:
@@ -581,27 +626,41 @@ def t_context(args: dict) -> str:
         acc = [a for a in (t.get("acceptance") or []) if a]
         if acc:
             bits.append(" — 验收：" + "；".join(acc))
+        bits.append(_blocked_mark(t))
         return "".join(bits)
 
-    if ctx["start_here"]:
-        parts.append("现在就能动手的任务：")
-        parts += [f"  - {_task_line(t)}" for t in ctx["start_here"]]
-    todo = ctx["tasks"]["todo"]
-    doing = ctx["tasks"]["in_progress"]
-    review = ctx["tasks"].get("review") or []
-    blocked = ctx["tasks"]["blocked"]
-    if doing:
-        parts.append("进行中：" + "；".join(_task_line(t) for t in doing))
-    if review:
-        parts.append("待审查：" + "；".join(_task_line(t) for t in review))
-    if todo:
-        parts.append("待办：" + "；".join(_task_line(t) for t in todo))
-    if blocked:
-        parts.append("阻塞：" + "；".join(_task_line(t) for t in blocked))
-    rd = ctx["readiness"]
-    parts.append(f"交接就绪度：{rd['score']}/100" + (f"（缺口：{'、'.join(rd['missing'])}）" if rd["missing"] else "（齐备）"))
-    # 直链也要带上这次同样的脱敏口径：不然是"工具给了脱敏版、链接指向未脱敏版"
-    link_suffix = "?redact=1" if _redact_arg(args) else ""
+    if "start_here" in ctx:
+        if ctx["start_here"]:
+            parts.append("现在就能动手的任务：")
+            parts += [f"  - {_task_line(t)}" for t in ctx["start_here"]]
+        else:
+            parts.append("现在就能动手的任务：无（都完成了或在等前置）")
+    tasks = ctx.get("tasks")
+    if tasks is not None:
+        todo = tasks["todo"]
+        doing = tasks["in_progress"]
+        review = tasks.get("review") or []
+        blocked = tasks["blocked"]
+        if doing:
+            parts.append("进行中：" + "；".join(_task_line(t) for t in doing))
+        if review:
+            parts.append("待审查：" + "；".join(_task_line(t) for t in review))
+        if todo:
+            parts.append("待办：" + "；".join(_task_line(t) for t in todo))
+        if blocked:
+            parts.append("阻塞：" + "；".join(_task_line(t) for t in blocked))
+    rd = ctx.get("readiness")
+    if rd is not None:
+        parts.append(f"交接就绪度：{rd['score']}/100" + (f"（缺口：{'、'.join(rd['missing'])}）" if rd["missing"] else "（齐备）"))
+    # 直链也要带上这次同样的脱敏/切片口径：不然是"工具给了切片版、链接指向整包"。
+    query = []
+    if _redact_arg(args):
+        query.append("redact=1")
+    if sections is not None:
+        query.append("sections=" + quote(",".join(sections), safe=","))
+    if since:
+        query.append("since=" + quote(str(since), safe=""))
+    link_suffix = ("?" + "&".join(query)) if query else ""
     parts.append(f"实时上下文（本机服务，活数据）：{local_url('/api/context/' + pid)}{link_suffix}")
     parts.append("—— 来自 AI 交接看板 MCP（可继续用 kanban_* 工具读写任务）")
     return "\n".join(parts)
@@ -954,11 +1013,14 @@ TOOLS: list[dict] = [
     },
     {
         "name": "kanban_context",
-        "description": "获取项目的机器可读接手包：背景、交接说明、现在就能动手的任务（依赖已满足）、代码现实、交接就绪度。换人/换工具接手时先调这个，一次拿到全部上下文。默认脱敏。",
+        "description": "获取项目的机器可读接手包：背景、交接说明、现在就能动手的任务（依赖已满足）、代码现实、交接就绪度。换人/换工具接手时先调这个，一次拿到全部上下文。默认脱敏；可用 sections 只取需要的小节、since 只取该时刻之后变化的条目（上下文省着用）。",
         "inputSchema": {
             "type": "object",
             "properties": {"project_id": {"type": "string"},
-                           "redact": REDACT_SCHEMA},
+                           "redact": REDACT_SCHEMA,
+                           "sections": CONTEXT_SECTIONS_SCHEMA,
+                           "since": {"type": "string",
+                                     "description": "只列该时刻之后变化的 tasks / memories（YYYY-MM-DD 或 YYYY-MM-DD HH:MM）；start_here / 就绪度 / 代码现实仍全量"}},
             "required": ["project_id"], "additionalProperties": False,
         },
     },
@@ -1365,6 +1427,24 @@ def _validate_args(schema: dict, args: dict) -> None:
                 raise ValueError(f"{key} 不能大于 {spec['maximum']}")
         if typ == "array" and not isinstance(val, list):
             raise ValueError(f"{key} 必须是数组")
+        if typ == "array" and isinstance(val, list):
+            # items 里的 enum 以前**只写在 schema 里没人执行** —— 客户端传
+            # ["memories","背景"] 会被原样收下，工具再默默当成"没传"或漏掉一项。
+            # 声明了什么就执行什么（同 string 的 maxLength，2026-10-19 收口）。
+            if "minItems" in spec and len(val) < spec["minItems"]:
+                raise ValueError(f"{key} 至少 {spec['minItems']} 项")
+            if "maxItems" in spec and len(val) > spec["maxItems"]:
+                raise ValueError(f"{key} 最多 {spec['maxItems']} 项")
+            item_spec = spec.get("items") or {}
+            item_type = item_spec.get("type")
+            item_enum = item_spec.get("enum")
+            for idx, item in enumerate(val):
+                if item_type == "string" and not isinstance(item, str):
+                    raise ValueError(f"{key}[{idx}] 必须是字符串")
+                if item_type == "integer" and (isinstance(item, bool) or not isinstance(item, int)):
+                    raise ValueError(f"{key}[{idx}] 必须是整数")
+                if item_enum and item not in item_enum:
+                    raise ValueError(f"{key}[{idx}] 只能是 {'/'.join(item_enum)}，收到「{item}」")
         if typ == "boolean" and not isinstance(val, bool):
             raise ValueError(f"{key} 必须是布尔值（收到「{val}」）")
         enum = spec.get("enum")

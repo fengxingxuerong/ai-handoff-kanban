@@ -130,9 +130,18 @@ MUTATIONS: list[dict] = [
     {
         "id": "assign_ignores_priority",
         "file": "app/assign.py",
-        "old": "    return [t for t in executable_tasks(tasks) if t.get(\"priority\") == priority]",
-        "new": "    return executable_tasks(tasks)",
+        "old": "    return [t for t in executable_tasks(tasks)\n            if t.get(\"priority\") == priority and t.get(\"status\") != \"阻塞\"]",
+        "new": "    return [t for t in executable_tasks(tasks)\n            if t.get(\"status\") != \"阻塞\"]",
         "why": "自动分配不按优先级筛选：把『中/低』任务也派出去（接口契约变宽）",
+        "tests": ["tests/test_assign.py"],
+    },
+    {
+        "id": "assign_takes_blocked_tasks",
+        "file": "app/assign.py",
+        "old": "            if t.get(\"priority\") == priority and t.get(\"status\") != \"阻塞\"]",
+        "new": "            if t.get(\"priority\") == priority]",
+        "why": "阻塞中的任务被自动分配：卡片上写着『缺权限被卡住』，分配器却照派不误 —— "
+               "2026-10-19 前的真实行为（allocatable 里根本没有阻塞过滤）",
         "tests": ["tests/test_assign.py"],
     },
     {
@@ -627,6 +636,74 @@ MUTATIONS: list[dict] = [
         "new": "            if False:\n                continue",
         "why": "带 :// 的 URL 引用被当本机坐标检查：外部文档/PR 链接全进 missing（真问题被噪音淹）",
         "tests": ["tests/test_git.py"],
+    },
+    {
+        # 2026-10-19 v1.8.1：空回复按成功直接返回（实盘：推理模型烧光 max_tokens 后
+        # content 空、HTTP 200，降级链不触发，上层拿到 500「LLM 返回为空」）。
+        "id": "llm_empty_reply_taken_as_success",
+        "file": "app/llm.py",
+        "old": "                if _empty_reply(content):\n"
+               "                    _record_usage(feature or \"未标注\", ep[\"name\"], model, usage, time.time() - t0, False)\n"
+               "                    errors.append(f\"{ep['name']}/{model}: 返回为空（max_tokens 可能被推理烧光）\")\n"
+               "                    time.sleep(0.4)\n"
+               "                    continue",
+        "new": "                if False:\n"
+               "                    _record_usage(feature or \"未标注\", ep[\"name\"], model, usage, time.time() - t0, False)\n"
+               "                    errors.append(f\"{ep['name']}/{model}: 返回为空（max_tokens 可能被推理烧光）\")\n"
+               "                    time.sleep(0.4)\n"
+               "                    continue",
+        "why": "空回复当成功返回：别的可用端点永远轮不到，症状是随机的 500 与静默降级（本地兜底版冒充 AI 版）",
+        "tests": ["tests/test_llm_gateway.py"],
+    },
+    {
+        "id": "next_ready_drops_blocked_mark",
+        "file": "app/main.py",
+        "old": "    if d[\"status\"] == \"阻塞\":\n        d[\"blocked_reason\"] = mask(t.get(\"blocked_reason\") or \"\")",
+        "new": "    if False:\n        d[\"blocked_reason\"] = mask(t.get(\"blocked_reason\") or \"\")",
+        "why": "「可做」条目丢掉阻塞原因：/next 与接手包 start_here 的阻塞任务看起来和普通待办一样，代理照单开工",
+        "tests": ["tests/test_task_deps.py"],
+    },
+    {
+        "id": "mcp_next_unmarked_blocked",
+        "file": "scripts/mcp_server.py",
+        "old": "    if t.get(\"status\") != \"阻塞\":\n"
+               "        return \"\"\n"
+               "    reason = t.get(\"blocked_reason\") or \"\"\n"
+               "    return f\" · ⛔ 阻塞中{'：' + reason if reason else ''}（先解阻塞，别直接开工）\"",
+        "new": "    return \"\"",
+        "why": "MCP 可做列表不带 ⛔ 标记：/today 里的阻塞标记到了 next_task 就消失，代理拿到的『现在可以做』是句谎话",
+        "tests": ["tests/test_mcp_server.py"],
+    },
+    {
+        # 2026-10-21 第七轮竞品吸取：接手包 sections/since（上下文切片与增量）
+        "id": "context_unknown_section_ignored",
+        "file": "app/context_slice.py",
+        "old": "        if name not in CONTEXT_SECTIONS:\n"
+               "            raise HTTPException(\n"
+               "                400, f\"{param} 不认识「{name}」，可选：{_SECTION_HINT}（project 始终返回）\")\n"
+               "        out.add(name)",
+        "new": "        if name not in CONTEXT_SECTIONS:\n"
+               "            continue\n"
+               "        out.add(name)",
+        "why": "不认识的 sections 被静默忽略：调用方以为只要了 tasks，实际拿到一整包（或以为字段名拼对了）",
+        "tests": ["tests/test_pure_modules.py", "tests/test_api.py"],
+    },
+    {
+        "id": "context_since_exclusive",
+        "file": "app/context_slice.py",
+        "old": "    return parsed.strftime(\"%Y-%m-%d %H:%M\") >= since[:16]",
+        "new": "    return parsed.strftime(\"%Y-%m-%d %H:%M\") > since[:16]",
+        "why": "since 改成开区间：与 generated_at 同分钟发生的改动会漏掉（重复可忍，漏一条会让代理以为没发生）",
+        "tests": ["tests/test_pure_modules.py", "tests/test_api.py"],
+    },
+    {
+        "id": "context_delta_filters_start_here",
+        "file": "app/main.py",
+        "old": "    ready = executable_tasks(tasks) if wanted_section(\"start_here\") else []",
+        "new": "    ready = ([t for t in executable_tasks(tasks) if task_changed(t)]\n"
+               "             if wanted_section(\"start_here\") else [])",
+        "why": "增量包把 start_here 也裁成「只列变化的」：没变化时看起来没事可做，恰恰丢掉接手方最需要的一节",
+        "tests": ["tests/test_api.py"],
     },
 ]
 

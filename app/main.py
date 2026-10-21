@@ -150,6 +150,13 @@ from .journal import (  # noqa: F401  —— 这些名字仍可从 app.main 取�
     clean_journal,
     compress_journal,
 )
+from .context_slice import (  # noqa: F401  —— 测试与 MCP 也可从 app.main 取这些名字
+    CONTEXT_SECTIONS,
+    changed_since,
+    has_timestamp,
+    parse_context_sections,
+    parse_since,
+)
 from .version import APP_VERSION, BUILD_TIME
 
 # 交接包里打印的直链端口。桌面壳用同一个环境变量起服务，两边口径一致；
@@ -164,7 +171,11 @@ DEFAULT_PRIORITY = ["高", "中", "低"]
 # 换机导入时"这份 JSON 的字段形状是哪一版"和"看板是第几版"是两件事。
 # 加字段/改字段语义时 +1，并在 tests/test_api.py 的接手包字段集合快照里同步。
 # v2（2026-10-06）：任务 slim 带 `acceptance`（验收标准）、顶层带 `expired_memory_count`。
-SCHEMA_VERSION = 2
+# v3（2026-10-19）：`start_here` 条目带 `status`，阻塞中的带 `blocked_reason` ——
+# 实测发现"可做"列表不带标记时，代理会把阻塞任务当普通待办直接开工。
+# v4（2026-10-21）：顶层带 `slice`（本次给了哪些小节、since 增量计数与说明）；
+# `sections` / `since` 让代理只取需要的那部分，`project` 始终返回。
+SCHEMA_VERSION = 4
 
 # 导出落盘扩展名白名单 / 本地访问防护 / 落盘路径黑名单：2026-10-14 整体拆出到 app/security.py
 # （纯函数，可穷举）。这里保留同名转发，测试与 monkeypatch 路径不变：
@@ -820,8 +831,25 @@ def health():
 
 # ---- 项目 CRUD ----
 
+def _blocked_fields(t: dict, mask=None) -> dict:
+    """「可做」类条目要带的状态字段：阻塞中的任务会出现在这些列表里（先解阻塞也算
+    推进 —— 与 /api/today 的口径一致），但消费方必须能一眼分辨。
+
+    2026-10-19 真实项目实测：`/next` 与 MCP `kanban_next_task` 把阻塞任务列进
+    「现在可以做」且不带任何标记，代理直接照单开工；同一条任务在 /today 里带
+    `status`、在交接行里带 ⛔ 原因。不带标记的"现在可以做"是句谎话。
+    返回并入条目的附加字段；阻塞时带原因（mask 由调用方给，接手包要脱敏）。
+    """
+    mask = mask or (lambda s: s)
+    d = {"status": t.get("status", "待办")}
+    if d["status"] == "阻塞":
+        d["blocked_reason"] = mask(t.get("blocked_reason") or "")
+    return d
+
+
 @app.get("/api/context/{pid}")
-def project_context(pid: str, redact: int = 0):
+def project_context(pid: str, redact: int = 0, sections: str | None = None,
+                    since: str | None = None):
     """机器可读项目上下文：给 AI 智能体直接拉取的「接手包」。
 
     对标 bd prime / Xanther——其他工具无需人工粘贴，
@@ -837,16 +865,39 @@ def project_context(pid: str, redact: int = 0):
     标题为什么也盖：掩码只替换凭据那一段（"轮换 sk-abcd… 这把" → "轮换 sk-******** 这把"），
     标题照样认得出来，对齐不受影响；反过来，"把密钥写在任务标题里"恰恰是最常见的写法，
     放行就等于让唯一一条 redact 开关在最常见的形状上失效。
+
+    `?sections=` 只保留指定小节（`project` 与元数据始终返回）；`?since=` 只列该时刻
+    之后变化的 tasks / memories（`start_here` / readiness / code_reality 仍全量，
+    done_count / expired_memory_count 也仍全量）。两者由 `app.context_slice` 解析。
     """
     found = find_project(pid)
     if not found:
         raise HTTPException(404, "项目不存在")
     p = found[1]
+    wanted = parse_context_sections(sections)
+    since_at = parse_since(since)
+    use_since = bool(since_at)
+
+    def wanted_section(name: str) -> bool:
+        return wanted is None or name in wanted
+
     mask = redact_text if redact else (lambda s: s)
     tasks = p.get("tasks") or []
-    ready = executable_tasks(tasks)
     by_id = {t.get("id"): t for t in tasks}
-    snap = git_snapshot(p.get("repo_path", ""), limit=3) if p.get("repo_path") else {"ok": False}
+
+    def task_changed(t: dict) -> bool:
+        if not use_since:
+            return True
+        if changed_since(t.get("updated_at"), since_at):
+            return True
+        # journal 追加不会改任务自身的 updated_at（append_task_journal 只动项目时间），
+        # 只按 updated_at 过滤会把"只记了一条过程"的任务漏掉。
+        return any(changed_since(e.get("time"), since_at) for e in (t.get("journal") or []))
+
+    changed_tasks = [t for t in tasks if task_changed(t)]
+    visible_tasks = changed_tasks if use_since else tasks
+    unknown_ts_tasks = sum(1 for t in changed_tasks
+                           if not has_timestamp(t.get("updated_at")))
 
     def slim(t: dict) -> dict:
         d = {
@@ -869,6 +920,9 @@ def project_context(pid: str, redact: int = 0):
         if t.get("desc"):
             d["desc"] = mask((t.get("desc") or ""))[:200]
         jr = t.get("journal") or []
+        if use_since:
+            # 增量包只带这次新增的过程记录；任务本身仍会出现在对应状态列里。
+            jr = [e for e in jr if changed_since(e.get("time"), since_at)]
         if jr:
             d["recent_journal"] = [{"time": e.get("time", ""), "text": mask((e.get("text") or ""))[:120]}
                                    for e in jr[-2:]]
@@ -878,12 +932,46 @@ def project_context(pid: str, redact: int = 0):
             d["waiting_for"] = waiting
         return d
 
-    missing = [it["label"] for it in _readiness_items(p) if not it["ok"]]
+    code_wanted = wanted_section("code_reality")
+    snap = git_snapshot(p.get("repo_path", ""), limit=3) if code_wanted and p.get("repo_path") else {"ok": False}
+    missing = [it["label"] for it in _readiness_items(p) if not it["ok"]] if wanted_section("readiness") else []
     # 过期记忆不进接手包（"轮换 sk-xxx 这把"这类有保质期的事实过期后就是误导），
     # 但**省了几个要说话**：接手方得知道这里少了几条、为什么少。
     pid_memories = [m for m in _load_memories() if m.get("pid") == p.get("id")]
-    expired_cnt = sum(1 for m in pid_memories if _memory_expired(m))
-    return {
+    active_memories = [m for m in pid_memories if not _memory_expired(m)]
+    expired_cnt = len(pid_memories) - len(active_memories)
+    changed_memories = ([m for m in active_memories
+                         if changed_since(m.get("time"), since_at)]
+                        if use_since else active_memories)
+    unknown_ts_memories = sum(1 for m in changed_memories if not has_timestamp(m.get("time")))
+
+    # start_here 是「现在就能动手」的集合，增量模式也保持全量 —— 只给变化项的话，
+    # 代理会以为"没变化 = 没有可做的事"，而它恰恰是每轮接手最需要的那一节。
+    ready = executable_tasks(tasks) if wanted_section("start_here") else []
+
+    included = [name for name in CONTEXT_SECTIONS if wanted_section(name)]
+    omitted = [name for name in CONTEXT_SECTIONS if not wanted_section(name)]
+    slice_meta = {
+        "sections": included,
+        "omitted": omitted,
+        "since": since_at or None,
+        "delta": use_since,
+        "note": ("tasks / memories 只列 since 之后变化的条目（分钟精度：同一分钟会重复、不会漏）；"
+                 "start_here / readiness / code_reality 不随 since 缩水；done_count / expired_memory_count 也不缩水"
+                 if use_since else
+                 "project 与元数据始终返回；sections 只保留指定小节，since 只列变化条目"),
+    }
+    if use_since:
+        slice_meta.update({
+            "changed_tasks": len(changed_tasks),
+            "unchanged_tasks": len(tasks) - len(changed_tasks),
+            "changed_memories": len(changed_memories),
+            "unchanged_memories": len(active_memories) - len(changed_memories),
+            "unknown_timestamp_tasks": unknown_ts_tasks,
+            "unknown_timestamp_memories": unknown_ts_memories,
+        })
+
+    out = {
         "app": "ai-kanban",
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_str(),
@@ -896,10 +984,13 @@ def project_context(pid: str, redact: int = 0):
             "handoff_note": mask(p.get("handoff_note", "")),
             "next_action": mask(p.get("next_action", "")),
         },
-        "memories": [{**m, "text": mask(m.get("text") or "")}
-                     for m in pid_memories if not _memory_expired(m)][-15:],
-        "expired_memory_count": expired_cnt,
-        "code_reality": ({
+        "slice": slice_meta,
+    }
+    if wanted_section("memories"):
+        out["memories"] = [{**m, "text": mask(m.get("text") or "")} for m in changed_memories][-15:]
+        out["expired_memory_count"] = expired_cnt
+    if code_wanted:
+        out["code_reality"] = ({
             "available": True,
             "branch": snap.get("branch", ""),
             "last_commit_at": (snap.get("head") or {}).get("date", ""),
@@ -911,20 +1002,25 @@ def project_context(pid: str, redact: int = 0):
             # "填了但不是 git 仓库/路径没了"在接手方看来一模一样，排查成本全转给用户。
             "available": False,
             "reason": "未填代码路径" if not p.get("repo_path") else (snap.get("error") or "git 读取失败"),
-        }),
-        "start_here": [  # 现在就能动手的（依赖已满足）
+        })
+    if wanted_section("start_here"):
+        out["start_here"] = [  # 现在就能动手的（依赖已满足）；阻塞中的也在，但带 status/原因别乱开工
             {"id": t["id"], "title": mask(t.get("title") or ""), "priority": t.get("priority"),
-             "refs": t.get("refs") or [], "acceptance": t.get("acceptance") or []} for t in ready
-        ],
-        "tasks": {
-            "todo": [slim(t) for t in tasks if t.get("status") == "待办"],
-            "in_progress": [slim(t) for t in tasks if t.get("status") == "进行中"],
-            "review": [slim(t) for t in tasks if t.get("status") == "待审查"],
-            "blocked": [slim(t) for t in tasks if t.get("status") == "阻塞"],
+             "refs": t.get("refs") or [], "acceptance": t.get("acceptance") or [],
+             **_blocked_fields(t, mask)} for t in ready
+        ]
+    if wanted_section("tasks"):
+        out["tasks"] = {
+            "todo": [slim(t) for t in visible_tasks if t.get("status") == "待办"],
+            "in_progress": [slim(t) for t in visible_tasks if t.get("status") == "进行中"],
+            "review": [slim(t) for t in visible_tasks if t.get("status") == "待审查"],
+            "blocked": [slim(t) for t in visible_tasks if t.get("status") == "阻塞"],
             "done_count": sum(1 for t in tasks if t.get("status") == "已完成"),
-        },
-        "readiness": {"score": _readiness_score(p), "missing": missing},
-    }
+        }
+    if wanted_section("readiness"):
+        out["readiness"] = {"score": _readiness_score(p), "missing": missing}
+    return out
+
 
 
 # ---- 交接内容脱敏（对标 handoff skill 的 redact） ----
@@ -2811,7 +2907,12 @@ def ai_summarize(body: SummarizeBody):
 
 @app.get("/api/projects/{pid}/next")
 def next_tasks(pid: str):
-    """现在就能动手的任务：自己没完成，且所有前置都已完成。换人接手时看这个就知道先做啥"""
+    """现在就能动手的任务：自己没完成，且所有前置都已完成。换人接手时看这个就知道先做啥。
+
+    阻塞中的任务**也在列表里**（先解阻塞也算推进，与 /api/today 同一口径），
+    但条目带 `status` 与 `blocked_reason` —— 2026-10-19 实测：不带标记时代理
+    把它当普通待办直接开工，而同一条任务在 /today 里明明带着阻塞标记。
+    """
     found = find_project(pid)
     if not found:
         raise HTTPException(404, "项目不存在")
@@ -2829,13 +2930,14 @@ def next_tasks(pid: str):
         "total": len(tasks),
         "done": sum(1 for t in tasks if t.get("status") == "已完成"),
         "next": [{"id": t["id"], "title": t.get("title"), "priority": t.get("priority"),
-                  "refs": t.get("refs") or []} for t in ready],
+                  "refs": t.get("refs") or [], **_blocked_fields(t)} for t in ready],
         "review": [{"id": t["id"], "title": t.get("title")}
                    for t in tasks if t.get("status") == "待审查"],
         "blocked": [{"id": t["id"], "title": t.get("title"),
                      "waiting_for": [by_id[d].get("title", d)
                                      for d in (t.get("depends_on") or [])
-                                     if d in by_id and by_id[d].get("status") != "已完成"]}
+                                     if d in by_id and by_id[d].get("status") != "已完成"],
+                     **_blocked_fields(t)}
                     for t in tasks if t.get("id") not in ready_ids and t.get("status") not in ("已完成", "待审查")],
     }
 

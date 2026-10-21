@@ -123,6 +123,50 @@ def test_next_tasks_endpoint(app_client):
     assert app_client.get("/api/projects/不存在/next")[0] == 404
 
 
+def test_next_and_context_mark_blocked_tasks(app_client):
+    """阻塞中的任务会出现在"现在可以做"列表里（先解阻塞也算推进，与 /today 同口径），
+    但必须带状态与原因 —— 2026-10-19 实测：/next 与接手包 start_here 只给
+    {id,title,priority,refs}，阻塞任务看起来和普通待办一模一样，代理照单开工；
+    同一条任务在 /today 里明明带着 status=阻塞。
+    """
+    pid = app_client.create_project("带阻塞")[1]["id"]
+    _, t = app_client.post(f"/api/projects/{pid}/tasks",
+                           {"title": "等权限的活", "priority": "高", "status": "阻塞",
+                            "blocked_reason": "等隔壁团队开权限"})
+
+    _, body = app_client.get(f"/api/projects/{pid}/next")
+    item = next(x for x in body["next"] if x["id"] == t["id"])
+    assert item["status"] == "阻塞", item
+    assert item["blocked_reason"] == "等隔壁团队开权限", item
+
+    _, ctx = app_client.get(f"/api/context/{pid}")
+    item2 = next(x for x in ctx["start_here"] if x["id"] == t["id"])
+    assert item2["status"] == "阻塞" and item2["blocked_reason"] == "等隔壁团队开权限", item2
+
+    # 普通待办条目带上 status 但不多出 blocked_reason 键（字段语义自己闭合）
+    _, t2 = app_client.post(f"/api/projects/{pid}/tasks", {"title": "普通待办"})
+    _, ctx2 = app_client.get(f"/api/context/{pid}")
+    item3 = next(x for x in ctx2["start_here"] if x["id"] == t2["id"])
+    assert item3["status"] == "待办" and "blocked_reason" not in item3, item3
+
+
+def test_next_blocked_bucket_carries_reason_and_waiting(app_client):
+    """blocked 桶里其实是两种人：被前置挡住的（等谁做）和状态=阻塞的（为什么卡），
+    还可能同时是两种。以前只给前者留了 waiting_for，后者只有名字。
+    （纯状态=阻塞、无未完成前置的任务进的是 next 桶 —— 见上一条用例。）"""
+    pid = app_client.create_project("两种阻塞")[1]["id"]
+    _, a = app_client.post(f"/api/projects/{pid}/tasks", {"title": "前置"})
+    _, b = app_client.post(f"/api/projects/{pid}/tasks", {"title": "等前置", "depends_on": [a["id"]]})
+    _, c = app_client.post(f"/api/projects/{pid}/tasks",
+                           {"title": "又等前置又卡住", "status": "阻塞",
+                            "blocked_reason": "缺 API Key", "depends_on": [a["id"]]})
+    _, body = app_client.get(f"/api/projects/{pid}/next")
+    bl = {x["id"]: x for x in body["blocked"]}
+    assert bl[b["id"]]["waiting_for"] == ["前置"] and bl[b["id"]]["status"] == "待办", bl[b["id"]]
+    assert bl[c["id"]]["waiting_for"] == ["前置"], bl[c["id"]]
+    assert bl[c["id"]]["status"] == "阻塞" and bl[c["id"]]["blocked_reason"] == "缺 API Key", bl[c["id"]]
+
+
 # ---------------- 交接与 AI ----------------
 
 def test_handoff_lists_tasks_in_dependency_order(app_client):

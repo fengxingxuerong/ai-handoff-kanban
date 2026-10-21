@@ -197,6 +197,133 @@ def test_project_context_404(server):
     assert server.get("/api/context/not_exist_pid")[0] == 404
 
 
+def test_context_sections_returns_only_requested_parts(app_client):
+    """`sections` 是白名单：省上下文可以，但 project 与元数据必须在，
+    且省略了什么要写进 `slice.omitted` —— 否则调用方会把"没给"读成"没有"。"""
+    import app.main as kanban
+    _, p = app_client.create_project("切片项目")
+    pid = p["id"]
+    app_client.post(f"/api/projects/{pid}/tasks", {"title": "一条任务"})
+
+    s, ctx = app_client.get(f"/api/context/{pid}?sections=tasks,memories")
+    assert s == 200, ctx
+    assert set(ctx) == {"app", "schema_version", "generated_at", "usage_hint", "project",
+                        "slice", "tasks", "memories", "expired_memory_count"}
+    assert ctx["slice"]["sections"] == ["memories", "tasks"]
+    assert ctx["slice"]["omitted"] == ["code_reality", "start_here", "readiness"]
+    assert ctx["project"]["name"] == "切片项目"
+
+    # 空串 = 一个可选小节都不要（仍保留 project/slice）
+    s, empty = app_client.get(f"/api/context/{pid}?sections=")
+    assert s == 200 and set(empty) == {"app", "schema_version", "generated_at", "usage_hint",
+                                       "project", "slice"}
+    assert empty["slice"]["sections"] == [] and empty["slice"]["omitted"] == list(kanban.CONTEXT_SECTIONS)
+
+    # 不认识的名字必须 400：静默忽略等于给了一份"看起来对"的另一份包
+    s, err = app_client.get(f"/api/context/{pid}?sections=background")
+    assert s == 400 and "background" in str(err)
+
+
+def test_context_sections_skip_git_when_code_reality_is_omitted(app_client, monkeypatch):
+    """裁掉 code_reality 就该真的省掉那次 git 探测（不是只把结果藏起来）。"""
+    import app.main as kanban
+    _, p = app_client.create_project("不探 git", repo_path="D:\\definitely-not-a-repo")
+    calls = []
+    monkeypatch.setattr(kanban, "git_snapshot",
+                        lambda *a, **k: calls.append(1) or {"ok": False, "error": "不应被调用"})
+    s, ctx = app_client.get(f"/api/context/{p['id']}?sections=tasks,start_here")
+    assert s == 200 and "code_reality" not in ctx
+    assert calls == [], "裁掉 code_reality 仍然跑了 git 子进程"
+
+
+def test_context_since_returns_only_changed_tasks_and_memories(app_client):
+    """`since` 只过滤 tasks / memories；start_here、done_count 仍全量 ——
+    增量包如果连"现在能做什么"都裁掉，代理会以为没变化就是没事可做。"""
+    import app.main as kanban
+    _, p = app_client.create_project("增量项目")
+    pid = p["id"]
+    _, old = app_client.post(f"/api/projects/{pid}/tasks", {"title": "旧待办"})
+    _, done = app_client.post(f"/api/projects/{pid}/tasks",
+                              {"title": "旧的已完成", "status": "已完成"})
+    _, new = app_client.post(f"/api/projects/{pid}/tasks", {"title": "新待办"})
+    stamps = {old["id"]: "2026-10-20 08:00", done["id"]: "2026-10-20 08:00",
+              new["id"]: "2026-10-21 09:30"}
+
+    def set_task_times(proj, _data):
+        for t in proj.get("tasks") or []:
+            if t.get("id") in stamps:
+                t["updated_at"] = stamps[t["id"]]
+
+    kanban.mutate_project(pid, set_task_times)
+
+    app_client.post("/api/memories", {"pid": pid, "type": "坑", "text": "旧记忆"})
+    app_client.post("/api/memories", {"pid": pid, "type": "坑", "text": "新记忆"})
+
+    def set_memory_times(items):
+        for m in items:
+            if m.get("pid") == pid:
+                m["time"] = "2026-10-20 08:00" if m["text"] == "旧记忆" else "2026-10-21 09:30"
+        return True, None
+
+    kanban._mutate_memories(set_memory_times)
+
+    s, ctx = app_client.get(f"/api/context/{pid}?since=2026-10-21%2009:00")
+    assert s == 200, ctx
+    todo_titles = [t["title"] for t in ctx["tasks"]["todo"]]
+    assert todo_titles == ["新待办"], f"只应留下 since 之后的任务：{todo_titles}"
+    assert ctx["tasks"]["done_count"] == 1, "done_count 是全量，不随 since 缩水"
+    assert [m["text"] for m in ctx["memories"]] == ["新记忆"]
+    assert {t["title"] for t in ctx["start_here"]} == {"旧待办", "新待办"}, \
+        "start_here 必须保持全量（否则代理以为没活干）"
+    assert ctx["slice"]["delta"] is True
+    assert set(ctx["slice"]) == {"sections", "omitted", "since", "delta", "note",
+                                 "changed_tasks", "unchanged_tasks", "changed_memories",
+                                 "unchanged_memories", "unknown_timestamp_tasks",
+                                 "unknown_timestamp_memories"}
+    assert ctx["slice"]["changed_tasks"] == 1 and ctx["slice"]["unchanged_tasks"] == 2
+    assert ctx["slice"]["changed_memories"] == 1 and ctx["slice"]["unchanged_memories"] == 1
+    assert ctx["slice"]["unknown_timestamp_tasks"] == 0
+    assert "分钟" in ctx["slice"]["note"], "分钟精度会重复不会漏，要在回执里说清"
+
+    # 含边界：since 正好等于新任务的分钟 → 仍然要给（重复可忍，漏不可忍）
+    s, same_minute = app_client.get(f"/api/context/{pid}?since=2026-10-21%2009:30")
+    assert s == 200
+    assert [t["title"] for t in same_minute["tasks"]["todo"]] == ["新待办"]
+
+    # 只有日期：按当天 00:00 算
+    s, by_day = app_client.get(f"/api/context/{pid}?since=2026-10-21")
+    assert s == 200 and [t["title"] for t in by_day["tasks"]["todo"]] == ["新待办"]
+
+    # 未来时间：任务/记忆清空，但 start_here 与 done_count 仍是全量
+    s, future = app_client.get(f"/api/context/{pid}?since=2999-01-01")
+    assert s == 200 and future["tasks"]["todo"] == [] and future["memories"] == []
+    assert future["tasks"]["done_count"] == 1 and len(future["start_here"]) == 2
+
+    # 格式不对要说清，不能当"没给"
+    s, err = app_client.get(f"/api/context/{pid}?since=下周三")
+    assert s == 400 and "YYYY-MM-DD" in str(err)
+
+
+def test_context_since_fails_open_for_entries_without_timestamps(app_client):
+    """手工导入/老数据可能没有 updated_at：增量里必须保留并计数，不能永久消失。"""
+    import app.main as kanban
+    _, p = app_client.create_project("老数据项目")
+    pid = p["id"]
+    _, t = app_client.post(f"/api/projects/{pid}/tasks", {"title": "没有时间戳的老任务"})
+
+    def drop_time(proj, _data):
+        for task in proj.get("tasks") or []:
+            if task.get("id") == t["id"]:
+                task.pop("updated_at", None)
+
+    kanban.mutate_project(pid, drop_time)
+    s, ctx = app_client.get(f"/api/context/{pid}?since=2999-01-01")
+    assert s == 200
+    assert [x["title"] for x in ctx["tasks"]["todo"]] == ["没有时间戳的老任务"]
+    assert ctx["slice"]["unknown_timestamp_tasks"] == 1, "fail-open 的条目要报数"
+
+
+
 # ---------------- 交接内容脱敏 ----------------
 
 def test_export_redact_hides_secrets(server):
@@ -778,17 +905,27 @@ def test_machine_readable_packages_declare_schema_version(app_client):
 def test_context_package_field_set_is_pinned(app_client):
     """接手包是给别的程序读的：字段集合变了必须是有意为之，不能顺手。
     v2（2026-10-06，对标 Backlog.md/OKM 后新增）：任务 slim 带 `acceptance`（验收标准）、
-    顶层带 `expired_memory_count`（过期记忆省略必须留痕）。"""
+    顶层带 `expired_memory_count`（过期记忆省略必须留痕）。
+    v3（2026-10-19）：`start_here` 条目带 `status`，阻塞中的带 `blocked_reason` ——
+    实测"可做"列表不带标记时，代理把阻塞任务当普通待办直接开工。
+    v4（2026-10-21）：顶层带 `slice`（本次给了哪些小节、since 增量计数与说明）——
+    `sections` / `since` 让代理省上下文，`project` 始终返回。"""
     import app.main as kanban
     _, p = app_client.create_project("字段快照")
     _, ctx = app_client.get(f"/api/context/{p['id']}")
     assert set(ctx) == {"app", "schema_version", "generated_at", "usage_hint", "project",
                         "memories", "expired_memory_count", "code_reality", "start_here",
-                        "tasks", "readiness"}
+                        "tasks", "readiness", "slice"}
     assert set(ctx["project"]) == {"id", "name", "status", "progress", "priority", "tags",
                                    "repo_path", "background", "handoff_note", "next_action"}
     assert set(ctx["tasks"]) == {"todo", "in_progress", "review", "blocked", "done_count"}
+    assert set(ctx["slice"]) == {"sections", "omitted", "since", "delta", "note"}
     assert ctx["schema_version"] == kanban.SCHEMA_VERSION
+
+    app_client.post(f"/api/projects/{p['id']}/tasks", {"title": "快照任务"})
+    _, ctx = app_client.get(f"/api/context/{p['id']}")
+    assert set(ctx["start_here"][0]) == {"id", "title", "priority", "refs", "acceptance",
+                                         "status"}, "start_here 条目形状变了？改 v3 快照要同步注释"
 
 
 def test_handoff_sections_can_be_omitted_over_http(app_client):

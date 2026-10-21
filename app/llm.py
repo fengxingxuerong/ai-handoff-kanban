@@ -338,6 +338,17 @@ def _model_temp(model: str, temperature: float) -> float:
     return temperature
 
 
+def _empty_reply(text) -> bool:
+    """空回复（或纯空白）不算成功。
+
+    推理型模型（deepseek-v4 等）会把 `max_tokens` 全烧在 `reasoning_content` 上、
+    `content` 返回空串，而 HTTP 仍是 200 —— 2026-10-19 实测：网关把它记成 ok=true
+    并直接返回，上层拿到空文本（监管分析 500「LLM 返回为空」、AGENTS.md 静默退回
+    本地版），同时其它可用端点**根本没机会被尝试**。空 = 失败，继续走降级链。
+    """
+    return not (text or "").strip()
+
+
 def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = DEFAULT_TIMEOUT,
          feature: str = "") -> tuple[str, str]:
     """统一 LLM 调用入口：返回 (内容, 使用的端点名)。失败时抛出 LLMError。
@@ -365,6 +376,11 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
             t0 = time.time()
             try:
                 content, usage = _post(ep["base_url"], key, model, messages, temp, timeout)
+                if _empty_reply(content):
+                    _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t0, False)
+                    errors.append(f"{ep['name']}/{model}: 返回为空（max_tokens 可能被推理烧光）")
+                    time.sleep(0.4)
+                    continue
                 _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t0, True)
                 return content, ep["name"]
             except urllib.error.HTTPError as e:
@@ -382,6 +398,11 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
                     try:
                         t1 = time.time()
                         content, usage = _post(ep["base_url"], key, model, messages, 1, timeout)
+                        if _empty_reply(content):
+                            _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t1, False)
+                            errors.append(f"{ep['name']}/{model}: temp=1 重试返回为空")
+                            time.sleep(0.4)
+                            continue
                         _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t1, True)
                         return content, ep["name"]
                     except Exception as e2:

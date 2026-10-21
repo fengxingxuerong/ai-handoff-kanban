@@ -26,6 +26,21 @@ def cfg_with(*endpoints, active: str | None = None) -> dict:
     return {"ai": {"endpoints": list(endpoints), "active_model": active or ""}}
 
 
+@pytest.fixture
+def no_sleep(monkeypatch):
+    """空回复要退避 0.4s 再试下一个端点；用例里把 sleep 换掉别拖慢套件"""
+    import time as real_time
+
+    class _NoSleep:
+        def __getattr__(self, name):
+            return getattr(real_time, name)
+
+        def sleep(self, _sec: float) -> None:
+            pass
+
+    monkeypatch.setattr(llm, "time", _NoSleep())
+
+
 def test_single_endpoint_success(stub):
     stub.push_text("你好")
     text, name = llm.chat(cfg_with(stub.endpoint("甲")), MSGS)
@@ -49,6 +64,38 @@ def test_endpoint_failover_on_5xx(stub):
     cfg = cfg_with(stub.endpoint("甲"), stub.endpoint("乙"))
     text, name = llm.chat(cfg, MSGS)
     assert text == "备用端点成功" and name == "乙"
+
+
+def test_empty_content_counts_as_failure_and_falls_back(stub, no_sleep):
+    """推理型模型把 max_tokens 烧在 reasoning_content 上 → HTTP 200 但 content 为空。
+
+    2026-10-19 实盘：网关把空回复当成功直接返回，降级链根本不触发 ——
+    监管分析 500「LLM 返回为空」、AGENTS.md 静默退回本地版，而当时明明还有可用端点。
+    空 = 失败，必须继续往下试。
+    """
+    stub.push_text("")            # 甲：200 但正文为空
+    stub.push_text("备用端点成功")  # 乙
+    text, name = llm.chat(cfg_with(stub.endpoint("甲"), stub.endpoint("乙")), MSGS)
+    assert text == "备用端点成功" and name == "乙"
+
+
+def test_blank_only_content_is_also_a_failure(stub, no_sleep):
+    """纯空白也是空：`.strip()` 之后判断，别让一个换行当正文混过去"""
+    stub.push_text("   \n  ")
+    stub.push_text("乙来兜底")
+    text, name = llm.chat(cfg_with(stub.endpoint("甲"), stub.endpoint("乙")), MSGS)
+    assert text == "乙来兜底" and name == "乙"
+
+
+def test_all_empty_replies_raise_with_reason(stub, no_sleep):
+    """全部端点都空 → 聚合成一个错误，理由里说清是"返回为空"而不是笼统的失败"""
+    stub.push_text("")
+    stub.push_text("")
+    with pytest.raises(llm.LLMError) as e:
+        llm.chat(cfg_with(stub.endpoint("甲"), stub.endpoint("乙")), MSGS)
+    msg = str(e.value)
+    assert "返回为空" in msg and "max_tokens" in msg, msg
+    assert "甲" in msg and "乙" in msg
 
 
 def test_all_endpoints_fail_raises_with_aggregated_errors(stub):

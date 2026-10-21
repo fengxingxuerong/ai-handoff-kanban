@@ -2,7 +2,7 @@
 
 多项目任务中枢桌面应用，专为「切换 AI 智能体做项目」设计：每个项目带交接说明与下一步行动，一键复制交接摘要，新智能体接手零成本。内置 **AI 自我监管**（多 LLM 端点自动分析健康度、生成建议、维护任务），并有 **可视化仪表盘** 与 **一键完整交接包** 提升交付效率。
 
-> 当前版本 **v1.8.0**。`app/version.py` 是唯一事实来源 —— 界面版本条、`/api/health`、
+> 当前版本 **v1.9.0**。`app/version.py` 是唯一事实来源 —— 界面版本条、`/api/health`、
 > MCP `serverInfo`、exe 的 PE 版本资源都读它，`tests/test_docs.py` 会核对本文档与 AGENTS.md 写的是同一个数。
 
 ## 界面
@@ -48,7 +48,7 @@ Windows 桌面应用（PyWebView 原生窗口，单文件 exe），内置深浅�
 - **LLM 用量追踪**：每次调用的模型/Token/耗时/成败本地记账，设置页看按功能与按模型分布
 - **逾期提醒**：启动与每次刷新检查临期/逾期任务，顶部横幅提示（每日一次不重复打扰）
 - **MCP 只读模式**：分享/演示时一键禁止外部智能体写看板
-- **机器可读接手包**：`GET /api/context/{pid}` 一次给出背景/交接说明/可执行任务/代码现状/就绪度；详情页「🧩 上下文 JSON」一键复制，MCP 工具 `kanban_context` 同步提供——智能体零粘贴接手
+- **机器可读接手包**：`GET /api/context/{pid}` 一次给出背景/交接说明/可执行任务/代码现状/就绪度；支持 `?sections=` 只取需要的小节、`?since=` 只列该时刻之后变化的条目（增量里 `start_here` 仍全量）；详情页「🧩 上下文 JSON」一键复制，MCP 工具 `kanban_context` 同步提供——智能体零粘贴接手
 - **交接内容脱敏**：交接包 / 全项目包 / AGENTS.md 支持 `?redact=1`，自动掩码 API Key / 令牌 / 密码 / 邮箱（对标 handoff redact）
 - **健康分趋势预警**：每份监管报告对比上一期，▼恶化 / ▲好转 / ◆持平 一眼看出哪个项目在滑坡
 - **多智能体入口文件**：一次生成 AGENTS.md / CLAUDE.md / Cursor / Copilot / Gemini / Cline / Aider / Windsurf / .claude/skills（Agent Skills）九个入口
@@ -151,7 +151,7 @@ Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读�
 | `kanban_agents_md` | 生成 AGENTS.md 正文 |
 | `kanban_log_progress` | 给任务追加一条过程记录（做了什么 / 改了什么决策 / 踩了什么坑） |
 | `kanban_memory_add` | 往项目记忆层记一条决策 / 坑 / 约定，交接包与 AI 监管会自动召回 |
-| `kanban_context` | **机器可读接手包**：背景/交接说明/代码现实/现在就能动手的任务/项目记忆/就绪度缺口，换取会话时先调这个 |
+| `kanban_context` | **机器可读接手包**：背景/交接说明/代码现实/现在就能动手的任务/项目记忆/就绪度缺口，换取会话时先调这个；可用 `sections` 裁剪、`since` 只取增量 |
 | `kanban_list_memories` | 查记忆层（按项目/类型/关键词过滤，每条带尺寸，默认脱敏） |
 | `kanban_delete_memory` | 删掉一条记错/过时的记忆 |
 | `kanban_export_all` | 导出全项目交接包（跨机迁移或整板存档） |
@@ -216,10 +216,10 @@ build.bat
 
 ```
 项目任务看板/
-├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 23 个模块，见 AGENTS.md）
+├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 24 个模块，见 AGENTS.md）
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
 ├── web/index.html          # 前端页面骨架（零内联脚本；深色主题，含 AI 界面）
-├── web/js-*.js             # 前端逻辑五个文件：core(ACTIONS 分发)/edit/render/data/boot（无构建、无 CDN）
+├── web/js-*.js             # 前端逻辑十个文件：core/overview/detail/render/reality/handoff/edit/ai/data/boot（无构建、无 CDN）
 ├── web/style.css           # 前端样式
 ├── tests/                  # pytest 套件：接口/并发/安全/数据/AI/前端契约/真实浏览器点击（含假 LLM 端点与系统浏览器，均不消耗配额）
 ├── scripts/desktop.py      # PyWebview 桌面壳（端口检测 + 后台自启服务）
@@ -263,7 +263,7 @@ rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 32 条用�
 rem （CI 里也有这一步：.github/workflows/ci.yml 跑的 ci_local 全门禁，改坏了会红）
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 
-rem 变异探针：往源码注入 68 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
+rem 变异探针：往源码注入 75 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
 rem （覆盖率只证明"这行跑过"，不证明"这行错了会被发现"——这一步量的是后者）
 .venv\Scripts\python.exe scripts/mutation_probe.py
 .venv\Scripts\python.exe scripts/mutation_probe.py --only due_soon_window   rem 只跑一条

@@ -15,6 +15,8 @@ from datetime import date, timedelta
 import pytest
 
 from app.agentfiles import AGENT_ENTRY_TARGETS, build_agent_entries
+from app.context_slice import (CONTEXT_SECTIONS, changed_since, has_timestamp,
+                               parse_context_sections, parse_since)
 from app.due import _clean_due_date, _due_state
 from app.handoff_meta import HANDOFF_SECTIONS, context_budget, parse_handoff_sections
 from app.idem import _clean_ref
@@ -86,6 +88,62 @@ def test_dedupe_ids_is_deterministic():
     items = [{"id": "t1"}, {"id": "t1"}, {"id": "t1"}]
     _dedupe_ids(items)
     assert [i["id"] for i in items] == ["t1", "t1~2", "t1~3"], "新 id 必须可预测（不是随机）"
+
+
+# ---------------- 接手包切片与增量 ----------------
+
+def test_context_sections_accepts_known_names_and_rejects_unknown():
+    assert parse_context_sections(None) is None, "没给参数 = 不裁剪"
+    assert parse_context_sections("") == set(), "空串 = 一个可选小节都不要"
+    assert parse_context_sections("memories, tasks") == {"memories", "tasks"}
+    assert parse_context_sections(["tasks", "tasks"]) == {"tasks"}
+    assert parse_context_sections("memories，readiness") == {"memories", "readiness"}, "中文逗号也要认"
+    with pytest.raises(Exception) as exc:
+        parse_context_sections("background")
+    assert "background" in str(exc.value) and "project" in str(exc.value), \
+        "不认识的 name 要 400 并列出可选值（静默忽略会让调用方以为拿到了）"
+    with pytest.raises(Exception) as exc:
+        parse_context_sections(123)
+    assert "字符串" in str(exc.value)
+
+
+@pytest.mark.parametrize("raw,want", [
+    ("", ""),
+    (None, ""),
+    ("2026-10-21", "2026-10-21 00:00"),
+    ("2026-10-21 09:30", "2026-10-21 09:30"),
+    ("2026-10-21T09:30", "2026-10-21 09:30"),
+    ("2026-10-21T09:30:45Z", "2026-10-21 09:30"),
+])
+def test_parse_since_normalizes_common_shapes(raw, want):
+    assert parse_since(raw) == want
+
+
+def test_parse_since_rejects_free_text():
+    with pytest.raises(Exception) as exc:
+        parse_since("下周三")
+    assert "YYYY-MM-DD" in str(exc.value), "日期不合法要说清格式，别静默当没给"
+
+
+def test_changed_since_is_inclusive_and_fails_open():
+    assert changed_since("2026-10-21 09:30", "2026-10-21 09:30") is True, \
+        "含边界：同一分钟宁可重复，不能漏"
+    assert changed_since("2026-10-21 09:29", "2026-10-21 09:30") is False
+    assert changed_since("2026-10-21", "2026-10-21 09:30") is True, "只有日期时整天都算"
+    assert changed_since("2026-10-20", "2026-10-21 09:30") is False
+    assert changed_since("2026-10-21T09:30:00Z", "2026-10-21 09:30") is True
+    assert changed_since("", "2026-10-21 09:30") is True, "缺时间戳 fail-open，不能永久消失"
+    assert changed_since("看不懂", "2026-10-21 09:30") is True
+    assert changed_since("2026/10/21", "2026-10-21 09:30") is True, \
+        "长度够但认不出的时间戳也要 fail-open，不能按字符串大小猜"
+    assert changed_since("2026-10-20 09:30", "") is True, "since 为空 = 全量"
+    assert has_timestamp("2026-10-21") is True
+    assert has_timestamp("2026-10-21T09:30:00Z") is True
+    assert has_timestamp("2026/10/21") is False, "认不出的不算有时间戳（要报进 unknown 计数）"
+
+
+def test_context_sections_constant_is_the_documented_whitelist():
+    assert CONTEXT_SECTIONS == ("memories", "code_reality", "start_here", "tasks", "readiness")
 
 
 # ---------------- 截止日期 ----------------

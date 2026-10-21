@@ -1,0 +1,18 @@
+已收录 349 个仓库，本轮排除
+q='AI agent task board in:name,description,readme stars:>20' -> 30 hits
+q='agent handoff in:name,description,readme stars:>10' -> 30 hits
+q='project handoff AI in:name,description,readme' -> 30 hits
+q='kanban AI agent in:name,description,readme stars:>10' -> 30 hits
+q='MCP kanban in:name,description,readme' -> 30 hits
+q='task management MCP server in:name,description stars:>5' -> 30 hits
+q='agent memory project context in:name,description stars:>20' -> 20 hits
+q='claude code task manager in:name,description,readme stars:>10' -> 30 hits
+q='codex task tracker in:name,description,readme stars:>5' -> 30 hits
+q='multi-project AI workspace in:name,description,readme stars:>5' -> 30 hits
+q='AI 交接 in:name,description,readme' -> 30 hits
+q='任务看板 AI in:name,description,readme' -> 30 hits
+q='智能体 任务管理 in:name,description,readme' -> 30 hits
+q='topic:ai-agents topic:task-management' -> 30 hits
+q='topic:kanban topic:mcp' -> 30 hits
+q='agent task board created:>2026-10-18' -> 12 hits
+q='handoff context created:>2026-10-18' -> 18 hits
