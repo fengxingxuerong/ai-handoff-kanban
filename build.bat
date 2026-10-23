@@ -43,7 +43,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [6/6] 打包中...
+echo [6/6] 打包中（两个产物：GUI 主程序 + MCP 控制台服务）...
 rem 注意：--specpath 会把 spec 放进 build/，此时相对的 --add-data / --paths 会按 spec 所在目录解析，
 rem 导致找不到 web 目录（报 "Unable to find ...\build\web"）。所以这里一律用 %~dp0 绝对路径。
 ".venv\Scripts\python.exe" -m PyInstaller -F -w -n "AI交接看板" ^
@@ -64,9 +64,29 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem 第二个产物：MCP 服务。**故意不加 -w** —— MCP 走 stdio 传输，而 -w 的 GUI 子系统程序
+rem 拿不到标准流（本项目最坑的一条历史教训：-w 打包后 sys.stdout / sys.stderr 是 None）。
+rem 只装 exe 的用户没有 .venv，"让代理直接读写看板"这个最大卖点就对他不可用，
+rem 所以这一份必须单独打出来，配置里直接指向它、不需要任何 Python 环境。
+".venv\Scripts\python.exe" -m PyInstaller -F -n "AI交接看板-MCP" ^
+  "%~dp0scripts\mcp_server.py" ^
+  --hidden-import app.main ^
+  --paths "%~dp0" ^
+  --version-file "%~dp0build\version_info.txt" ^
+  --distpath "%~dp0dist" ^
+  --workpath "%~dp0build" ^
+  --specpath "%~dp0build" ^
+  --noconfirm
+if errorlevel 1 (
+  echo MCP 服务打包失败，请把上方错误信息发给我排查
+  pause
+  exit /b 1
+)
+
 echo.
 echo ============================================
-echo  打包完成！程序位于：dist\AI交接看板.exe
-echo  双击即可使用，数据保存在 %USERPROFILE%\.ai-kanban
+echo  打包完成！产物两个：
+echo   dist\AI交接看板.exe      双击即用（数据在 %USERPROFILE%\.ai-kanban）
+echo   dist\AI交接看板-MCP.exe  给 AI 代理读写看板用（stdio，无需 Python）
 echo ============================================
 pause

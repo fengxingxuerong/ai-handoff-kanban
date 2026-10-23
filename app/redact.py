@@ -52,3 +52,24 @@ def redact_text(text: str) -> str:
     for pat, rep in _REDACT_PATTERNS:
         text = re.sub(pat, rep, text)
     return text
+
+
+def count_sensitive(text: str) -> int:
+    """这段文本里有**几处**会被脱敏规则盖掉的东西（同一口径，不是另写一套规则）。
+
+    为什么需要它：`/api/export/agent-files` 会把项目内容写成 `<仓库>\\AGENTS.md`，
+    而仓库通常是要 `git push` 的 —— 那是整个应用里最可能把看板内容（含用户从会话里
+    抄进来的凭据）带出本机的一条路（约定 9 只说"交接物默认不出本机"，这条是它的盲区）。
+    光有"脱不脱敏"的开关不够：用户得先**知道**这份文档里有东西，才谈得上去按开关。
+
+    口径纪律（与约定 29 的"按实际给出去的那份文本算"同源）：这里逐条 `subn` 的**顺序与
+    替换结果和 `redact_text` 完全一致**，只是顺手把命中数加起来 —— 不许为了报个数
+    另跑一套正则，那迟早和真正的脱敏漂成两个答案。
+    """
+    if not text:
+        return 0
+    n = 0
+    for pat, rep in _REDACT_PATTERNS:
+        text, hits = re.subn(pat, rep, text)
+        n += hits
+    return n

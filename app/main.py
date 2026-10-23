@@ -66,6 +66,7 @@ from . import assign as assign_module
 from .redact import (  # noqa: F401  —— 这些名字仍可从 app.main 取，既有 import 与 monkeypatch 路径不变
     MASK_MARK,
     _REDACT_PATTERNS,
+    count_sensitive,
     redact_text,
 )
 # 创建幂等键：2026-09-26 从本文件整体搬出（实现逐字未改）
@@ -896,12 +897,16 @@ def project_context(pid: str, redact: int = 0, sections: str | None = None,
     而智能体的上下文通常在别的机器上。自由文本一律盖：
     背景 / 交接说明 / 下一步 / 任务标题 / 任务描述 / 过程记录 / 记忆；
     id / 状态 / 分支名 / refs 原样保留（模型要靠它们对齐项目与任务）。
-    （`_projects_brief` 是这条线的一个例外：那里的标题留着，因为 ai_command 的提示词
-    明写"任务用现有任务标题匹配"，盖了标题就没法把建议对回任务。）
 
     标题为什么也盖：掩码只替换凭据那一段（"轮换 sk-abcd… 这把" → "轮换 sk-******** 这把"），
     标题照样认得出来，对齐不受影响；反过来，"把密钥写在任务标题里"恰恰是最常见的写法，
     放行就等于让唯一一条 redact 开关在最常见的形状上失效。
+
+    **`_projects_brief`（送进模型的看板简报）是同一口径，标题也盖** —— 它那边的任务每条
+    都带 `id`，`ai_command` 的提示词明写"按 `project_id` + `task_id` 回传、**不要拿标题当
+    匹配键**"，所以盖掉标题不影响对齐（见 `app/aiprompt.py:projects_brief` 与约定 9）。
+    历史：简报一度是唯一留原文的一条，理由是"提示词按标题匹配"；后来提示词与简报两处一起
+    改成按 id 对齐，这句注释却留在原地 —— 2026-10-23 修正（注释说过期的话，比没注释更坏）。
 
     `?sections=` 只保留指定小节（`project` 与元数据始终返回）；`?since=` 只列该时刻
     之后变化的 tasks / memories（`start_here` / readiness / code_reality 仍全量，
@@ -2156,12 +2161,26 @@ def _generate_agents_md(p: dict) -> tuple[str, str, str]:
         p, project_memories_fn=_project_memories, local_builder_fn=_build_agents_md_local)
 
 
+def _agent_files_credential_note(hits: int, redacted: bool) -> str:
+    """入口文件写入的凭据提示。**没事就不说话**（空串）—— 只在真有东西时说。"""
+    if not hits:
+        return ""
+    if redacted:
+        return (f"已按脱敏写入：盖掉 {hits} 处像凭据的内容，仓库里看到的是掩码。"
+                "（这会让接手方看不到真值，如果是你有意要写进去的原文，"
+                "取消勾选「写前脱敏」重写一次）")
+    return (f"⚠ 这份文档里有 {hits} 处像凭据的内容（如 API Key / 令牌 / 密码），"
+            "按当前设置会**原文**写进仓库 —— 而仓库通常会被 git push，"
+            "一旦提交就进了版本史。勾选「写前脱敏」可只写掩码。")
+
+
 class AgentFilesBody(BaseModel):
     dir: str = ""                       # 目标仓库根目录；留空表示只预览不写盘
     targets: list[str] | None = None
     content: str | None = None          # 前端已预览过的内容，传回来可省一次模型调用
     overwrite: bool = False             # 默认不覆盖仓库里已有的入口文件（可能是用户手写的）
     check_only: bool = False            # 只体检：逐目标比对本应写的内容与磁盘现状，不写盘
+    redact: bool = False                # 写盘前先脱敏（默认关：这是往用户自己的仓库写自己的文档）
 
 
 @app.post("/api/export/agent-files/{pid}")
@@ -2177,10 +2196,24 @@ def export_agent_files(pid: str, body: AgentFilesBody):
         content, source, endpoint = _generate_agents_md(p)
 
     entries = build_agent_entries(p, content, body.targets)
+    # 这份文档的去向是**用户的仓库**，而仓库通常会被 `git push` —— 它是整个应用里
+    # 唯一一条能把看板内容（含用户从会话里随手抄进来的凭据）带出本机的路。
+    # 约定 9 管的是"交接物默认不出本机"，agent-files 是它的盲区（写的是用户自己的仓库，
+    # 所以不该强行脱敏），但这不等于"可以不说"：
+    #   ① 无论脱不脱敏，只要内容里有凭据形态的东西，就在回执里报数（预览时就能看见）；
+    #   ② `redact=true` 时**在算出 entries 之后、写盘与返回之前**统一盖 ——
+    #      脱敏必须发生在"实际给出去的那份文本"上（约定 29 同源纪律），
+    #      否则预览显示原文、写盘写掩码，两边立刻分叉。
+    sensitive_hits = count_sensitive(content)
+    if body.redact:
+        entries = {rel: redact_text(text) for rel, text in entries.items()}
     result = {
         "source": source, "endpoint": endpoint,
         "files": [{"path": rel, "content": text} for rel, text in entries.items()],
         "written": [], "skipped_existing": [], "failed": [], "preview": True,
+        "redacted": bool(body.redact),
+        "credential_warning": {"hits": sensitive_hits, "redacted": bool(body.redact),
+                               "note": _agent_files_credential_note(sensitive_hits, bool(body.redact))},
     }
 
     target_dir = (body.dir or "").strip()
@@ -2841,12 +2874,24 @@ def restore_data(body: RestoreBody):
     revived_refs = len(restored.get(IDEM_KEY) or {})
     restored.pop(IDEM_KEY, None)
 
+    # 恢复前安全副本的结果（三态见下方 worker 里的注释）。worker 只改这个 dict 的键，
+    # 不重新绑定名字，所以不需要 nonlocal。
+    safety: dict = {"state": "skipped", "path": str(before_restore_file())}
+
     def worker(data: dict):
-        try:
-            if data_file().exists():
+        # 恢复前的安全副本**失败必须说话**，不能吞掉之后照旧回 ok:true。
+        # 界面在恢复确认框里明说"当前数据会先另存为 projects.json.before-restore.bak"、
+        # /api/recoverable 又把它当成一个正式来源列出来 —— 拷贝失败却报成功，
+        # 等于向用户承诺一份不存在的退路（而人正是靠这句承诺才敢点"恢复"）。
+        # 三态：skipped = 本来就没有数据文件（第一次用，没什么可保）；
+        #       ok = 真存下了；failed = 有数据却没存成 —— 这一档要在回执里说破。
+        if data_file().exists():
+            try:
                 shutil.copy2(data_file(), before_restore_file())
-        except Exception:
-            pass
+                safety["state"] = "ok"
+            except Exception as exc:
+                safety["state"] = "failed"
+                safety["error"] = f"{type(exc).__name__}: {exc}"
         # 自定义视图与记忆层同语义：来源里没有 `views` 键 = 保持现状。
         # 老备份是"视图功能上线前"拍的，不能因为回滚旧数据把攒下来的界面配置一起清掉。
         kept_views = data.get("views") if "views" not in restored else None
@@ -2901,7 +2946,14 @@ def restore_data(body: RestoreBody):
 
     out = {"ok": True, "source": body.source,
            "project_count": len(restored["projects"]),
-           "task_count": sum(len(p.get("tasks") or []) for p in restored["projects"])}
+           "task_count": sum(len(p.get("tasks") or []) for p in restored["projects"]),
+           "pre_restore_backup": safety}
+    if safety["state"] == "failed":
+        # 说清"这次没有退路"，并且给一条可行动的路 —— 只说"失败了"等于把用户停在半空。
+        out["pre_restore_backup_note"] = (
+            "⚠ 当前数据没能另存成恢复前副本（" + safety.get("error", "未知原因") + "），"
+            "这次恢复**没有**退路：刚才被覆盖的那份数据已经取不回来了。"
+            "如果这是一次误操作，请立刻用数据面板停手、先手动备份一份再继续。")
     if dropped:
         out["dropped_invalid"] = dropped
         out["dropped_note"] = (f"{len(dropped)} 条项目缺 id 或名称，恢复回来会让整个看板读不回来，"

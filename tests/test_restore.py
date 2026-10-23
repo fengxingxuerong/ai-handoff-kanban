@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -106,6 +107,54 @@ def test_restore_makes_a_safety_copy_of_current_data(app_client):
     assert safety.exists(), "没有生成恢复前的安全副本"
     saved = json.loads(safety.read_text(encoding="utf-8"))
     assert any(p["name"] == "恢复后会消失的项目" for p in saved["projects"])
+
+
+def test_restore_reports_the_safety_copy_it_made(app_client):
+    """成功路径也要把"退路在哪"回给调用方 —— 只在一个隐式文件名里存着，界面没法指路"""
+    api = app_client
+    seed_projects(api, "当前数据")
+    assert api.post("/api/backup")[0] == 200
+    folder = api.get("/api/backups")[1]["backups"][0]["name"]
+
+    status, body = api.post("/api/restore", {"source": folder})
+    assert status == 200
+    assert body["pre_restore_backup"]["state"] == "ok"
+    assert Path(body["pre_restore_backup"]["path"]).exists()
+    assert "pre_restore_backup_note" not in body, "存下来了就不该报警"
+
+
+def test_restore_says_so_when_the_safety_copy_failed(app_client, monkeypatch):
+    """安全副本失败必须说破：它是**唯一**那处"答应过却没做到"的地方。
+
+    2026-10-23 实测：这一行以前是 `except Exception: pass`，拷贝失败照样回 `ok: true`——
+    而界面在确认框里刚明说过"当前数据会先另存为 before-restore.bak"，还把它列成一个
+    可选回来的来源。用户以为手里有退路，其实没有，全程没有任何提示。
+    恢复本身要照常完成（拦住用户只会更糟），但回执必须说清"这次没有退路"。
+    """
+    from app import main as main_mod
+
+    api = app_client
+    seed_projects(api, "当前数据")
+    assert api.post("/api/backup")[0] == 200
+    folder = api.get("/api/backups")[1]["backups"][0]["name"]
+    api.create_project("恢复后会消失的项目")
+
+    real_copy2 = main_mod.shutil.copy2
+    safety_path = main_mod.before_restore_file()
+
+    def fake_copy2(src, dst, *a, **kw):
+        # 只坏"存安全副本"这一路：其余拷贝（last-good 等）照常，否则用例验的不是目标行为
+        if Path(dst) == safety_path:
+            raise PermissionError("模拟：数据目录不可写")
+        return real_copy2(src, dst, *a, **kw)
+
+    monkeypatch.setattr(main_mod.shutil, "copy2", fake_copy2)
+    status, body = api.post("/api/restore", {"source": folder})
+
+    assert status == 200, "恢复本身应当照常完成 —— 备份失败不是拦住用户的理由"
+    assert body["pre_restore_backup"]["state"] == "failed"
+    assert "退路" in body["pre_restore_backup_note"], "要直说这次没有退路，而不是一句「失败了」"
+    assert not safety_path.exists(), "失败时不该留下半份副本冒充退路"
 
 
 def test_unknown_source_is_rejected(app_client):

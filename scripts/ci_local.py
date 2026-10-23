@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """一条命令跑完全部门禁 —— CI 的本地等价物。
 
-为什么需要它：这个仓库**没有远端，所以 CI 从未执行过一次**。所有"全绿"都依赖某个人
-记得依次敲六条命令 —— 而"依赖人记得"正是门禁最弱的形态（本项目已经为此加过
-`release_regression` / `delivery_drill` 这类脚本）。这个入口做三件事：
+为什么需要它：**发版判据只能有一条命令**。所有"全绿"如果依赖某个人记得依次敲六条命令，
+那就是门禁最弱的形态（本项目已经为此加过 `release_regression` / `delivery_drill` 这类脚本）。
+`--quick` 会跳过四道脚本门禁，所以它**只算"快检"**，结论文案与退出码都不许冒充发版判据。
+这个入口做三件事：
 
 1. **自己起一个隔离实例**（临时数据目录 + 空闲端口），`live_check` 与 `live_ui_check`
    才有东西可打，且**绝不可能写到用户真实的 ~/.ai-kanban**；
@@ -20,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -45,6 +47,26 @@ for a in sys.argv[1:]:
         MODE = "quick"
     elif a == "--with-exe":
         MODE = "exe"
+
+
+def coverage_floor() -> str:
+    """覆盖率门槛的唯一事实来源：`pytest.ini` 里的 `fail_under`。
+
+    **为什么必须显式取出来传给 pytest-cov**：`[coverage:report] fail_under` 单独放着
+    **不拦任何东西** —— 2026-10-23 实测：只跑 `tests/test_version.py`、TOTAL 16%，pytest
+    仍然 exit 0、连一句 fail 都不说；加上 `--cov-fail-under=90` 才 exit 1
+    （`Coverage failure: total of 16 is less than fail-under=90`）。
+    也就是说门槛此前只是一行装饰品：删掉几百条用例也不会有人红，而门禁的这一步
+    标签上却写着"含覆盖率门槛" —— **标签在撒谎**，这比没有门槛更糟。
+
+    `pytest.ini` 里那段早就写着"不要指望这里的 `branch = true` 生效（pytest-cov 自己构造
+    开关）"，`fail_under` 是同一个坑，只是当时没顺手验它。数字只写在 pytest.ini 一处，
+    这里读出来用；读不到就**停**，不拿一个兜底数字继续跑（那等于又埋一个会漂的门槛）。
+    """
+    m = re.search(r"^fail_under\s*=\s*(\d+)", (ROOT / "pytest.ini").read_text(encoding="utf-8"), re.M)
+    if not m:
+        raise SystemExit("pytest.ini 里找不到 fail_under —— 覆盖率门槛没了单一事实来源，停")
+    return m.group(1)
 
 
 def free_port() -> int:
@@ -138,6 +160,9 @@ def main() -> int:
 
     server = None
     results: list[tuple[str, bool, float, str]] = []
+    # `--quick` 跳过的那几步要记名字：否则它在结尾照样印"可以发版"，
+    # 而"跳过四道门禁"与"四道门禁都过了"在屏幕上长得一模一样。
+    skipped: list[str] = []
 
     def step(label, argv, timeout=900, for_server=False, live=False):
         e = live_env if live else (srv_env if for_server else env)
@@ -149,8 +174,12 @@ def main() -> int:
         # --basetemp 不是多余的：pytest 收尾会去删系统 temp 里历次会话的目录，
         # 本机（杀软/受管终端）那一步会抛 PermissionError 把整条 CI 掐在收尾阶段。
         # 指到自己的临时目录里，跑完整包连带一起删，不留跨会话残留。
+        #
+        # `--cov-fail-under` 必须**显式传**（见 coverage_floor 的说明）：pytest.ini 里的
+        # `fail_under` 自己拦不住退出码，不传它，这一步的"含覆盖率门槛"就是一句空话。
         step("pytest 全量（含覆盖率门槛）",
-             [PY, "-m", "pytest", "-q", "--basetemp", os.path.join(tmp, "basetemp")], 1800)
+             [PY, "-m", "pytest", "-q", "--cov-fail-under", coverage_floor(),
+              "--basetemp", os.path.join(tmp, "basetemp")], 1800)
         if MODE != "quick":
             # 覆盖率只证明"这行被执行过"，不证明"这行错了会被发现"。
             # 变异探针是唯一能量化后者的门禁：**改了语义还全绿 = 盲区**，直接判失败。
@@ -161,6 +190,9 @@ def main() -> int:
             step("发版回归 release_regression",
                  [PY, "scripts/release_regression.py", "--no-ai"], 900, True)
             step("交付演练 delivery_drill", [PY, "scripts/delivery_drill.py"], 900, True)
+        else:
+            skipped += ["变异探针 mutation_probe", "场景测试 scenario_test",
+                        "发版回归 release_regression", "交付演练 delivery_drill"]
 
         # 起一个实例给 live_* 两条门禁打（它们的设计就是"对着在跑的实例只读体检"）。
         # 用的是**单独一块已播种的数据目录**：空实例会让 live_check 的字段断言变成
@@ -211,6 +243,17 @@ def main() -> int:
                                       "--workpath", str(ROOT / "build"),
                                       "--specpath", str(ROOT / "build"), "--noconfirm"], 1500, True)
             step("冻结版冒烟 frozen_smoke", [PY, "scripts/frozen_smoke.py"], 900, True)
+            # 第二个产物：MCP 服务，**故意不加 -w** —— 它走 stdio，而 GUI 子系统程序拿不到标准流。
+            # 只装 exe 的用户没有 .venv，"让代理直接读写看板"这个卖点此前对他不可用（2026-10-23 评测）。
+            step("打包 PyInstaller（MCP 控制台产物）",
+                 [PY, "-m", "PyInstaller", "-F", "-n", "AI交接看板-MCP",
+                  "scripts/mcp_server.py", "--hidden-import", "app.main",
+                  "--paths", str(ROOT),
+                  "--version-file", str(ROOT / "build" / "version_info.txt"),
+                  "--distpath", str(ROOT / "dist"),
+                  "--workpath", str(ROOT / "build"),
+                  "--specpath", str(ROOT / "build"), "--noconfirm"], 1500, True)
+            step("MCP 冻结版自查", [PY, "scripts/mcp_frozen_smoke.py"], 600, True)
     finally:
         if server is not None and server.poll() is None:
             _kill_tree(server.pid)
@@ -223,7 +266,17 @@ def main() -> int:
     print(f"门禁：{len(results)} 步    通过 {len(results) - len(bad)}    失败 {len(bad)}")
     for label, _, _, note in bad:
         print(f"  ✗ {label} —— {note}")
-    print("结论：" + ("全部通过，可以发版 ✓" if not bad else "有步骤失败，别发版"))
+    if bad:
+        print("结论：有步骤失败，别发版")
+    elif skipped:
+        # 跳过的东西必须在结论里说破：`--quick` 与全量在屏幕上长得一样，
+        # 而它少跑的恰好是"改了语义会不会红"那一层。
+        print(f"结论：已跑的 {len(results)} 步全过，但这是**快检**，跳过了 {len(skipped)} 道门禁：")
+        for label in skipped:
+            print(f"  ▸ {label}")
+        print("      → 不能当发版判据；发版请跑 `python scripts/ci_local.py`（带 --with-exe 更全）")
+    else:
+        print("结论：全部通过，可以发版 ✓")
     return 1 if bad else 0
 
 

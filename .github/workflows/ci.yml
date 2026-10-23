@@ -44,10 +44,12 @@ jobs:
       - name: 全部门禁 + 重新打包 + 冻结版冒烟
         run: python scripts/ci_local.py --with-exe
 
-      - name: 上传 exe（每次 main 构建都留一份可核对的版本与构建时间）
+      - name: 上传 exe（两个产物都留：GUI 主程序 + MCP 控制台服务）
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ai-kanban-exe
-          path: dist/AI交接看板.exe
+          path: |
+            dist/AI交接看板.exe
+            dist/AI交接看板-MCP.exe
           if-no-files-found: warn

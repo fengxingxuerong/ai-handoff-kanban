@@ -116,7 +116,7 @@ async function showRecoverable() {
         + `<div>${btn}</div></div>`;
     }).join("");
     box.innerHTML = head + rows
-      + '<div style="margin-top:6px;color:var(--text-faint);font-size:11px">恢复会覆盖当前数据；覆盖前会自动把当前数据另存为 projects.json.before-restore.bak</div>';
+      + '<div style="margin-top:6px;color:var(--text-faint);font-size:11px">恢复会覆盖当前数据；覆盖前会自动把当前数据另存为 projects.json.before-restore.bak（万一没存成会明确告诉你）</div>';
   } catch (e) {
     box.innerHTML = "加载失败：" + esc(e.message);
   }
@@ -129,8 +129,15 @@ async function restoreData(source) {
   try {
     const r = await api("/api/restore", { method: "POST", body: JSON.stringify({ source }) });
     // 少恢复了必须说出来：一句"已恢复 N 个项目"分不清"本来就只有 N 个"和"丢了几条"
-    toast(`已恢复 ${r.project_count} 个项目、${r.task_count} 个任务 ✓`
-          + (r.dropped_note ? `\n⚠ ${r.dropped_note}` : ""));
+    // 安全副本失败了更要说：确认框刚承诺过"当前数据会先另存为 before-restore.bak"，
+    // 这时候还打一个 ✓，用户会以为手里有退路 —— 而它其实不存在。
+    const noNet = r.pre_restore_backup && r.pre_restore_backup.state === "failed";
+    toast(noNet
+      ? `已恢复 ${r.project_count} 个项目、${r.task_count} 个任务 —— 但没有退路 ⚠`
+        + (r.pre_restore_backup_note ? `\n${r.pre_restore_backup_note}` : "")
+        + (r.dropped_note ? `\n⚠ ${r.dropped_note}` : "")
+      : `已恢复 ${r.project_count} 个项目、${r.task_count} 个任务 ✓`
+        + (r.dropped_note ? `\n⚠ ${r.dropped_note}` : ""));
     await loadOverview();
     showRecoverable();
   } catch (e) { toast("恢复失败：" + e.message); }

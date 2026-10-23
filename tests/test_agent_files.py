@@ -311,3 +311,83 @@ def test_entry_drift_check_without_dir_stays_preview(ai):
                           {"dir": "", "content": CONTENT, "check_only": True})
     assert status == 200
     assert "checks" not in res and res["preview"] is True
+
+
+# ---------------- 凭据预警与写前脱敏（2026-10-23） ----------------
+# 入口文件的去向是**用户的仓库**，而仓库通常会被 git push —— 这是整个应用里唯一一条
+# 能把看板内容（含用户从会话里随手抄进来的凭据）带出本机的路。约定 9 管的是
+# "交接物默认不出本机"，agent-files 是它的盲区：写的是用户自己的仓库，所以不强行脱敏，
+# 但必须让他**在写之前知道**这份文档里有什么。
+
+FAKE_KEY = "sk-agentfilesFAKE1234567890abcdef"
+KEYED_CONTENT = "# AGENTS.md — 示例\n\n## 部署\n\n轮换 " + FAKE_KEY + " 这把\n"
+
+
+def test_agent_files_warns_when_the_document_carries_credentials(ai):
+    """预览时就要报数：等写完再看提示，文件已经落进仓库了"""
+    pid = ai.get("/api/projects")[1]["projects"][0]["id"]
+    status, res = ai.post(f"/api/export/agent-files/{pid}",
+                          {"dir": "", "content": KEYED_CONTENT})
+    assert status == 200
+    cw = res["credential_warning"]
+    assert cw["hits"] >= 1, "内容里有明确的 Key 形态，不该报 0 处"
+    assert cw["redacted"] is False
+    assert "原文" in cw["note"] and "git push" in cw["note"], cw["note"]
+    # 默认不脱敏 = 预览里就是原文（这是"写自己的仓库"的既定语义，不能偷偷改）
+    agents = next(f for f in res["files"] if f["path"] == "AGENTS.md")
+    assert FAKE_KEY in agents["content"]
+
+
+def test_agent_files_redact_writes_the_mask_and_the_preview_agrees(ai, tmp_path):
+    """开了「写前脱敏」：**预览与实际写出的必须是同一份文本**（约定 29 同源纪律）"""
+    pid = ai.get("/api/projects")[1]["projects"][0]["id"]
+    repo = tmp_path / "redact-repo"
+    repo.mkdir()
+    status, res = ai.post(f"/api/export/agent-files/{pid}",
+                          {"dir": str(repo), "content": KEYED_CONTENT, "redact": True})
+    assert status == 200
+    assert res["redacted"] is True
+    assert res["credential_warning"]["redacted"] is True
+    assert "AGENTS.md" in res["written"]
+
+    on_disk = (repo / "AGENTS.md").read_text(encoding="utf-8")
+    previewed = next(f for f in res["files"] if f["path"] == "AGENTS.md")["content"]
+    assert FAKE_KEY not in on_disk, "脱敏开关开着却把明文写进了仓库"
+    assert on_disk == previewed, "预览与落盘必须是同一份文本，否则预览就是在骗人"
+    assert "********" in on_disk
+
+
+def test_agent_files_stays_silent_when_there_is_nothing_to_report(ai):
+    """没事就不说话：一句常驻的"注意凭据"很快会被读成背景噪音"""
+    pid = ai.get("/api/projects")[1]["projects"][0]["id"]
+    status, res = ai.post(f"/api/export/agent-files/{pid}",
+                          {"dir": "", "content": CONTENT})
+    assert status == 200
+    assert res["credential_warning"]["hits"] == 0
+    assert res["credential_warning"]["note"] == ""
+
+
+def test_credential_count_uses_the_same_rules_as_redaction():
+    """报数不许另写一套正则：命中数必须与"真按脱敏跑一遍"同口径。
+
+    这是约定 29 的同源纪律 —— 报的数和做的事一旦不同源，迟早给出两个答案
+    （报 0 处却盖掉了东西，或报 3 处其实只盖到 1 处）。所以两头都钉：
+    数字写死在这里，`redact_text` 的**是否改动**与 `count_sensitive` 的**是否为 0** 必须一致。
+    """
+    from app.redact import count_sensitive, redact_text
+
+    cases = {
+        KEYED_CONTENT: 1,                                   # 前缀型 Key，一条
+        CONTENT: 0,                                         # 干净的文档
+        "": 0,
+        "密码=SuperSecret123": 1,                            # 中文键名 kv
+        "api_key: abcdefghijkl": 1,                          # JSON/英文 kv
+        "AKIAIOSFODNN7EXAMPLE": 1,                           # AWS 无分隔符形态
+        "联系 ops@example.com 或 bearer abcdefghijklmn": 2,    # 邮箱 + Bearer 各一处
+        "密码=SuperSecret123 和 api_key: abcdefghijkl 还有 AKIAIOSFODNN7EXAMPLE": 3,
+    }
+    for text, expected in cases.items():
+        assert count_sensitive(text) == expected, f"命中数口径漂了：{text!r}"
+        # 两个方向都要成立，否则"报 0 处"和"什么都没盖"会各说各话
+        assert (count_sensitive(text) == 0) == (redact_text(text) == text), \
+            f"报数与脱敏结果不一致：{text!r}"

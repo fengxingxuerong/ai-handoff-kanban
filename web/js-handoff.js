@@ -160,6 +160,9 @@ function agentFilesBody() {
     dir: document.getElementById("agentsmd-dir").value.trim(),
     content: content || null,
     overwrite: !!(document.getElementById("agentsmd-overwrite") || {}).checked,
+    // 写进的是用户的仓库（通常要 git push），所以"要不要脱敏"得由他按真值决定；
+    // 默认关 = 保持原行为，但服务端只要有凭据形态的内容就会在回执里报数（见 renderAgentFiles）。
+    redact: !!(document.getElementById("agentsmd-redact") || {}).checked,
   };
 }
 
@@ -181,7 +184,15 @@ function renderAgentFiles(res) {
   let extra = "";
   if (skippedExisting.length) extra = `<div style="margin-top:4px;color:var(--text-faint)">跳过了 ${skippedExisting.length} 个已有文件（勾选「覆盖」可强制写入）</div>`;
   else if (failed.length) extra = `<div style="margin-top:4px;color:var(--red)">${failed.length} 个写入失败</div>`;
-  box.innerHTML = `<div style="margin-bottom:4px;color:var(--text-faint)">${head} · 内容来源：${esc(srcName)}</div>${rows}${extra}`;
+  // 凭据预警必须显示在这块面板里，不能只走 toast：用户在**预览**这一步就该看到
+  // "写下去会带出什么"，等点完写入再看 toast 已经晚了（文件已经落到仓库里）。
+  const cw = res.credential_warning || {};
+  let cred = "";
+  if (cw.note) {
+    const tone = cw.redacted ? "var(--text-dim)" : "var(--red)";
+    cred = `<div style="margin-top:5px;color:${tone}">${esc(cw.note)}</div>`;
+  }
+  box.innerHTML = `<div style="margin-bottom:4px;color:var(--text-faint)">${head} · 内容来源：${esc(srcName)}${res.redacted ? " · 已脱敏" : ""}</div>${rows}${extra}${cred}`;
   box.style.display = "block";
 }
 
@@ -192,7 +203,10 @@ async function previewAgentFiles() {
       method: "POST", body: JSON.stringify(agentFilesBody()),
     });
     renderAgentFiles(r);
-    toast(`将写出 ${r.files.length} 个入口文件`);
+    // 结果必须再走一次 toast（约定 14）：toast 是全站唯一的 aria-live 区域，
+    // 而且这块面板在别的面板被打开时会被盖住 —— 有凭据预警时绝不打 ✓。
+    const cw = (r.credential_warning || {}).note || "";
+    toast(`将写出 ${r.files.length} 个入口文件${cw ? `\n${cw}` : ""}`);
   } catch (e) { toast("预览失败：" + e.message); }
 }
 
@@ -209,7 +223,13 @@ async function writeAgentFiles(ev) {
     renderAgentFiles(r);
     const extra = (r.skipped_existing || []).length
       ? `，跳过 ${r.skipped_existing.length} 个已有文件（要覆盖请勾选）` : "";
-    toast(`已写入 ${r.written.length} 个文件到 ${r.dir}${extra} ✓`);
+    const cw = r.credential_warning || {};
+    // 写进仓库了却带着凭据：这时候打 ✓ 是错的结论性文案
+    toast((cw.hits && !cw.redacted)
+      ? `已写入 ${r.written.length} 个文件到 ${r.dir}${extra} —— 但里面有 ${cw.hits} 处凭据原文 ⚠`
+        + (cw.note ? `\n${cw.note}` : "")
+      : `已写入 ${r.written.length} 个文件到 ${r.dir}${extra} ✓`
+        + (cw.note ? `\n${cw.note}` : ""));
   } catch (e) { toast("写入失败：" + e.message); }
   btn.classList.remove("ai-loading-btn");
 }
