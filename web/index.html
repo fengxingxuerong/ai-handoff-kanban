@@ -23,6 +23,7 @@
     <div class="search-box">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
       <input id="search" type="text" aria-label="搜索项目：名称 / 标签 / 下一步 / 代码路径" placeholder="搜索项目名称 / 标签 / 下一步 / 代码路径…">
+      <button class="search-clear" id="search-clear" type="button" data-act="clearSearch" aria-label="清空搜索" title="清空搜索" hidden>✕</button>
     </div>
   </div>
   <div class="header-actions">
@@ -89,7 +90,7 @@
     <button class="btn small" data-act="bulkClear">取消选择</button>
   </div>
   <div id="dash"></div>
-  <div class="list-head"><strong>项目</strong><span id="repo-change-note">按最近更新排序</span></div>
+  <div class="list-head" id="list-head"><strong>项目</strong><span id="repo-change-note">按最近更新排序</span></div>
   <div class="grid" id="grid">
     <div class="skel-card"></div>
     <div class="skel-card"></div>
@@ -98,14 +99,22 @@
   <div class="empty" id="empty" style="display:none">
     <div class="big">🗂️</div>
     <div id="empty-msg">还没有项目，点右上角「新建项目」开始搭建你的交接看板吧</div>
+    <div class="empty-onboard" id="empty-onboard" hidden>
+      <div class="empty-steps">
+        <span><b>1</b> 新建项目</span>
+        <span><b>2</b> 写清交接说明与下一步</span>
+        <span><b>3</b> 一键复制给下一个智能体</span>
+      </div>
+      <button class="btn primary" data-act="openProjectModal">＋ 新建第一个项目</button>
+    </div>
   </div>
 </div>
 
 <!-- 详情视图 -->
 <div id="view-detail">
   <div id="detail-state"></div>
-  <div class="detail-scroll">
-    <div class="d-head">
+  <!-- 头栏放在滚动区之外：贴顶常驻但不遮挡内容（2026-10-22 修 sticky 头挡住按钮点击） -->
+  <div class="d-head">
       <button class="btn" data-act="showOverview">← 返回总览</button>
       <span class="title" id="d-name"></span>
       <span class="badge" id="d-status"></span>
@@ -123,6 +132,7 @@
       </details>
     </div>
 
+  <div class="detail-scroll">
     <div id="repo-watch" class="repo-watch" aria-live="polite" hidden></div>
 
     <div class="d-layout">
@@ -233,7 +243,7 @@
           <h3>🏁 里程碑 <span style="color:var(--text-faint);font-size:11px;font-weight:400;text-transform:none;letter-spacing:0">任务按「里程碑」归组，勾选手工标记该节点已过去</span></h3>
           <div id="ms-body"></div>
         </div>
-        <div class="panel" style="margin-bottom:0">
+        <div class="panel" id="kanban-panel" style="margin-bottom:0">
           <h3>🗃 任务看板
             <span style="margin-left:auto; display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:0; font-weight:400">
               <span style="color:var(--text-faint)" id="d-task-total"></span>

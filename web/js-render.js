@@ -132,8 +132,9 @@ function renderDash() {
         <span class="k-num">${stats.total_tasks}</span>
         <span class="k-sub">平均进度 ${stats.avg_progress}% · 平均就绪度 ${stats.avg_readiness}</span>
       </div>
-      <div class="kpi ${attention ? "alert" : "ok"}">
-        <span class="k-lab">需要关注</span>
+      <div class="kpi ${attention ? "alert" : "ok"}" data-act="openInbox" role="button" tabindex="0" data-keyact="1"
+           title="查看需要拍板的任务（逾期 / 待审查 / 阻塞）">
+        <span class="k-lab">需要关注${attention ? ' <span class="k-go">查看 ›</span>' : ''}</span>
         <span class="k-num">${attention}</span>
         <span class="k-sub">${attention ? `逾期 ${overdue} · 临期 ${duesoon} · 阻塞 ${blocked}` : "没有逾期 / 临期 / 阻塞的任务 👍"}</span>
       </div>

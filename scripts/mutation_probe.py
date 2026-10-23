@@ -731,6 +731,30 @@ MUTATIONS: list[dict] = [
         "why": "示例时间戳退回写死：新装用户过几周就看到「37 天没记录」和成排停滞告警",
         "tests": ["tests/test_misc.py"],
     },
+    {
+        "id": "memory_form_stops_wrapping",
+        "file": "web/style.css",
+        "old": "#memory-form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }",
+        "new": "#memory-form { display: flex; flex-wrap: nowrap; gap: 8px; margin-bottom: 8px; }",
+        "why": "记忆表单不换行：四个控件在 328px 侧栏里把「存」按钮挤出面板 88px，点上去命中隔壁列",
+        "tests": ["tests/test_frontend.py", "tests/test_frontend_e2e.py"],
+    },
+    {
+        "id": "memory_text_input_cannot_shrink",
+        "file": "web/style.css",
+        "old": "#memory-form #memory-text { flex: 1 1 120px; min-width: 0; }",
+        "new": "#memory-form #memory-text { flex: 1 1 120px; }",
+        "why": "输入框保留默认 min-width：内容再短也不肯收缩，整行照样溢出面板",
+        "tests": ["tests/test_frontend.py", "tests/test_frontend_e2e.py"],
+    },
+    {
+        "id": "detail_head_back_into_scroll_area",
+        "file": "web/index.html",
+        "old": '  <div class="detail-scroll">\n    <div id="repo-watch"',
+        "new": '  <div class="detail-scroll d-head">\n    <div id="repo-watch"',
+        "why": "头栏与滚动区被合成一个块（复制类名的典型手误）：滚动时头部跟着内容跑，或反过来盖住内容",
+        "tests": ["tests/test_frontend.py"],
+    },
 ]
 
 

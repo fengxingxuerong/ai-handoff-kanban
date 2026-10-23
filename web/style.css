@@ -366,18 +366,27 @@ header {
 #view-detail {
   display: none;
   height: calc(100vh - var(--head-h) - var(--banner-h));
-  flex: 1 1 auto; min-height: 0; position: relative;
+  flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden;
 }
-#view-detail.active { display: block; }
+#view-detail.active { display: flex; flex-direction: column; }
 /* 详情页此前没有加载/失败态：慢的时候像点死了，失败时只闪一条 toast，界面还停在旧项目上 */
 #detail-state {
   position: absolute; inset: 0; z-index: 6; display: none; flex-direction: column;
   align-items: center; justify-content: center; gap: 12px; background: var(--bg);
   font-size: 13px; color: var(--text-dim); text-align: center; padding: 0 24px;
 }
-/* 用绝对定位铺满，不再依赖父级百分比高度 —— flex 化之后更稳 */
-.detail-scroll { position: absolute; inset: 0; overflow-y: auto; padding: 18px 22px 60px; }
-.d-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+/* 头栏是 flex 的第一行，滚动区是第二行：贴顶常驻且**不覆盖**任何可点元素。
+   2026-10-22 之前这里是 `position: sticky`，滚动时把头栏浮在内容上，E2E 直接报
+   `<div class="d-head"> intercepts pointer events` —— 头栏压住按钮，真人同样点不到。 */
+.d-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  flex: 0 0 auto; padding: 18px 22px 10px; margin: 0;
+  background: var(--bg); border-bottom: 1px solid var(--border-soft);
+}
+.detail-scroll {
+  position: relative; flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; padding: 16px 22px 60px;
+}
 .d-head .title { font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
 .d-head .badge { font-size: 12px; padding: 3px 12px; }
 .d-head .spacer { flex: 1; }
@@ -419,6 +428,8 @@ header {
   .kanban { grid-template-columns: 1fr; }
   .row3 { grid-template-columns: 1fr; }
   #view-overview, #view-detail { padding-left: 12px; padding-right: 12px; }
+  /* 头栏与滚动区自带 22px 内边距，窄屏交给外层容器的 12px，别再叠一层 */
+  .d-head, .detail-scroll { padding-left: 0; padding-right: 0; }
   .d-layout { gap: 12px; }
 }
 .kcol {
@@ -1455,4 +1466,72 @@ header { padding: 10px 20px; gap: 12px; }
   border: 1px solid var(--accent-line); border-radius: 5px;
   font: 9px var(--mono); letter-spacing: .02em; color: var(--accent);
   white-space: nowrap;
+}
+
+/* ---------- 2026-10-22 用户体验轮：清空搜索 / 空态引导 / 可点 KPI ---------- */
+.search-box input { padding-right: 36px; }
+.search-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; border: 0; border-radius: 50%;
+  background: transparent; color: var(--text-faint); cursor: pointer;
+  font: inherit; font-size: 12px; line-height: 1; display: grid; place-items: center;
+}
+.search-clear:hover { background: var(--card-hover); color: var(--text); }
+.search-clear[hidden] { display: none; }
+
+.empty-onboard { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 18px; }
+.empty-onboard[hidden] { display: none; }
+.empty-steps { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.empty-steps span {
+  font-size: 12px; color: var(--text-dim); background: var(--card);
+  border: 1px solid var(--border-soft); border-radius: var(--r-pill); padding: 5px 12px;
+}
+.empty-steps b { color: var(--accent); margin-right: 4px; }
+
+.kpi[data-act] { cursor: pointer; }
+.kpi[data-act]:hover { border-color: var(--accent-line); background: var(--card-hover); }
+.kpi[data-act]:focus-visible, .search-clear:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.kpi .k-go { color: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none; margin-left: 4px; }
+
+/* 详情页头栏是常驻行（不再 sticky 覆盖内容，见上方 .d-head 注释） */
+.d-layout > div { min-width: 0; }
+
+/* 记忆表单：类型 + 内容 + 有效期 + 存，四个控件在 328px 的侧栏面板里排不下一行。
+   此前 flex 不换行、输入框又保留默认 min-width，整行往右溢出 88px ——「存」按钮跑到
+   隔壁列的下面，鼠标点上去命中的是隔壁列（2026-10-22 E2E 实测：elementFromPoint
+   返回隔壁列的 div，Playwright 报 intercepts pointer events）。换行 + 允许输入框收缩。 */
+#memory-form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+#memory-form #memory-text { flex: 1 1 120px; min-width: 0; }
+.d-layout .panel, .d-layout .kanban, .d-layout .kcol { min-width: 0; }
+.d-head .title { min-width: 0; overflow-wrap: anywhere; }
+
+/* 窄屏：任务板优先于侧栏面板，别让用户滚过两千像素才看到任务 */
+@media (max-width: 980px) {
+  .d-layout { display: flex; flex-direction: column; gap: 12px; }
+  .d-layout > div { width: 100%; min-width: 0; }
+  .d-layout > div:last-child { order: -1; display: flex; flex-direction: column; }
+  .d-layout > div:last-child > #kanban-panel { order: -1; }
+}
+
+/* 触屏没有 hover：项目卡操作不能等鼠标移上来才出现 */
+@media (hover: none) {
+  .pcard .actions { opacity: 1; }
+}
+
+/* 窄窗口顶栏：隐藏副标题、压缩搜索与外层间距，少占一屏 */
+@media (max-width: 560px) {
+  header { padding: 8px 12px; gap: 10px; row-gap: 8px; }
+  .logo .sub { display: none; }
+  .search-wrap { flex-basis: 140px; min-width: 110px; }
+  .header-actions { gap: 6px; justify-content: flex-start; }
+  .header-nav, .header-tools { display: contents; }
+  .header-nav .btn, .header-tools .btn, .header-cta { padding: 7px 9px; }
+}
+
+/* 宽屏：左侧长面板滚动时让任务板停在视野里，消掉右侧大片空白 */
+@media (min-width: 1201px) {
+  .d-layout > div:last-child { align-self: stretch; }
+  #kanban-panel { position: sticky; top: 16px; }
 }

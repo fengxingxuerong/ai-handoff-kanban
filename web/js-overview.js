@@ -71,15 +71,22 @@ function renderOverview() {
   // 于是手里有 5 个项目的人搜索打了个不匹配的词，界面就大字宣布"还没有项目"——
   // 看着就像数据被人清空了。
   empty.style.display = list.length ? "none" : "block";
+  const listHead = document.getElementById("list-head");
+  if (listHead) listHead.style.display = projects.length ? "" : "none";
   const msg = document.getElementById("empty-msg");
+  const onboard = document.getElementById("empty-onboard");
   if (list.length) {
     msg.textContent = "";
+    if (onboard) onboard.hidden = true;
   } else if (!projects.length) {
-    msg.textContent = "还没有项目，点右上角「新建项目」开始搭建你的交接看板吧";
+    msg.textContent = "还没有项目。先建一个，把交接说明和下一步写进去；换智能体时一键复制即可。";
+    if (onboard) onboard.hidden = false;
   } else if (q) {
     msg.textContent = `没有匹配「${q}」的项目（共 ${projects.length} 个）—— 换个词，或清空搜索框`;
+    if (onboard) onboard.hidden = true;
   } else {
     msg.textContent = `「${filter}」状态下没有项目（共 ${projects.length} 个）—— 点「全部」看所有项目`;
+    if (onboard) onboard.hidden = true;
   }
   grid.innerHTML = list.map(p => cardHTML(p)).join("");
   grid.dataset.rendered = "1";   // 骨架屏让位给真实卡片；也是给失败分支的信号"已经有内容了"
@@ -264,15 +271,36 @@ async function bulkDelete() {
 // 搜索框防抖：卡片是全量重渲染，逐字符触发在项目多时会卡
 let searchTimer = null;
 const searchInput = document.getElementById("search");
+
+// 清空按钮只在输入框有内容时出现：省得用户为了退出一段搜索去全选删除
+function updateSearchClear() {
+  const btn = document.getElementById("search-clear");
+  if (btn) btn.hidden = !(searchInput && searchInput.value);
+}
+
+function clearSearch() {
+  if (!searchInput) return;
+  searchInput.value = "";
+  if (activeViewId) {
+    activeViewId = "";
+    syncViewSelect();
+  }
+  updateSearchClear();
+  renderOverview();
+  searchInput.focus();
+}
+
 if (searchInput) {
   searchInput.addEventListener("input", () => {
     if (activeViewId) {                               // 手动改搜索 = 脱离已保存视图
       activeViewId = "";
       syncViewSelect();
     }
+    updateSearchClear();
     clearTimeout(searchTimer);
     searchTimer = setTimeout(renderOverview, 120);
   });
+  updateSearchClear();
 }
 
 // ============ 保存的视图（Plane Views 轻量版） ============
@@ -313,6 +341,7 @@ function applyView(vid) {
     c.classList.toggle("active", c.dataset.f === filter));
   const box = document.getElementById("search");
   if (box) box.value = v.q || "";
+  updateSearchClear();
   renderOverview();
 }
 

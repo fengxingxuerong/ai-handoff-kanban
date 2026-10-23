@@ -172,6 +172,7 @@ document.querySelectorAll(".modal-mask").forEach(m => {
 const ACTIONS = {
   // —— 顶部与总览 ——
   openProjectModal: () => openProjectModal(),
+  clearSearch: () => clearSearch(),
   openAICmd: () => openAICmd(),
   // 要转发 data-arg：报告面板既能"现生成一份"（无参）也能回看某一份历史（带 rid）。
   // 写成 `() => openReport()` 会把 rid 丢掉，点历史条目变成重新跑一次分析。

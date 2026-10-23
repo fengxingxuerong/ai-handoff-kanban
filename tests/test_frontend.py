@@ -9,13 +9,14 @@
 from __future__ import annotations
 
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
 
 # 2026-09-28 前端拆成 index.html + style.css + 多份 js-*.js；2026-10-18 按关注点重新分成 10 份。
 # 契约测的是"整个前端"而不是某一个文件，所以读拼接后的源码（顺序与浏览器加载一致）。
-from frontend_src import frontend_source  # noqa: E402
+from frontend_src import WEB, frontend_source  # noqa: E402
 
 HTML = frontend_source()
 
@@ -577,3 +578,107 @@ def test_set_filter_detaches_the_saved_view_in_the_dropdown_too():
     chip 路径漏了：下拉还挂着视图名，用户会以为当前筛选仍是那个视图。"""
     fn = re.search(r"function setFilter\(el, f\)\s*\{(.*?)\n\}", HTML, re.S)
     assert fn and "syncViewSelect()" in fn.group(1), fn.group(0)
+
+
+# ---------- 2026-10-22 用户体验轮：三处改动各钉一条契约 ----------
+
+class _DivNest(HTMLParser):
+    """只跟 <div> 的嵌套关系，用来回答「某个 div 是不是另一个 div 的后代」。
+
+    整份前端拼起来再解析（见 `frontend_src`），不写死文件名。
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.stack = []
+        self.hits = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "div":
+            return
+        a = dict(attrs)
+        classes = (a.get("class") or "").split()
+        if "d-head" in classes:
+            self.hits.append((list(self.stack), a.get("id") or ""))
+        self.stack.append((a.get("id") or "", classes))
+
+    def handle_endtag(self, tag):
+        if tag == "div" and self.stack:
+            self.stack.pop()
+
+
+def test_detail_head_is_outside_the_scroll_area():
+    """详情头栏不能落在 .detail-scroll 里面。
+
+    2026-10-22 用 `position: sticky` 把它钉在滚动区顶部，滚动后头栏浮在内容之上，
+    压住「存」「新建任务」这些按钮 —— 浏览器实测报
+    `<div class="d-head"> intercepts pointer events`，真人同样点不到。
+    正确形态只有一个：头栏是 #view-detail 的直接子元素，滚动区是它的兄弟。
+    """
+    p = _DivNest()
+    # 只喂 index.html：CSS 注释里也写着 `<div class="d-head">` 这种字样，
+    # 拿整份拼接源码喂 HTMLParser 会把它当成真的标签，凭空多出一个"头栏"。
+    p.feed((WEB / "index.html").read_text(encoding="utf-8"))
+    assert len(p.hits) == 1, f"详情头栏应只有一个，实际 {len(p.hits)}"
+    ancestors, _ = p.hits[0]
+    assert not any("detail-scroll" in cls for _, cls in ancestors), \
+        "头栏又回到滚动区里了：sticky/absolute 都会让它在滚动时挡住内容的点击"
+    assert ancestors and ancestors[-1][0] == "view-detail", \
+        f"头栏的父级应是 #view-detail，实际 {ancestors[-1] if ancestors else None}"
+
+    css = (WEB / "style.css").read_text(encoding="utf-8")
+    rules = re.findall(r"([^{}]*\.d-head[^{}]*)\{([^{}]*)\}", css)
+    sticky = [sel.strip() for sel, body in rules if re.search(r"position\s*:\s*sticky", body)]
+    assert not sticky, f"这些规则又给头栏加了 sticky（滚动时会遮住并吃掉点击）：{sticky}"
+
+
+def test_memory_form_wraps_instead_of_overflowing_the_panel():
+    """侧栏 328px 面板里塞四个控件，必须换行且允许输入框收缩。
+
+    曾经 flex 不换行、输入框保留默认 min-width，整行往右溢出 88px：「存」按钮跑到
+    隔壁列下面，鼠标点上去命中隔壁列（E2E 的 elementFromPoint 实测）。
+    """
+    css = (WEB / "style.css").read_text(encoding="utf-8")
+    m = re.search(r"#memory-form\s*\{([^}]*)\}", css)
+    assert m, "找不到 #memory-form 的样式（是不是又搬回内联了？）"
+    assert re.search(r"flex-wrap\s*:\s*wrap", m.group(1)), f"表单又不会换行了：{m.group(1)}"
+    t = re.search(r"#memory-form\s+#memory-text\s*\{([^}]*)\}", css)
+    assert t and re.search(r"min-width\s*:\s*0", t.group(1)), \
+        "输入框要 min-width:0 才能被压缩，否则会把按钮挤到面板外面"
+
+
+def test_search_clear_button_appears_only_with_input():
+    """清空按钮：默认隐藏、有输入才出现、点了清空并回到全部。"""
+    tag = re.search(r"<button[^>]*id=\"search-clear\"[^>]*>", HTML)
+    assert tag, "找不到清空搜索按钮"
+    assert "hidden" in tag.group(0), "没输入内容时清空按钮不该占位"
+    assert 'data-act="clearSearch"' in tag.group(0), "清空按钮没有接到动作分发"
+
+    fn = re.search(r"function clearSearch\(\)\s*\{(.*?)\n\}", HTML, re.S)
+    assert fn, "clearSearch 不见了？"
+    body = fn.group(1)
+    assert 'searchInput.value = ""' in body, body
+    assert "renderOverview()" in body, "清空后没有重渲染，卡片还停在筛选结果上"
+    assert "updateSearchClear()" in body, "清空后没同步按钮自身的显隐"
+
+    hook = re.search(r'searchInput\.addEventListener\("input", \(\) => \{(.*?)\n  \}\);', HTML, re.S)
+    assert hook and "updateSearchClear()" in hook.group(1), \
+        "输入时没有刷新按钮显隐：按钮会一直不出现"
+
+
+def test_empty_state_onboarding_shows_the_three_steps():
+    """一个项目都没有时给三步引导；有项目、只是搜不到/筛不到时不能出现。"""
+    box = re.search(r'id="empty-onboard"(.*?)</div>\s*</div>', HTML, re.S)
+    assert box, "找不到空态引导块"
+    steps = re.findall(r"<b>(\d)</b>\s*([^<]+)", box.group(1))
+    assert [n for n, _ in steps] == ["1", "2", "3"], f"三步引导不完整：{steps}"
+    assert any("新建项目" in t for _, t in steps), f"第一步不是新建项目：{steps}"
+
+    render = re.search(r"function renderOverview\(\)\s*\{(.*?)\n\}", HTML, re.S)
+    assert render, "找不到 renderOverview"
+    src = render.group(1)
+    blank = re.search(r"else if \(!projects\.length\) \{(.*?)\} else if", src, re.S)
+    assert blank, "找不到「真的没有项目」那个分支"
+    assert "onboard.hidden = false" in blank.group(1), "真没项目时没显示引导"
+    others = re.findall(r"onboard\.hidden = (true|false)", src)
+    assert others.count("false") == 1, f"引导只该在「一个项目都没有」时出现，实际 false 出现 {others.count('false')} 次"

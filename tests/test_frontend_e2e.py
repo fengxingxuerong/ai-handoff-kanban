@@ -1845,3 +1845,166 @@ def test_today_shows_task_status_blocked_reason_and_is_keyboard_usable(ui):
     page.wait_for_selector("#view-detail.active", timeout=10000)
     assert "今日状态项目" in page.locator("#view-detail").inner_text()
 
+
+# ---------------- 2026-10-22 全方面用户体验轮 ----------------
+
+def test_detail_puts_the_task_board_first_on_narrow_screens(ui):
+    """768/390 下任务板必须先于侧栏面板出现，且不产生横向溢出。
+
+    旧布局在 980px 以下把左栏十来个面板排在最前，任务板要滚 2000px 以上才出现；
+    390px 下右栏还有 508px 的 min-content 宽度，整块内容被裁到视口外。
+    """
+    page, api, _ = ui
+    p = make_project(api, "窄屏任务板优先项目", background="背景" * 20,
+                     handoff_note="接手说明 " * 20, next_action="下一步")
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "窄屏里要先看到的任务"})
+
+    for width in (768, 390):
+        page.set_viewport_size({"width": width, "height": 844})
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_selector(".pcard", timeout=15000)
+        page.locator(".pcard:has-text('窄屏任务板优先项目')").click()
+        page.wait_for_selector("#view-detail.active", timeout=10000)
+        page.wait_for_selector(".kanban", timeout=10000)
+        box = page.evaluate("""() => {
+          const sc = document.querySelector('.detail-scroll');
+          const kb = document.querySelector('.kanban').getBoundingClientRect();
+          const hb = document.querySelector('.handoff-box').getBoundingClientRect();
+          const sr = sc.getBoundingClientRect();
+          return {kanbanTop: Math.round(kb.top - sr.top), handoffTop: Math.round(hb.top - sr.top),
+                  scrollW: sc.scrollWidth, clientW: sc.clientWidth};
+        }""")
+        assert box["scrollW"] <= box["clientW"], f"{width}px 下详情横向溢出：{box}"
+        assert box["kanbanTop"] < box["handoffTop"], f"{width}px 下任务板仍被侧栏压到后面：{box}"
+        assert box["kanbanTop"] < 700, f"{width}px 下任务板首屏看不到：{box}"
+        page.click("[data-act='showOverview']")
+        page.wait_for_selector("#view-overview", state="visible", timeout=5000)
+
+
+def test_detail_keeps_actions_and_task_board_visible_while_scrolling(ui):
+    """长详情滚动时：头栏常驻在滚动区之外，宽屏任务板停在视野里。
+
+    旧实现把 `.d-head` 放进滚动区再用 sticky 钉住，滚动后它会浮到内容上并挡住按钮；
+    现在是「常驻头栏 + 独立滚动区」两行，滚动只发生在第二行。
+    """
+    page, api, _ = ui
+    p = make_project(api, "滚动吸顶项目", background="背景段落。" * 40,
+                     handoff_note="交接说明。" * 40, next_action="下一步")
+    api.post(f"/api/projects/{p['id']}/tasks", {"title": "滚动时也要看见的任务"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.locator(".pcard:has-text('滚动吸顶项目')").click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.evaluate("document.querySelector('.detail-scroll').scrollTop = 1200")
+    page.wait_for_timeout(300)
+    box = page.evaluate("""() => {
+      const sc = document.querySelector('.detail-scroll').getBoundingClientRect();
+      const head = document.querySelector('.d-head').getBoundingClientRect();
+      const kb = document.querySelector('#kanban-panel').getBoundingClientRect();
+      return {headTop: Math.round(head.top), headBottom: Math.round(head.bottom),
+              kanbanTop: Math.round(kb.top), scrollTop: Math.round(sc.top),
+              scrollBottom: Math.round(sc.bottom),
+              headNested: !!document.querySelector('.detail-scroll .d-head')};
+    }""")
+    assert not box["headNested"], "头栏又回到滚动区里了：滚动后它会跟着内容跑或盖住按钮"
+    assert 0 <= box["headTop"] < box["scrollTop"], f"头栏没有常驻在滚动区上方：{box}"
+    assert box["headBottom"] <= box["scrollTop"], f"头栏与滚动区重叠：{box}"
+    assert box["scrollTop"] < box["kanbanTop"] < box["scrollBottom"], \
+        f"宽屏滚动时任务板没留在视野里：{box}"
+    assert box["kanbanTop"] >= box["headBottom"], f"任务板压住了头栏：{box}"
+
+
+def test_attention_kpi_opens_inbox_and_is_keyboard_activatable(ui):
+    """「需要关注」不是只能看的数字：点它 / 键盘 Enter 直接进拍板列表。"""
+    page, api, _ = ui
+    p = make_project(api, "关注入口项目")
+    api.post(f"/api/projects/{p['id']}/tasks",
+             {"title": "卡住等拍板", "status": "阻塞", "blocked_reason": "在等接口文档"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".kpi[data-act='openInbox']", timeout=15000)
+    kpi = page.locator(".kpi[data-act='openInbox']")
+    assert "查看" in kpi.inner_text()
+    kpi.focus()
+    page.keyboard.press("Enter")
+    page.wait_for_selector("#inbox-modal.show", timeout=5000)
+    assert "在等接口文档" in page.locator("#inbox-body").inner_text()
+
+
+def test_search_clear_button_restores_the_full_board(ui):
+    """清空按钮：有输入才露头，点一下回到全量列表并把焦点留在搜索框。
+
+    以前退出一段搜索只能全选删除 —— 在窄窗口里连全选都容易点歪。
+    """
+    page, api, _ = ui
+    make_project(api, "清空搜索甲项目")
+    make_project(api, "清空搜索乙项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    total = page.locator(".pcard").count()
+    assert page.locator("#search-clear").is_hidden(), "空搜索框旁边不该挂着清空按钮"
+
+    page.fill("#search", "甲")
+    page.wait_for_timeout(900)                       # 搜索是 120ms 防抖 + 渲染
+    assert page.locator("#search-clear").is_visible(), "输入了内容却没出现清空按钮"
+    assert page.locator(".pcard").count() < total
+
+    page.click("#search-clear")
+    page.wait_for_timeout(400)
+    assert page.input_value("#search") == ""
+    assert page.locator("#search-clear").is_hidden(), "清空之后按钮自己该收起来"
+    assert page.locator(".pcard").count() == total, "清空搜索没有回到全量列表"
+    assert page.evaluate("document.activeElement && document.activeElement.id") == "search", \
+        "清空后焦点跑了，想接着搜还得再点一次输入框"
+
+
+def test_empty_board_offers_a_three_step_onboarding(ui):
+    """真一个项目都没有时给三步引导；有项目时这块必须收起来。
+
+    引导只在 `!projects.length` 分支出现 —— 搜不到、筛不到都不该冒出"新建第一个项目"。
+    """
+    page, api, _ = ui
+    make_project(api, "占位项目让引导先藏着")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    assert not page.locator("#empty-onboard").is_visible(), "还有项目却冒出了新手引导"
+
+    for p in api.get("/api/projects")[1]["projects"]:
+        api.delete(f"/api/projects/{p['id']}")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("#empty", state="visible", timeout=15000)
+    onb = page.locator("#empty-onboard")
+    assert onb.is_visible(), "空看板没给新手引导"
+    assert page.locator(".empty-steps span").count() == 3, "三步引导不完整"
+    assert not page.locator("#list-head").is_visible(), "真空看板还挂着「项目 / 按最近更新排序」表头"
+    txt = onb.inner_text()
+    for must in ("新建项目", "交接说明", "复制"):
+        assert must in txt, f"三步引导缺了「{must}」：{txt}"
+
+    onb.locator("button[data-act='openProjectModal']").click()
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+
+
+def test_memory_form_button_does_not_overflow_the_sidebar(ui):
+    """记忆表单的按钮必须留在侧栏面板里。
+
+    2026-10-22 实测溢出 88px：「存」按钮跑到隔壁列的地盘上，鼠标点上去命中的是
+    隔壁列（Playwright 报 intercepts pointer events）。这条直接量几何，不再靠点击碰运气。
+    """
+    page, api, _ = ui
+    make_project(api, "记忆表单几何项目")
+    page.reload(wait_until="domcontentloaded")
+    page.click(".pcard:has-text('记忆表单几何项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    page.click("[data-act='toggleMemoryForm']")
+    page.wait_for_selector("#memory-form", state="visible", timeout=10000)
+
+    geo = page.evaluate("""() => {
+      const form = document.querySelector('#memory-form');
+      const panel = form.closest('.panel');
+      const btn = form.querySelector("[data-act='saveMemory']");
+      const f = form.getBoundingClientRect(), p = panel.getBoundingClientRect();
+      const b = btn.getBoundingClientRect();
+      return {formRight: f.right, panelRight: p.right, btnRight: b.right, btnLeft: b.left};
+    }""")
+    assert geo["formRight"] <= geo["panelRight"] + 0.5, f"表单比面板还宽：{geo}"
+    assert geo["btnRight"] <= geo["panelRight"] + 0.5, f"按钮溢出面板右侧：{geo}"
