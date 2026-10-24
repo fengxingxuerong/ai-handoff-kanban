@@ -487,8 +487,14 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
    （`test_ai_command_prompt_keys_on_ids_not_titles` 直接 inspect 端点源码，搬它要连测试迁，收益不值）。
    以后搬任何模块，先 `grep` 探针表把门禁的 `file` 指针一起搬（哑火教训见档案）。
 2. **发版节奏（2026-10-24 起）**：`ci_local --with-exe` 全绿 → 推 main 等 CI 绿 →
-   打 tag（`v` + version.py 的数，不同源 CI 会拦）→ CI 自动发 GitHub Release（两个 exe）。
-   仓库已更名 `fengxingxuerong/ai-handoff-kanban`（旧 URL 自动重定向），配了 description/topics 与英文 README。
+   打 tag（`v` + version.py 的数，不同源 CI 会拦）→ CI 自动发 GitHub Release（两个 exe）
+   并推 GHCR 镜像。仓库已更名 `fengxingxuerong/ai-handoff-kanban`（旧 URL 自动重定向），
+   配了 description/topics 与英文 README；官方 Registry 的元数据在仓库根 `server.json`。
+3. **条件触发的路线图（都已想清楚并论证，别提前做）**：evidence 完成证据（等真实
+   「缺证据导致接手失败」案例）、任务 claim/租约（等同时跑 2+ agent 改同一块板）、
+   SQLite（等列表接口日常 >300ms）、Smithery（等将来发包）。论证与触发线见档案
+   「不要再做的事」与各轮叙事。分发侧的待办是用户的登录动作（glama/表单/Registry 发布），
+   清单在 DELIVERY 材料，不属于工程。
 
 > ⚠️ **本文件可能被加载预算截断**（实测 65536 字节）。若你读到的内容在中途断掉，
 > 按上面那张「去哪看」的表去 `docs/` 取对应小节 —— **没读到不等于没有**。
