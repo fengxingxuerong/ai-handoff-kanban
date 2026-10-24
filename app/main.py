@@ -159,14 +159,49 @@ from .context_slice import (  # noqa: F401  —— 测试与 MCP 也可从 app.m
     parse_since,
 )
 from .version import APP_VERSION, BUILD_TIME
+# 端口兜底值与「活数据直链」的唯一实现（2026-10-24 从本文件与 mcp_server 各一份收敛到一处）
+from .service import DEFAULT_PORT, local_url
+
+# 字段级白名单/上限/清洗、示例数据与 HTTP 请求模型：2026-10-24 整体拆出
+# （纯常量 + 纯函数 + 纯声明）。这里保留同名转发，既有调用点、测试与 monkeypatch 路径不变。
+from .fields import (  # noqa: F401,E402
+    DEFAULT_PRIORITY,
+    DEFAULT_STATUS,
+    DEFAULT_TASK_STATUS,
+    MAX_BLOCKED_REASON,
+    MAX_MILESTONES,
+    MAX_MILESTONE_NAME,
+    MAX_REPO_ACK_NOTE,
+    MAX_SAVED_VIEWS,
+    MAX_VIEW_NAME,
+    MAX_VIEW_QUERY,
+    _clean_milestones,
+)
+from .sampledata import sample_data as _sample_data  # noqa: F401,E402
+from .schemas import (  # noqa: F401,E402
+    AIConfigIn,
+    AgentFilesBody,
+    AssignIn,
+    BulkDeleteIn,
+    CommandBody,
+    HandoffBody,
+    ImportBody,
+    JournalIn,
+    MemoryIn,
+    ProjectIn,
+    RepoAckIn,
+    RestoreBody,
+    SaveExportBody,
+    SummarizeBody,
+    SuggestionUpdate,
+    TaskIn,
+    ViewIn,
+)
 
 # 交接包里打印的直链端口。桌面壳用同一个环境变量起服务，两边口径一致；
-# 用户没设时两边都落回 18320。服务没开时链接取不到，交接包正文仍可用（它是快照）。
-SERVICE_PORT = os.environ.get("KANBAN_PORT", "18320")
-# 合法值白名单：状态/优先级会被前端拼进 class 与文本，必须收口
-DEFAULT_STATUS = ["规划中", "进行中", "已暂停", "已完成"]
-DEFAULT_TASK_STATUS = ["待办", "进行中", "待审查", "已完成", "阻塞"]
-DEFAULT_PRIORITY = ["高", "中", "低"]
+# 用户没设时两边都落回 `service.DEFAULT_PORT`（**这一个数只有一处**：2026-10-24 之前
+# main / desktop 各写了一份 18320，改一处漏一处就会出现"服务在 18321、直链指向 18320"）。
+SERVICE_PORT = os.environ.get("KANBAN_PORT", DEFAULT_PORT)
 
 # 数据文档与机器可读交接包的**结构版本**，与 APP_VERSION（发布号）分开：
 # 换机导入时"这份 JSON 的字段形状是哪一版"和"看板是第几版"是两件事。
@@ -212,114 +247,6 @@ from .paths import (  # noqa: E402,F401
 _LOCK = threading.Lock()
 _LOCK_DEPTH = threading.local()   # _cross_process_lock 的同线程重入计数
 
-def _sample_data() -> dict:
-    """首次运行展示的示例数据。
-
-    时间戳**按相对今天生成**：写死日期的版本用两周后就会让新用户一进来看到
-    「37 天没记录」「更新于 9 月」和成排的停滞告警，像自己的看板坏了。
-    另外进度与任务完成数要自洽 —— `realityVerdicts` 会核对「进度 65% 却 0 条完成」
-    这类矛盾，示例不能自带一条假告警。示例里的代码路径留空：指向不存在的本机目录
-    只会让「代码现实」面板第一次打开就报读不到。
-    """
-    now = datetime.now()
-
-    def at(days_ago: int = 0) -> str:
-        return (now - timedelta(days=days_ago)).strftime("%Y-%m-%d %H:%M")
-
-    def due(days: int) -> str:
-        return (now + timedelta(days=days)).strftime("%Y-%m-%d")
-
-    return {
-        "projects": [
-            {
-                "id": "sample-a",
-                "name": "示例项目 A · 后台系统",
-                "status": "进行中",
-                "progress": 65,
-                "priority": "高",
-                "tags": ["全栈", "monorepo"],
-                "repo_path": "",
-                "background": "全栈后台管理系统，monorepo 架构，已覆盖核心业务域决策。",
-                "handoff_note": "接手前先看 docs 目录的架构说明；已有决策改动前先读对应文档；前端有部分页面是假实现，注意核对。",
-                "next_action": "补完剩余接口联调，跑一遍全量测试基线",
-                "tasks": [
-                    {"id": "t1", "title": "接口联调", "desc": "前后端联调剩余接口，确认数据流",
-                     "status": "进行中", "priority": "高", "agent": "",
-                     "created_at": at(20), "updated_at": at(1), "due_date": due(7)},
-                    {"id": "t2", "title": "全量测试基线回归", "desc": "跑通全部测试并修复失败用例",
-                     "status": "待办", "priority": "高", "agent": "",
-                     "created_at": at(15), "updated_at": at(2), "due_date": due(5),
-                     "acceptance": ["全部用例通过", "失败项写进交接说明"]},
-                    {"id": "t3", "title": "前端假实现核对", "desc": "排查哪些页面是 setTimeout 假实现，补齐真实接口",
-                     "status": "待办", "priority": "中", "agent": "",
-                     "created_at": at(10), "updated_at": at(3), "depends_on": ["t6"]},
-                    {"id": "t6", "title": "基础框架搭建", "desc": "脚手架、路由与构建流程",
-                     "status": "已完成", "priority": "高", "agent": "",
-                     "created_at": at(25), "updated_at": at(6), "done_at": at(6)},
-                ],
-                "created_at": at(25),
-                "updated_at": at(1),
-            },
-            {
-                "id": "sample-b",
-                "name": "示例项目 B · 内容流水线",
-                "status": "进行中",
-                "progress": 75,
-                "priority": "中",
-                "tags": ["AI 写作", "多模型流水线"],
-                "repo_path": "",
-                "background": "内容生产项目，多模型流水线持续演进。",
-                "handoff_note": "长跑任务需与会话解耦启动；进程排查时注意别误杀流水线后台进程；重启长跑前先做编译+符号完整性冒烟。",
-                "next_action": "继续验证流水线健壮性，处理下一轮生成结果质检",
-                "tasks": [
-                    {"id": "t4", "title": "流水线健壮性验证", "desc": "断点续传、守护进程、健康池冷却等机制验证",
-                     "status": "进行中", "priority": "中", "agent": "",
-                     "created_at": at(18), "updated_at": at(2), "due_date": due(10)},
-                    {"id": "t5", "title": "生成结果质检", "desc": "对最新一轮生成内容做通读级终审",
-                     "status": "待办", "priority": "中", "agent": "",
-                     "created_at": at(12), "updated_at": at(2)},
-                    {"id": "t7", "title": "多模型路由接入", "desc": "按任务类型选择模型并记录用量",
-                     "status": "已完成", "priority": "中", "agent": "",
-                     "created_at": at(22), "updated_at": at(8), "done_at": at(8)},
-                    {"id": "t8", "title": "失败回退策略", "desc": "端点失败时切换备用 Key 与模型",
-                     "status": "已完成", "priority": "高", "agent": "",
-                     "created_at": at(24), "updated_at": at(9), "done_at": at(9)},
-                ],
-                "created_at": at(26),
-                "updated_at": at(2),
-            },
-            {
-                "id": "sample-c",
-                "name": "示例项目 C · 文本润色工具",
-                "status": "已暂停",
-                "progress": 50,
-                "priority": "中",
-                "tags": ["文本处理"],
-                "repo_path": "",
-                "background": "中文文本润色工具，当前已暂停。",
-                "handoff_note": "暂停中。恢复时先看项目文档确认当前实现进度与下一步计划。",
-                "next_action": "暂停中，暂无下一步",
-                "tasks": [],
-                "created_at": at(35),
-                "updated_at": at(20),
-            },
-            {
-                "id": "sample-d",
-                "name": "示例项目 D · 扫描器",
-                "status": "已完成",
-                "progress": 100,
-                "priority": "低",
-                "tags": ["安全", "对标评测"],
-                "repo_path": "",
-                "background": "命令行扫描器，已完成实战评测。",
-                "handoff_note": "已完结。如需继续迭代可参考实战评测结果。",
-                "next_action": "已完结",
-                "tasks": [],
-                "created_at": at(60),
-                "updated_at": at(40),
-            },
-        ]
-    }
 
 
 # ---- 任务关联的代码位置（交接时说清"改哪里"） ----
@@ -594,11 +521,6 @@ def _readiness_score(p: dict) -> int:
 
 # ---------------- 请求模型 ----------------
 
-# 自定义视图（Plane Views 轻量版）：总览筛选条件的「命名 → 保存 → 切换」薄壳。
-# 它是追加型存储（存 projects.json 顶层 `views`），按硬性约定 11 必须有上限。
-MAX_SAVED_VIEWS = 30
-MAX_VIEW_NAME = 40
-MAX_VIEW_QUERY = 200   # 视图里保存的搜索词上限
 
 
 def _clean_views(v) -> list[dict]:
@@ -641,169 +563,23 @@ def _clean_views(v) -> list[dict]:
     return out
 
 
-# 里程碑（P2 轻量版）上限：方案明确「追加型字段设上限，里程碑≦20 个」。
-MAX_MILESTONES = 20
-MAX_MILESTONE_NAME = 40   # 也用于任务的 milestone 归属字段（与名称同一截断口径）
-
-# 阻塞原因上限（第六轮竞品吸取：tsk/plandeck 的"阻塞必须带原因"最小切片）。
-# 上限只有一个数：TaskIn 清洗、MCP schema maxLength、界面 maxlength 共用（对账钉子）。
-MAX_BLOCKED_REASON = 300
 
 
-def _clean_milestones(v) -> list[dict]:
-    """清洗项目的里程碑数组：`[{name, done?}]`。
-
-    规则：只认带非空 name 的 dict（类型不对的整条丢弃）；name 去首尾空白并截断；
-    同名去重（按首次出现的顺序保留）；`done` 只当布尔用，其余值一律按 False；
-    总量封顶 `MAX_MILESTONES`。清出来的结构保证前端与统计模块拿到稳定形状。
-    """
-    out: list[dict] = []
-    if isinstance(v, str):
-        v = [{"name": x} for x in v.replace("\n", ",").split(",")]
-    if not isinstance(v, (list, tuple)):
-        return []
-    for item in v:
-        if not isinstance(item, dict):
-            continue
-        name = str(item.get("name") or "").strip()[:MAX_MILESTONE_NAME]
-        if not name or name in [m["name"] for m in out]:
-            continue
-        out.append({"name": name, "done": bool(item.get("done"))})
-        if len(out) >= MAX_MILESTONES:
-            break
-    return out
 
 
-class ProjectIn(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    status: Literal["规划中", "进行中", "已暂停", "已完成"] = "规划中"
-    progress: int = Field(0, ge=0, le=100)
-    priority: Literal["高", "中", "低"] = "中"
-    tags: list[str] = []
-    repo_path: str = ""
-    background: str = ""
-    handoff_note: str = ""
-    next_action: str = ""
-    # 类型放宽为 list：清洗全部交给 _clean_milestones（非 dict 元素按规则丢弃、
-    # 不 422 —— 方案口径是「类型不对的整条丢弃」）。若钉死 list[dict]，
-    # pydantic 会在 validator 之前就把非 dict 元素拒掉，容错永远走不到。
-    milestones: list = []
-
-    @field_validator("tags")
-    @classmethod
-    def _clean_tags(cls, v: list[str]) -> list[str]:
-        out = []
-        for t in v or []:
-            t = (t or "").strip()[:24]
-            if t and t not in out:
-                out.append(t)
-        return out[:12]
-
-    @field_validator("milestones")
-    @classmethod
-    def _clean_milestones_val(cls, v):
-        return _clean_milestones(v)
 
 
-class TaskIn(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-    desc: str = ""
-    status: Literal["待办", "进行中", "待审查", "已完成", "阻塞"] = "待办"
-    priority: Literal["高", "中", "低"] = "中"
-    agent: str = ""
-    due_date: str = ""            # 截止日期 YYYY-MM-DD，空=未设置
-    refs: list[str] = []          # 相关代码位置，如 app/main.py:120；交接时用来说明"改哪里"
-    depends_on: list[str] = []    # 前置任务 id（同一项目内），用于排"先做哪个"
-    milestone: str = ""           # 归入的项目里程碑名（空=未归入）；普通字符串校验，非 Literal
-    acceptance: list[str] = []    # 验收标准（对标 Backlog.md 的 DoD）：逐条"怎么算完成"，
-                                  # 交接包与接手页带着走，待审查→已完成时照着验
-    blocked_reason: str = ""      # 为什么被卡住：**只在状态=阻塞时保留**，离开阻塞自动清空
-                                  # （历史留在 journal 的状态流转条目里）。见 _apply_task。
-    @field_validator("blocked_reason", mode="before")
-    @classmethod
-    def _clean_blocked_reason(cls, v):
-        v = (v or "").strip()
-        return v[:MAX_BLOCKED_REASON] if v else ""
-    @field_validator("due_date", mode="before")
-    @classmethod
-    def _clean_due(cls, v):
-        v = (v or "").strip()
-        if not v:
-            return ""
-        try:
-            datetime.strptime(v, "%Y-%m-%d")
-        except ValueError:
-            return ""
-        return v
-
-    @field_validator("milestone", mode="before")
-    @classmethod
-    def _clean_milestone(cls, v):
-        v = (v or "").strip()
-        return v[:MAX_MILESTONE_NAME] if v else ""
-
-    @field_validator("refs", mode="before")
-    @classmethod
-    def _clean_refs(cls, v):
-        return clean_refs(v)
-
-    @field_validator("depends_on", mode="before")
-    @classmethod
-    def _clean_deps(cls, v):
-        if isinstance(v, str):
-            v = [p for p in v.replace("\n", ",").split(",")]
-        if not isinstance(v, (list, tuple)):
-            return []
-        return [str(x).strip() for x in v if str(x).strip()]
-
-    @field_validator("acceptance", mode="before")
-    @classmethod
-    def _clean_acceptance(cls, v):
-        return clean_acceptance(v)
 
 
-class AssignIn(BaseModel):
-    """任务自动分配请求：把项目内『指定优先级、未完成、依赖已就绪』的任务批量指派给某智能体。
-
-    `overwrite=True` 时连已有负责人的任务一起覆盖（默认跳过，保护手工指派）。
-    """
-    agent: str = Field(..., min_length=1, max_length=60, description="要指派给的智能体名，如 cline / 豆包")
-    priority: Literal["高", "中", "低"] = "高"
-    overwrite: bool = False
 
 
-class ViewIn(BaseModel):
-    """持久化自定义视图（Plane Views 轻量版）：`filter` 放行项目状态白名单，`q` 是搜索词。
-
-    保存语义是「upsert-by-name」：同名再存 = 更新该视图并返回原 id（带 `updated: true`），
-    不产生重复条目 —— 菜单里"把当前筛选存成同名视图"是常见动作，报 409 只会让人困惑。
-    """
-    name: str = Field(..., min_length=1, max_length=MAX_VIEW_NAME, description="视图名，同名即覆盖更新")
-    filter: str = Field("全部", description="项目状态筛选：全部/规划中/进行中/已暂停/已完成")
-    q: str = Field("", max_length=MAX_VIEW_QUERY, description="保存的搜索词，应用视图时回填搜索框")
-
-    @field_validator("filter")
-    @classmethod
-    def _clean_view_filter(cls, v):
-        v = (v or "").strip()
-        return v if v in ("全部", *DEFAULT_STATUS) else "全部"
 
 
-class BulkDeleteIn(BaseModel):
-    """批量删除：一次请求完成预快照 + 全有或全无，避免逐条 DELETE 的半删状态。"""
-    ids: list[str] = Field(..., min_length=1, max_length=100)
-    confirm: bool = False
 
 
-# 备注被原样写进审计行：不设上限时，一次请求就能把一行撑成任意长
-# （行数上限挡不住行内膨胀）。与 journal 同一条纪律：超限在边界被拒，不是被静默裁。
-MAX_REPO_ACK_NOTE = 500
 
 
-class RepoAckIn(BaseModel):
-    """确认仓库已读；progress 为空时只清变化标记，不改百分比。"""
-    progress: int | None = Field(None, ge=0, le=100)
-    note: str = Field("", max_length=MAX_REPO_ACK_NOTE)
+
 
 
 # ---------------- 应用 ----------------
@@ -1738,11 +1514,6 @@ def _append_journal(t: dict, text: str, when: str = "") -> None:
     journal.append_journal(t, text, when or now_str())
 
 
-class JournalIn(BaseModel):
-    # 上限与 `MAX_JOURNAL_TEXT` 同一个数（以前声明收 2000、落盘偷偷截到 500 ——
-    # 智能体写 1200 字的记录会无声掉一半，而回执还写着"已记录"）。
-    # 对账钉子：test_journal_limit_is_one_number_everywhere
-    text: str = Field(..., min_length=1, max_length=MAX_JOURNAL_TEXT)
 
 
 def append_task_journal(tid: str, text: str) -> dict:
@@ -1795,8 +1566,14 @@ def delete_task(tid: str):
 # ---- 交接摘要导出 ----
 
 def _local_url(path: str) -> str:
-    """本机服务的直链（只给 127.0.0.1，不给局域网地址——不出本机是硬边界）"""
-    return f"http://127.0.0.1:{SERVICE_PORT}{path}"
+    """本机服务的直链（只给 127.0.0.1，不给局域网地址——不出本机是硬边界）
+
+    2026-10-24：格式实现搬到 `app/service.py`（原先 MCP 那边又抄了一份），这里只做转发。
+    **`SERVICE_PORT` 仍住在 main 里**（`tests/test_api.py:1140` monkeypatch 的就是这个全局：
+    交接包直链端口必须来自它、不许写死）—— 所以包装必须把全局**当参数传下去**，
+    不能改成让 service 自己读环境变量，否则那条契约会静默失效。
+    """
+    return local_url(SERVICE_PORT, path)
 
 
 # [handoff_meta.py] 本节已于 2026-09-26 整体搬出（实现逐字未改），名字改为从 app.handoff_meta 导入，见文件顶部 import。
@@ -1893,11 +1670,6 @@ def api_stats():
     }
 
 
-class SaveExportBody(BaseModel):
-    filename: str = "交接包.md"
-    content: str = ""
-    path: str | None = None  # 可选：显式保存路径（用户输入）
-    overwrite: bool = False  # 显式路径时是否允许覆盖已有文件（默认不覆盖）
 
 
 @app.post("/api/export/save")
@@ -2174,13 +1946,6 @@ def _agent_files_credential_note(hits: int, redacted: bool) -> str:
             "一旦提交就进了版本史。勾选「写前脱敏」可只写掩码。")
 
 
-class AgentFilesBody(BaseModel):
-    dir: str = ""                       # 目标仓库根目录；留空表示只预览不写盘
-    targets: list[str] | None = None
-    content: str | None = None          # 前端已预览过的内容，传回来可省一次模型调用
-    overwrite: bool = False             # 默认不覆盖仓库里已有的入口文件（可能是用户手写的）
-    check_only: bool = False            # 只体检：逐目标比对本应写的内容与磁盘现状，不写盘
-    redact: bool = False                # 写盘前先脱敏（默认关：这是往用户自己的仓库写自己的文档）
 
 
 @app.post("/api/export/agent-files/{pid}")
@@ -2359,8 +2124,6 @@ def export_all_data():
     }
 
 
-class ImportBody(BaseModel):
-    content: str = Field(..., min_length=2, max_length=10_000_000)
 
 
 def _writable_projects(projects: list) -> tuple[list, list[str]]:
@@ -2594,24 +2357,6 @@ def _trim_memories(items: list[dict]) -> None:
         del items[:-KEEP_MEMORIES_ON_TRIM]
 
 
-class MemoryIn(BaseModel):
-    pid: str = ""
-    type: str = "事实"
-    text: str = Field(..., min_length=1, max_length=2000)
-    source: str = "手动"
-    expires: str = ""   # 时效（YYYY-MM-DD，空=长期有效）；过期后不进交接包/AGENTS.md
-
-    @field_validator("expires", mode="before")
-    @classmethod
-    def _clean_expires(cls, v):
-        v = (v or "").strip()
-        if not v:
-            return ""
-        try:
-            datetime.strptime(v, "%Y-%m-%d")
-        except ValueError:
-            return ""
-        return v
 
 
 @app.get("/api/memories")
@@ -2772,8 +2517,6 @@ def ingest_session(body: dict):
 
 # ---- 数据恢复：从 .bak 或历史快照还原（损坏自愈之后还能回去） ----
 
-class RestoreBody(BaseModel):
-    source: str = "bak"
 
 
 def _peek_projects(path: Path) -> dict:
@@ -2969,9 +2712,6 @@ def restore_data(body: RestoreBody):
 
 # ---- 会话粘贴 AI 提炼 ----
 
-class SummarizeBody(BaseModel):
-    pid: str = ""
-    text: str = Field(..., min_length=10, max_length=20000)
 
 
 def _summarize_inner(pid: str, text: str) -> dict:
@@ -3168,13 +2908,6 @@ def _projects_brief(projects: list[dict]) -> list[dict]:
         stalled_fn=_stalled_for_brief)
 
 
-class AIConfigIn(BaseModel):
-    endpoints: list[dict] | None = None
-    active_model: str | None = None
-    schedule: dict | None = None
-    mcp_readonly: bool | None = None
-    session_sources: list[dict] | None = None
-    budget_limit: float | None = None
 
 
 # _merge_keys 2026-10-07 迁入 app/llm.py（merge_keys，与 mask_matches 同域）；main 侧是转发别名
@@ -3330,10 +3063,6 @@ def ai_report_detail(rid: str):
 
 # ---- 手动应用监管建议 ----
 
-class SuggestionUpdate(BaseModel):
-    project_id: str
-    field: str = "next_action"
-    value: str = ""
 
 
 MAX_SUGGESTION_VALUE = 2000   # 单条建议值的上限。整份 JSON 每次请求都整读整写，
@@ -3399,8 +3128,6 @@ def ai_apply_suggestions(body: list[SuggestionUpdate], dry_run: int = 0):
 
 # ---- 交接文档智能生成 ----
 
-class HandoffBody(BaseModel):
-    mode: str = "generate"  # generate=新写 / polish=润色现有
 
 
 @app.post("/api/ai/handoff/{pid}")
@@ -3431,8 +3158,6 @@ def ai_generate_handoff(pid: str, body: HandoffBody):
 
 # ---- 自然语言维护看板 ----
 
-class CommandBody(BaseModel):
-    text: str = Field(..., min_length=1, max_length=500)
 
 
 # 这两份名单就是 /api/ai/command 告诉模型的"能改什么"，也是前端 execSingleAction

@@ -74,6 +74,33 @@ def test_every_test_file_actually_collects_tests():
     assert not empty, f"这些 test_*.py 里一条用例都没有：{empty}"
 
 
+def test_default_port_is_written_in_exactly_one_place():
+    """端口兜底值只许有一处 —— 「同一条清单不许两份」的具体化。
+
+    为什么需要它（2026-10-24 实测）：这个数曾被**写死三份** —— `app/main.py` 的
+    `SERVICE_PORT` 兜底、`scripts/desktop.py` 的 `PORT` 兜底、`app/handoff_page.py`
+    的 `port` 默认参数。改一处漏一处的后果不会报错，只会让桌面壳起在 18321、
+    而交接包正文里的直链写 18320 —— 接手方去点一个没人听的端口。
+    现在它们全部取自 `app/service.DEFAULT_PORT`，这条把"一处"钉住。
+
+    口径（**别把它放宽成"全仓库"**）：只看产品代码 `app/*.py` 与 `scripts/desktop.py`。
+    `scripts/live_check.py` 这类联调工具自带的 `http://127.0.0.1:18320` 是另一回事 ——
+    它们每次都由门禁显式传 base_url，把它们算进来只会造出假红，而假红的下场是
+    "有人把这条门禁删掉"。
+    """
+    targets = sorted((ROOT / "app").glob("*.py")) + [ROOT / "scripts" / "desktop.py"]
+    hits = []
+    for p in targets:
+        for i, ln in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+            code = ln.split("#")[0]                       # 注释里讲历史是允许的
+            if re.search(r"""["']18320["']""", code):      # 只认"真的当字面量用了"
+                hits.append(f"{p.relative_to(ROOT)}:{i}")
+    assert len(hits) == 1, (
+        f"端口兜底值应当只有一处（app/service.py 的 DEFAULT_PORT），实测写了 {len(hits)} 处：{hits}")
+    assert "service.py" in hits[0], (
+        f"那唯一一处应当在 app/service.py，实测在 {hits[0]}")
+
+
 def test_coverage_floor_is_enforced_by_the_release_gate():
     """覆盖率门槛必须真的拦人，而且只能有一份数字。
 

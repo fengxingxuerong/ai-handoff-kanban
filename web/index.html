@@ -99,6 +99,7 @@
   <div class="empty" id="empty" style="display:none">
     <div class="big">🗂️</div>
     <div id="empty-msg">还没有项目，点右上角「新建项目」开始搭建你的交接看板吧</div>
+    <button class="btn" id="empty-action" data-act="resetOverview" hidden>查看全部项目</button>
     <div class="empty-onboard" id="empty-onboard" hidden>
       <div class="empty-steps">
         <span><b>1</b> 新建项目</span>
@@ -255,7 +256,7 @@
               </select>
             </span>
           </h3>
-          <div class="kanban">
+          <div class="kanban" id="kanban-board">
             <div class="kcol k-todo">
               <div class="khead"><span class="dot"></span>待办<span class="n" id="c-todo">0</span></div>
               <div id="col-todo"></div>
@@ -276,6 +277,12 @@
               <div class="khead"><span class="dot"></span>阻塞<span class="n" id="c-blocked">0</span></div>
               <div id="col-blocked"></div>
             </div>
+          </div>
+          <div class="kanban-empty" id="kanban-empty" hidden>
+            <div class="ke-icon">🗃️</div>
+            <div class="ke-title">还没有任务</div>
+            <div class="ke-hint">把下一件事写进来，交接时智能体才知道从哪开始。</div>
+            <button class="btn primary" data-act="openTaskModal">＋ 新建第一个任务</button>
           </div>
         </div>
       </div>
@@ -669,6 +676,10 @@
         <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--text-dim)">
           <input type="checkbox" id="agentsmd-overwrite" style="width:auto" aria-label="覆盖已有入口文件">
           覆盖已有文件（默认跳过，避免把你手写的 AGENTS.md / CLAUDE.md 冲掉；两个保存按钮共用这一项）
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--text-dim)">
+          <input type="checkbox" id="agentsmd-redact" style="width:auto" aria-label="写前脱敏">
+          写前脱敏（默认关：这是往你自己的仓库写自己的文档。开着写只留掩码 —— 文档里有 API Key / 令牌 / 密码时会提示你先决定）
         </label>
         <div style="font-size:11px;color:var(--text-faint);margin-top:6px;line-height:1.7">
           AGENTS.md · CLAUDE.md（桥接 @AGENTS.md，Claude Code 只认这个）· .cursor/rules/project.mdc（带 frontmatter）·

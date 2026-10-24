@@ -284,8 +284,8 @@ MUTATIONS: list[dict] = [
     },
     {
         "id": "live_url_wrong_port",
-        "file": "app/main.py",
-        "old": '    return f"http://127.0.0.1:{SERVICE_PORT}{path}"',
+        "file": "app/service.py",
+        "old": '    return f"http://127.0.0.1:{port}{path}"',
         "new": '    return f"http://127.0.0.1:18321{path}"',
         "why": "交接包里的实时直链端口写死成 18321：自定义端口部署时智能体拿到死链",
         "tests": ["tests/test_api.py", "tests/test_mcp_server.py"],
@@ -487,7 +487,7 @@ MUTATIONS: list[dict] = [
     },
     {
         "id": "milestone_dedupe_removed",
-        "file": "app/main.py",
+        "file": "app/fields.py",
         "old": '        if not name or name in [m["name"] for m in out]:',
         "new": "        if not name:",
         "why": "里程碑同名去重失效：两条同名里程碑并存，归组任务时按 name 匹配会分到第一条（语义漂移）",
@@ -495,7 +495,7 @@ MUTATIONS: list[dict] = [
     },
     {
         "id": "milestone_cap_removed",
-        "file": "app/main.py",
+        "file": "app/fields.py",
         "old": "        out.append({\"name\": name, \"done\": bool(item.get(\"done\"))})\n        if len(out) >= MAX_MILESTONES:",
         "new": "        out.append({\"name\": name, \"done\": bool(item.get(\"done\"))})\n        if len(out) >= MAX_MILESTONES + 999:",
         "why": "里程碑上限失效：海量里程碑写入核心数据文件并被整份解析，追加型存储失控",
@@ -503,7 +503,7 @@ MUTATIONS: list[dict] = [
     },
     {
         "id": "milestone_task_name_not_trimmed",
-        "file": "app/main.py",
+        "file": "app/schemas.py",
         "old": '        v = (v or "").strip()\n        return v[:MAX_MILESTONE_NAME] if v else ""',
         "new": '        v = (v or "")\n        return v[:MAX_MILESTONE_NAME] if v else ""',
         "why": "任务 milestone 归属不去首尾空白：『 甲 』与『甲』归不进同一组，进度条错",
@@ -573,7 +573,7 @@ MUTATIONS: list[dict] = [
     },
     {
         "id": "repo_ack_note_uncapped",
-        "file": "app/main.py",
+        "file": "app/schemas.py",
         "old": '    note: str = Field("", max_length=MAX_REPO_ACK_NOTE)',
         "new": '    note: str = ""',
         "why": "确认备注不设上限：一次请求就能把一行审计撑成任意长（行数上限挡不住行内膨胀）",
@@ -722,8 +722,17 @@ MUTATIONS: list[dict] = [
         "tests": ["tests/test_api.py", "tests/test_mcp_server.py"],
     },
     {
+        "id": "port_default_written_twice",
+        "file": "app/handoff_page.py",
+        "old": '                       port: str = DEFAULT_PORT, generated_at: str = "",',
+        "new": '                       port: str = "18320", generated_at: str = "",',
+        "why": "端口兜底值又被写死一份：桌面壳起在 18321 时，接手页里那三条实时直链"
+               "仍指向 18320 —— 接手方点一个没人听的端口，而且不报任何错",
+        "tests": ["tests/test_suite_hygiene.py"],
+    },
+    {
         "id": "sample_dates_hardcoded_again",
-        "file": "app/main.py",
+        "file": "app/sampledata.py",
         "old": "    def at(days_ago: int = 0) -> str:\n"
                "        return (now - timedelta(days=days_ago)).strftime(\"%Y-%m-%d %H:%M\")",
         "new": "    def at(days_ago: int = 0) -> str:\n"
@@ -754,6 +763,34 @@ MUTATIONS: list[dict] = [
         "new": '  <div class="detail-scroll d-head">\n    <div id="repo-watch"',
         "why": "头栏与滚动区被合成一个块（复制类名的典型手误）：滚动时头部跟着内容跑，或反过来盖住内容",
         "tests": ["tests/test_frontend.py"],
+    },
+    {
+        "id": "restore_safety_copy_failure_silent",
+        "file": "app/main.py",
+        "old": '                safety["state"] = "failed"\n'
+               '                safety["error"] = f"{type(exc).__name__}: {exc}"',
+        "new": "                pass",
+        "why": "恢复前安全副本失败被吞：确认框刚承诺过「当前数据会先另存为 before-restore.bak」，"
+               "拷贝失败却照旧回 ok:true —— 用户以为手里有退路，其实没有，且全程没提示",
+        "tests": ["tests/test_restore.py"],
+    },
+    {
+        "id": "agent_files_credential_warning_dropped",
+        "file": "app/main.py",
+        "old": "    sensitive_hits = count_sensitive(content)",
+        "new": "    sensitive_hits = 0",
+        "why": "入口文件里的凭据不再报数：这份文档会被写进用户的仓库（通常要 git push），"
+               "不报数就等于让人蒙着眼把 Key 提交进版本史",
+        "tests": ["tests/test_agent_files.py"],
+    },
+    {
+        "id": "agent_files_redact_switch_ignored",
+        "file": "app/main.py",
+        "old": "        entries = {rel: redact_text(text) for rel, text in entries.items()}",
+        "new": "        entries = dict(entries)",
+        "why": "「写前脱敏」开关被无视：勾了还是把原文写进仓库，而回执与界面都会宣称已脱敏 ——"
+               "这正是「开关看着有反应、做的却是另一件事」的形状",
+        "tests": ["tests/test_agent_files.py"],
     },
 ]
 

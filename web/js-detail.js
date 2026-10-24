@@ -151,6 +151,10 @@ function renderDetail() {
   renderMilestones();
   renderTimeline();
   const tasks = sortTasks(p.tasks || [], taskSortMode);
+  const board = document.getElementById("kanban-board");
+  const boardEmpty = document.getElementById("kanban-empty");
+  if (board) board.style.display = tasks.length ? "" : "none";
+  if (boardEmpty) boardEmpty.hidden = tasks.length > 0;
   document.getElementById("d-task-total").textContent = "共 " + tasks.length + " 个任务";
   const cols = { "待办": "col-todo", "进行中": "col-doing", "待审查": "col-review", "已完成": "col-done", "阻塞": "col-blocked" };
   const counts = { "待办": 0, "进行中": 0, "待审查": 0, "已完成": 0, "阻塞": 0 };

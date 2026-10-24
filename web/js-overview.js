@@ -44,6 +44,19 @@ function setFilter(el, f) {
   renderOverview();
 }
 
+// 空结果页的「查看全部」：同时清掉状态筛选、搜索词与已保存视图，
+// 让用户不必先找到「全部」chip、再回头清搜索框（两条路都要手动走一遍）。
+function resetOverview() {
+  filter = "全部";
+  activeViewId = "";
+  if (searchInput) searchInput.value = "";
+  updateSearchClear();
+  document.querySelectorAll(".chip").forEach(c =>
+    c.classList.toggle("active", c.dataset.f === "全部"));
+  syncViewSelect();
+  renderOverview();
+}
+
 function renderOverview() {
   const q = (document.getElementById("search").value || "").trim().toLowerCase();
   let list = projects.filter(p => {
@@ -75,18 +88,23 @@ function renderOverview() {
   if (listHead) listHead.style.display = projects.length ? "" : "none";
   const msg = document.getElementById("empty-msg");
   const onboard = document.getElementById("empty-onboard");
+  const emptyAction = document.getElementById("empty-action");
   if (list.length) {
     msg.textContent = "";
     if (onboard) onboard.hidden = true;
+    if (emptyAction) emptyAction.hidden = true;
   } else if (!projects.length) {
     msg.textContent = "还没有项目。先建一个，把交接说明和下一步写进去；换智能体时一键复制即可。";
     if (onboard) onboard.hidden = false;
+    if (emptyAction) emptyAction.hidden = true;
   } else if (q) {
     msg.textContent = `没有匹配「${q}」的项目（共 ${projects.length} 个）—— 换个词，或清空搜索框`;
     if (onboard) onboard.hidden = true;
+    if (emptyAction) { emptyAction.textContent = "清空搜索，查看全部"; emptyAction.hidden = false; }
   } else {
     msg.textContent = `「${filter}」状态下没有项目（共 ${projects.length} 个）—— 点「全部」看所有项目`;
     if (onboard) onboard.hidden = true;
+    if (emptyAction) { emptyAction.textContent = "查看全部项目"; emptyAction.hidden = false; }
   }
   grid.innerHTML = list.map(p => cardHTML(p)).join("");
   grid.dataset.rendered = "1";   // 骨架屏让位给真实卡片；也是给失败分支的信号"已经有内容了"
@@ -299,6 +317,14 @@ if (searchInput) {
     updateSearchClear();
     clearTimeout(searchTimer);
     searchTimer = setTimeout(renderOverview, 120);
+  });
+  // 搜索框里按 Esc = 退出这次搜索（标准交互）；stopPropagation 避免同时触发全局 Esc 关弹窗
+  searchInput.addEventListener("keydown", e => {
+    if (e.key === "Escape" && searchInput.value) {
+      e.preventDefault();
+      e.stopPropagation();
+      clearSearch();
+    }
   });
   updateSearchClear();
 }

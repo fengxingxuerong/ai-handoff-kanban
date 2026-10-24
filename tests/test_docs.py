@@ -16,6 +16,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 AGENTS = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+# 2026-10-24：AGENTS.md 按「是否每次都要读」切分了（154KB → 63KB，见它开头的「去哪看」表），
+# 参考资料搬进了 docs/。**数字跟着小节搬走了，门禁指针就得跟着搬** —— 这一条在探针上已经吃过
+# 一次教训（探针盯的 `old` 串随代码搬走就哑火）。所以判据分两类：
+#   · 必须常驻 AGENTS.md 的（模块表/探针数/状态行/测试文件数）：照旧只查 AGENTS；
+#   · 讲某件事本身的（工具数、版本叙事）：查**文档集合**，搬去哪都算数。
+DOCS = AGENTS + "\n".join(
+    p.read_text(encoding="utf-8") for p in sorted((ROOT / "docs").glob("*.md")))
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 MCP_SRC = (ROOT / "scripts" / "mcp_server.py").read_text(encoding="utf-8")
 PROBE_SRC = (ROOT / "scripts" / "mutation_probe.py").read_text(encoding="utf-8")
@@ -49,7 +56,32 @@ def test_readme_mcp_tool_table_lists_every_tool():
     assert not missing, f"README 工具表漏列：{missing}"
     assert f"提供的工具（{len(actual)} 个）" in README, \
         f"README 写的工具数不是实测的 {len(actual)} 个"
-    assert f"MCP {len(actual)} 个工具" in AGENTS, f"AGENTS.md 的工具数对不上（实测 {len(actual)}）"
+    assert f"MCP {len(actual)} 个工具" in DOCS, f"AGENTS.md/ 文档集 的工具数对不上（实测 {len(actual)}）"
+
+
+def test_every_relative_doc_link_points_at_a_real_file():
+    """文档里的相对链接必须指向真实存在的文件。
+
+    为什么需要它：这类失效引用**没人会红**，只会让接手方点空 ——
+    2026-10-23 就抓到过一处：AGENTS.md 写着「见 README「和同类工具比」」，
+    而 README 里**根本没有这一节**，它静默挂了好几个版本（`test_docs` 对账的是数字，
+    对账不了引用）。同一天文档被切成 AGENTS.md + docs/ 五份，一次多出十几条链接 ——
+    链接存在性从此必须是机械可查的。
+
+    只查**相对路径**：http(s)/mailto/纯锚点跳过（那些是外部世界的事）。
+    """
+    missing = []
+    files = [ROOT / "AGENTS.md", ROOT / "README.md"] + sorted((ROOT / "docs").glob("*.md"))
+    for f in files:
+        for target in re.findall(r"\]\(([^)\s]+)\)", f.read_text(encoding="utf-8")):
+            if target.startswith(("http://", "https://", "mailto:", "#")):
+                continue
+            rel = target.split("#", 1)[0]
+            if not rel:
+                continue
+            if not (f.parent / rel).exists():
+                missing.append(f"{f.relative_to(ROOT)} → {target}")
+    assert not missing, "这些文档链接指向不存在的文件（点空 = 接手方以为没写）：\n  " + "\n  ".join(missing)
 
 
 def test_module_counts_in_both_docs_match_the_app_package():
@@ -100,10 +132,13 @@ def test_version_in_docs_matches_version_py():
     MCP `serverInfo` / exe 的 PE 版本资源都读它），唯独**文档这一侧没人看着** ——
     而这类"只出现在散文里的事实"正是本文件存在的理由（探针 45→54、MCP 工具 17→23、
     模块 21→22 都漂过）。判据取「状态行 + 版本叙事」两处，避免只改一处也算过。
+    **2026-10-24 起**：状态行仍必须常驻 AGENTS.md（接手方第一眼要看的就是它），
+    但版本叙事跟着「进度档案」搬进了 `docs/` —— 所以后者查**文档集合**。
     """
     v = _current_version()
     assert f"状态：v{v}" in AGENTS, (
         f"AGENTS.md「当前进度」的状态行必须写当前版本 v{v}（现读自 app/version.py）")
     assert f"v{v}" in README, f"README 里应写明当前版本 v{v}"
-    assert AGENTS.count(v) >= 2, (
-        f"AGENTS.md 里 {v} 只出现一次：状态行之外还应有一轮版本叙事（改了什么、为什么）")
+    assert DOCS.count(v) >= 2, (
+        f"文档集合里 {v} 只出现一次：状态行之外还应有一轮版本叙事（改了什么、为什么），"
+        f"现在它在 docs/进度与版本档案.md 里")

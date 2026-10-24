@@ -16,6 +16,9 @@ from __future__ import annotations
 import html
 
 from .readiness import readiness_line
+# 端口兜底值只在 app/service.py 一处（2026-10-24 收敛）：接手页里那三条实时直链的端口
+# 必须与服务实际在听的端口同源 —— 这里抄一份 18320 就是"点一个没人听的端口"的伏笔。
+from .service import DEFAULT_PORT
 
 # 依赖图布局
 COL_W, ROW_H, PAD = 230, 58, 16
@@ -146,7 +149,7 @@ footer{margin-top:32px;padding-top:12px;border-top:1px solid #2C2C32;color:#9A9A
 
 
 def build_handoff_page(p: dict, md: str = "", *, git_block: str = "",
-                       port: str = "18320", generated_at: str = "",
+                       port: str = DEFAULT_PORT, generated_at: str = "",
                        link_suffix: str = "") -> str:
     """生成单文件接手页 HTML。
 

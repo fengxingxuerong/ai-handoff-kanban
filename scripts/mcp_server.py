@@ -55,12 +55,16 @@ SERVER_VERSION = kanban.APP_VERSION
 
 # 桌面应用服务的端口，用于给出"活数据"直链。直接取本体的常量而不是重抄一遍
 # `os.environ.get("KANBAN_PORT", "18320")` —— 两份兜底值改一处就会漂移，
-# 而漂移的后果是交接包里的链接指向一个没在听的端口。
+# 而漂移的后果是交接包里的链接指向一个没在听的端口（兜底值本身现在只在 app/service.py 一处）。
 SERVICE_PORT = kanban.SERVICE_PORT
+
+# 直链格式：2026-10-24 起与后端共用同一实现（此前这里抄了一份 `http://127.0.0.1:{port}{path}`，
+# 正是本项目最忌的"两条路给不同答案"）。名字保住，调用点与测试照旧。
+from app.service import local_url as _local_url  # noqa: E402
 
 
 def local_url(path: str) -> str:
-    return f"http://127.0.0.1:{SERVICE_PORT}{path}"
+    return _local_url(SERVICE_PORT, path)
 
 # 支持协商的协议版本（新→旧）；客户端报别的版本时回落到最新
 SUPPORTED_VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]

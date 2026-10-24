@@ -22,7 +22,6 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-PORT = int(os.environ.get("KANBAN_PORT", "18320"))
 HOST = "127.0.0.1"
 WINDOW_TITLE = "AI 交接看板"
 
@@ -37,6 +36,15 @@ try:                                        # 冻结版里 app 是 hidden-import
     from app.version import APP_VERSION, BUILD_TIME
 except Exception:
     APP_VERSION, BUILD_TIME = "?", "?"
+
+# 端口兜底值：2026-10-24 起只在 app/service.py 一处（此前这里与 app/main.py 各写一份 18320，
+# 改一处漏一处就会出现"服务在 18321、交接包直链指向 18320"这种最难查的漂移）。
+# **故意不给 try/except 兜底**：`app.service` 是纯标准库的叶子模块，它取不到的话
+# 后面 `uvicorn.run("app.main:app")` 一样起不来 —— 与其留一个字面量在这儿等它漂，
+# 不如让导入失败当场炸在启动日志里（`startup.log` 是唯一的排查入口）。
+from app.service import DEFAULT_PORT
+
+PORT = int(os.environ.get("KANBAN_PORT", DEFAULT_PORT))
 
 
 def data_dir() -> Path:

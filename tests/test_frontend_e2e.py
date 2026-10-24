@@ -1956,6 +1956,64 @@ def test_search_clear_button_restores_the_full_board(ui):
     assert page.evaluate("document.activeElement && document.activeElement.id") == "search", \
         "清空后焦点跑了，想接着搜还得再点一次输入框"
 
+    # 键盘 Esc 也能退出搜索（标准交互）：输入后按 Esc，列表回来、焦点留在框里
+    page.fill("#search", "乙")
+    page.wait_for_timeout(300)
+    page.press("#search", "Escape")
+    page.wait_for_timeout(400)
+    assert page.input_value("#search") == "", "Esc 没有清空搜索词"
+    assert page.locator(".pcard").count() == total, "Esc 清空后没有回到全量列表"
+    assert page.evaluate("document.activeElement && document.activeElement.id") == "search"
+
+
+def test_empty_filter_and_search_offer_a_way_back(ui):
+    """筛选为空 / 搜索无结果时，除了提示还要有一个就地按钮回到全部。
+
+    以前提示写着「点全部」或「清空搜索」，但用户得自己回头找 chip 和清空按钮；
+    这里把两步合成一个动作。
+    """
+    page, api, _ = ui
+    make_project(api, "空结果甲项目")
+    make_project(api, "空结果乙项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_function("() => document.querySelectorAll('.pcard').length === 2", timeout=15000)
+
+    page.click(".filter-bar .chip:has-text('已完成')")
+    page.wait_for_selector("#empty-action", state="visible", timeout=5000)
+    assert "查看全部项目" in page.locator("#empty-action").inner_text()
+    page.click("#empty-action")
+    page.wait_for_function("() => document.querySelectorAll('.pcard').length === 2", timeout=10000)
+    assert page.locator(".filter-bar .chip.active").inner_text().strip() == "全部", \
+        "回到全部后 chip 高亮没同步"
+
+    page.fill("#search", "zzz不可能匹配zzz")
+    page.wait_for_selector("#empty-action", state="visible", timeout=5000)
+    assert "清空搜索" in page.locator("#empty-action").inner_text()
+    page.click("#empty-action")
+    page.wait_for_function("() => document.querySelectorAll('.pcard').length === 2", timeout=10000)
+    assert page.input_value("#search") == ""
+
+
+def test_project_without_tasks_shows_a_single_empty_board(ui):
+    """零任务项目不要摊开五个空列：给一个明确的空态和「新建第一个任务」。"""
+    page, api, _ = ui
+    make_project(api, "零任务空态项目")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click(".pcard:has-text('零任务空态项目')")
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    assert page.locator("#kanban-empty").is_visible(), "零任务项目没给空态"
+    assert not page.locator("#kanban-board").is_visible(), "零任务还摊开五个空列"
+
+    page.click("#kanban-empty [data-act='openTaskModal']")
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    page.fill("#t-title", "第一条任务")
+    page.click("[data-act='saveTask']")
+    page.wait_for_selector("#task-modal", state="hidden", timeout=10000)
+    page.wait_for_selector("#kanban-board", state="visible", timeout=10000)
+    assert not page.locator("#kanban-empty").is_visible(), "有任务后空态还在"
+    assert "第一条任务" in page.locator("#col-todo").inner_text()
+
 
 def test_empty_board_offers_a_three_step_onboarding(ui):
     """真一个项目都没有时给三步引导；有项目时这块必须收起来。
