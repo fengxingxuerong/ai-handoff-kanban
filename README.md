@@ -116,7 +116,7 @@ Windows 桌面应用（PyWebView 原生窗口，单文件 exe），内置深浅�
 
 ### 方式一：打包好的 exe（推荐日常使用）
 
-双击 `dist\AI交接看板.exe` 即可，无需安装 Python。首次启动自带示例项目，看板开箱即用；AI 功能需要你在 AI 设置里填自己的 Key（发行包不会内置任何 Key）。
+**从 [Releases](https://github.com/fengxingxuerong/ai-handoff-kanban/releases) 下载两个单文件 exe**（`AI-Handoff-Kanban-v*.exe` 主程序 + `AI-Handoff-Kanban-MCP-v*.exe` MCP 服务，附 SHA-256 校验和），无需安装 Python；也可以用 `build.bat` 自己打包出 `dist\AI交接看板.exe`。首次启动自带示例项目，看板开箱即用；AI 功能需要你在 AI 设置里填自己的 Key（发行包不会内置任何 Key）。
 
 > 运行环境：Windows 10/11 + Microsoft Edge WebView2 Runtime。Windows 11 通常自带；Windows 10 若启动空白，先安装 WebView2 Runtime。
 
