@@ -61,13 +61,20 @@ jobs:
           if not m or tag != "v" + m.group(1):
               sys.exit(f"tag {tag} 与 version.py 的 v{m.group(1) if m else '?'} 不一致 —— 先对齐再打 tag")
 
-      - name: 发布 GitHub Release（两个 exe，正文自动生成）
+      # 资产名必须 ASCII：GitHub 的资产名清理会剥掉 CJK 字符（2026-10-24 首跑实测
+      # `AI交接看板.exe` 被传成 `AI.exe`），dist 里的中文文件名保留不动 ——
+      # 复制成带 tag 的 ASCII 名再传，下载链接从此可打字、可分享、不会被改坏。
+      - name: 发布 GitHub Release（资产用 ASCII 名，正文自动生成）
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.exe \
+          cp "dist/AI交接看板.exe" "dist/AI-Handoff-Kanban-${GITHUB_REF_NAME}.exe"
+          cp "dist/AI交接看板-MCP.exe" "dist/AI-Handoff-Kanban-MCP-${GITHUB_REF_NAME}.exe"
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/AI-Handoff-Kanban-${GITHUB_REF_NAME}.exe" \
+            "dist/AI-Handoff-Kanban-MCP-${GITHUB_REF_NAME}.exe" \
             --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
 
       - name: 上传 exe（两个产物都留：GUI 主程序 + MCP 控制台服务）
