@@ -412,85 +412,28 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   凡是"真启动 exe"的自动化，一律带 `KANBAN_NO_WINDOW=1`（只服务不开窗），
   `frozen_smoke.py` 在 CI 里就是这么跑的（数据目录由它自己指定为 `%TEMP%\kanban_frozen_smoke`）。
 - **CI 已经在真跑**（2026-10-11 接上远端 `origin` 之后）：`.github/workflows/ci.yml` 是**唯一一份**
-  工作流（单入口：按锁文件安装 → `ci_local --with-exe` → 上传 exe，只在 `windows-latest`）。
-  实测三次全绿：run #1（de1dfe2）success 约 7 分钟、run #2（a3af088）success **7 分 35 秒**
-  （16:33:11 → 16:40:46 UTC）、run #3（a3ff8b3，v1.4.0 桌面端视觉轮）success，job `gates`
-  实测 **467 秒**（run 创建于 2026-10-15 16:22:34 UTC；run 与逐 job 明细都是带 GCM 已有凭据
-  走 API 查的，token 不回显、不落临时脚本）。**查 run 时 `?head_sha=` 只认 40 位完整 SHA** ——
-  给短号**不报错、只静默返回空的 `workflow_runs`**，极易被误读成"run 还没创建"（实测连查 5 次皆空，
-  换 `git rev-parse HEAD` 的全长后一次命中）；别为此去改提交或怀疑推送失败。首跑把本地预演唯一没覆盖的两处都验掉了 ——
-  步骤清单里有「装 Playwright 自带 chromium（界面门禁的第三级降级）」且成功（runner 上没有系统
-  Edge/Chrome，走的就是这级降级），actions 大版本兼容也一并验证。
-  **改 workflow 一律按"它会被真执行"来写** —— 这句话现在有实测背书。
-  **2026-10-18 连跑两次**：`fa9bfac`（探针 mtime 契约 + 版本号对账门禁）首跑**红在一条前端 E2E**
-  （`tests/test_frontend_e2e.py::test_detail_view_skips_rebuilding_the_hidden_overview`，
-  run `39052162314`，报"切回总览时没有补渲染"），同一份代码**本地全绿** —— 根因是用例赌了机器快慢：
-  `showOverview` 里 `loadOverview()` 是异步补渲染（等一次 `/api/projects` 回来才重建卡片），
-  用例点完立刻读卡片文本，本机 fetch 快就过、runner 上慢一拍就读到旧数据。定性办法是
-  **扣住 `/api/projects` 不放**做确定性复现（扣住时旧判据必红、放行后新判据等得到 → 竞态而非产品缺陷，
-  隐藏期间不重渲染是有意的优化），修法按惯例改成条件等待（`wait_for_function`）而不是加长睡眠；
-  `6421e2d` 复跑 run `39053864773`：`gates` **465 秒 success**、7 个步骤全绿。
-  **拉 job 日志**是排 CI 红的第一手段，注意两点：① `.../actions/jobs/{job_id}/logs` 会 302 到 blob 存储，
-  **跟随重定向时必须去掉 `Authorization` 头**（`curl -sL` 自动去掉；自己用 urllib 跟跳会撞 401）；
-  ② 仓库路径写错一个字母，API 回的是 `404 Not Found` 而**不是**空列表 —— 把它读成 "run 还没创建"
-  会白等好几轮（本次就这样绕了一圈，正确路径是 `fengxingxuerong/look`）。
-  **2026-10-18 后续两次**：`e547c2c`（CI 记录本身）与 `5350842`（前端分层 5→10 个文件）
-  两个 run（`39054573678` / `39056032979`）都是 `gates` **success**，后者 **454 秒**、10 个步骤全绿 ——
-  前端拆成 10 个文件后的首跑把"10 个 script 标签在干净 runner 上都能加载"也一并验掉了
-   （本地是 `live_ui_check` 16/0 零 JS 报错，两者同口径但环境不同）。
-   **2026-10-18 v1.7.2 轮两次**：一次性推上去的 10 个提交（v1.5.1→v1.7.1，run `39116037285`）
-   与随后的 `00a9a55`（run `39116791745`）、`33155e5`（run `39117335874`）三个 run 都是
-   `gates` **success**（最后一个 8 分 02 秒、9 个步骤全绿）。同轮两条可复算的观测：
-   ① 探活与推送会**各自独立**成败 —— 本轮 `git ls-remote --heads origin main` 连败 6 轮，
-   而紧接着的 `git push` 第 1 轮就成功（推送输出里的 `113ff5a..e209ced  main -> main`
-   才是权威确认，探针只用来挑时机）；
-   ② `git push` 只推提交，**不会**带走工作区里未跟踪的杂物 —— 手上有 `DELIVERY/` 之类的
-   未跟踪目录时推送本身是安全的（那些东西要影响本地门禁，是另一条线的事）。
-   **2026-10-18 v1.7.3 收口轮**：`5c9e804` + `18097e4`（总览截图补「代码变化」标记）推送成功，
-   run `39127793467` `gates` **success**（12:33:47 → 12:42:28 UTC，约 8 分 41 秒，7 步骤全绿）。
-   同轮线路中断约 1 小时：6 轮 `git ls-remote` 探针 + 9 轮 `git push` 全败，期间 `api.github.com`
-   200 / `example.com` 200 / `github.com` HTML 000，`github.com:443` TCP 探针直接连不上、
-   无代理配置 —— 定性为主站线路被干扰。本地提交全程安全（一个字节没动），恢复后探针第 1 轮
-   即通、`git push` 一次成功 —— 印证"探针只用来挑时机，权威确认看推送输出"。
-   **教训：线路中断时不要反复重试刷屏**，收手等恢复（一轮有界重试够定性）。
-   随后 `882c8cf`（CI 记录本身，纯文档）的 run `39129537093` **红在一条前端 E2E**
-   （`test_settings_and_recover_panel_open`）：本地与上一次 run 都是绿的，runner 上
-   `#recover-list` 一可见就 `inner_text()`，读到的是占位文本「加载中…」—— 与上午
-   `fa9bfac` 那次同型（赌"本机 fetch 比断言快"）。确定性复现：`page.evaluate` 把
-   `/api/recoverable` 的 fetch 推迟 1.5s，旧断言必红、且报错输出与 CI fragment 逐字同型；
-   修法同惯例 —— `wait_for_function` 等正文出现 + 明确断言给失败消息（`e5b1192`）。
-   同轮再次实测"探针只挑时机"：探针连通 3 轮，而 `git push` 还连超时（21s）两次才过。
-   `e5b1192` run `39131162803` `gates` **success**（13:21:11 → 13:32:13 UTC，约 11 分钟）。
-   （另注：本轮自己又踩了一次"短 SHA 查 run 静默返回空"—— 见下方那条已有记录，
-   改用 `git rev-parse HEAD` 全长后立刻查到。）
-   **2026-10-18 v1.7.4 UI 收口轮**：`93e9fd4`（五处前端缺陷修复 + 版本/文档/截图）推送成功 ——
-   探针前 3 轮连败、第 4 轮通，`git push` 第 1 轮即过（又一次"探针只挑时机"；另注意 shell 里
-   `git ls-remote | head` 的管道会盖掉退出码，探针判断要直接看命令退出码，2026-10-19 踩过）。
-   run `39146148602` `gates` **success**（16:41:29 → 16:50:34 UTC，约 9 分 05 秒；
-   7 个业务步骤全绿 + 4 个 Post 步骤全绿）；本轮在干净 runner 上把新版本资源（PE v1.7.4）与
-   「重打包后 exe 内嵌前端与仓库这份逐字节一致」一起验过。
-   **2026-10-19 v1.8.0 第六轮吸取轮**：`5e4c517`（五条全落 + 探针 64→68 + 文档）—— 探针与
-   `git push` 都是第 1 轮即过（推送输出 `8898284..5e4c517 main -> main` 即权威确认）；
-   run `39229025847` `gates` **success**（09:18:11 → 09:27:12 UTC，约 9 分 01 秒，步骤全绿）。
-   **2026-10-21 v1.9.0 第七轮吸取轮**：`8ec1816`（sections/since 切片 + v1.8.1 评测修复 +
-   探针 72→75 + 文档）推送成功（`4d0e813..8ec1816 main -> main`），`git push` 第 1 轮即过；
-   run `39573464312` `gates` **success**（08:59:27 → 09:10:09 UTC，约 10 分 38 秒，步骤全绿；
-   干净 runner 上重打包与冻结版自查一并通过）。
-   推送这一跳本身也会抖（2026-10-15 首遇，**2026-10-16 更正了探法**）：一次 `git push` 报
-  `Failed to connect to github.com:443 after 21070 ms`，而**同一时刻 `api.github.com` 返回 200** ——
-  分端点探测（含一个无关对照站点）定性为"主站线路被干扰、不是断网"。处置：本地提交一个都不动、
-  有界重试（最多 6 轮、轮间约 25 秒）。**探针必须打同一个 git 端点** ——
-  用 `git ls-remote --heads origin main`，**不要用 `curl https://github.com`**：
-  2026-10-16 实测 HTML 站点连续两次返回 200，而 git push 那两次都在 21 秒后连接超时
-  —— HTML 页面与 git 服务不是同一条路，拿前者探活会白等好几轮；换 git 端点探针后，
-  第 3 轮探通即一次推过。推成功后照旧轮询该提交的 CI 到终态（`?head_sha=` 用 40 位全长），
-  `conclusion=success` 且 job 明细全绿才收官。
-  历史：接远端之前它从未被执行过（"看起来对"不作数），当时的替代是 2026-10-07 的**本地预演**
-  （干净 venv 只按 `requirements.lock.txt` 安装，跑 `ci_local --with-exe` 11 步全绿、约 4 分钟
-  —— 锁文件"换机/CI/出包用它"这句承诺的实测背书）。
-  旧 `test.yml` 是它的复刻前身（2026-09-19 静态核对查出三处必红/必空：package job 只装
-  `requirements.txt` 没有 pyinstaller、GBK runner 上中文假红、exe 没上传），已于 2026-10-07 退役
-  删除 —— 两个 workflow 都监听 push，会双跑两份各自维护的步骤清单，正是「两处各写一遍必然漂」的形状。
+  工作流（单入口：按锁文件安装 → `ci_local --with-exe` → 上传 exe，只在 `windows-latest`；
+  2026-10-24 起另有 container 作业构建镜像推 GHCR）。累计数十次 run 全绿，逐 run 记录（含两次
+  E2E 竞态的完整定性过程、线路中断观测、旧 test.yml 退役原因）在 [docs/进度与版本档案.md](docs/进度与版本档案.md)
+  的「CI 运行史」。常驻教训：
+  - **查 run 用 `?head_sha=` 只认 40 位完整 SHA**：短号不报错、静默返回空 `workflow_runs`，
+    极易误读成"run 还没创建"（踩过两次）；先 `git rev-parse HEAD` 取全长。
+  - **拉 job 日志**：`.../actions/jobs/{job_id}/logs` 会 302 到 blob 存储，跟随重定向时必须
+    去掉 `Authorization` 头（`curl -sL` 自动去；urllib 自己跟会 401）；仓库路径写错一个字母
+    API 回 `404` 而**不是**空列表，别读成"run 还没创建"。
+  - **前端 E2E 在 runner 上红的头号形状**是用例赌"本机 fetch 比断言快"（两起同型）：
+    定性用 `page.route`/`page.evaluate` 扣住对应请求做确定性复现，修法一律 `wait_for_function`
+    条件等待，不加长睡眠。
+  - **探活与推送各自独立成败**：权威确认只看 `git push` 的输出（`a1b2c3..d4e5f6 main -> main`）；
+    探针必须打同一个 git 端点（`git ls-remote --heads origin main`），**不要** `curl https://github.com`
+    （HTML 站点与 git 服务不是一条路）；shell 里 `git ls-remote | head` 的管道会盖掉退出码，
+    直接看命令退出码。
+  - **线路中断处置**：`github.com:443` 连不上而 `api.github.com` 200 = 主站被干扰不是断网；
+    本地提交一个不动，有界重试（6-8 轮、轮间约 25s）后收手等恢复，别反复重试刷屏
+    （2026-10-24 一晚三次，最长的一次多轮后才恢复）。
+  - `git push` 只推提交，不会带走工作区未跟踪目录（`DELIVERY/` 之类推送时是安全的）。
+  - **改 workflow 一律按"它会被真执行"来写**：runner 上没有系统 Edge/Chrome（Playwright
+    chromium 降级真验过）、双产物打包、ASCII 资产名、tag 同源校验都已在干净 runner 上真跑过。
 - **"这个端点没人用"要先连 scripts/ 和 tests/ 一起看**（2026-09-19 我就是这样误判过两条）：
   `GET /api/projects/{pid}/next` 前端与 MCP 当时都不用，但 `delivery_drill` 与
   `test_task_deps` 在用；`GET /api/ai/reports` 界面上进不去（`openReport(rid)` 的"历史报告"
