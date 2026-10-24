@@ -166,3 +166,18 @@ def test_stale_pid_parse_only_trusts_integer_lines():
     spec.loader.exec_module(mod)
     assert mod._parse_pid_lines("123\nabc\n 456 \n警告：xxx\n") == [123, 456]
     assert mod._parse_pid_lines("") == []
+
+
+def test_agents_md_stays_inside_the_loading_budget():
+    """AGENTS.md 必须装进它自己声明的加载预算（文件头写着实测 65536 字节）。
+
+    为什么需要它（2026-10-24 实测）：文件头承诺「常驻部分能整体装进预算」，而
+    v1.9.3/v1.9.4 两轮各自加几百字、没有任何门禁看着，累积到 66485 字节 —— 超出
+    949 字节，尾部（状态/验证基线/下一步）恰好是接手方最需要的部分被静默截断。
+    「给自己写的加载预算」和「给别人写的 >300 行要裁剪」是同一条纪律，对自己没有
+    门禁就是装饰品。超了就压缩：历史细节的归宿是 docs/进度与版本档案.md，不是删信息。
+    """
+    size = (ROOT / "AGENTS.md").stat().st_size
+    assert size <= 65536, (
+        f"AGENTS.md {size} 字节，超出加载预算 65536 —— 接手方只能读到前一半。"
+        f"把历史细节压进 docs/进度与版本档案.md（内容搬走不是删掉），别砍规则与命令")

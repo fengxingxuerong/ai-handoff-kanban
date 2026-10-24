@@ -1,5 +1,11 @@
 # AI 交接看板
 
+[![CI](https://github.com/fengxingxuerong/ai-handoff-kanban/actions/workflows/ci.yml/badge.svg)](https://github.com/fengxingxuerong/ai-handoff-kanban/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/fengxingxuerong/ai-handoff-kanban)](https://github.com/fengxingxuerong/ai-handoff-kanban/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+语言：[中文](README.md) | [English](README.en.md)
+
 多项目任务中枢桌面应用，专为「切换 AI 智能体做项目」设计：每个项目带交接说明与下一步行动，一键复制交接摘要，新智能体接手零成本。内置 **AI 自我监管**（多 LLM 端点自动分析健康度、生成建议、维护任务），并有 **可视化仪表盘** 与 **一键完整交接包** 提升交付效率。
 
 > 当前版本 **v1.9.4**。`app/version.py` 是唯一事实来源 —— 界面版本条、`/api/health`、

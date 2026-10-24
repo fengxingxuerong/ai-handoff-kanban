@@ -25,6 +25,9 @@ jobs:
     # 拿 ubuntu 跑等于测一条永远不会交付的路径。
     runs-on: windows-latest
     timeout-minutes: 40
+    # 日常 push 只有读权限的步骤照常；tag 推送时的 Release 步骤需要 contents: write。
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -43,6 +46,29 @@ jobs:
 
       - name: 全部门禁 + 重新打包 + 冻结版冒烟
         run: python scripts/ci_local.py --with-exe
+
+      # 发布只发生在 tag 推送、且门禁全绿之后（上一步失败 job 就停，轮不到这里）。
+      # tag 必须与 app/version.py 同源 —— 版本号是单一事实来源，CI 是最后一道对账。
+      - name: tag 与 version.py 必须同源
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: python
+        run: |
+          import os, re, sys
+          from pathlib import Path
+          m = re.search(r'^__version__ = "([^"]+)"',
+                        Path("app/version.py").read_text(encoding="utf-8"), re.M)
+          tag = os.environ["GITHUB_REF_NAME"]
+          if not m or tag != "v" + m.group(1):
+              sys.exit(f"tag {tag} 与 version.py 的 v{m.group(1) if m else '?'} 不一致 —— 先对齐再打 tag")
+
+      - name: 发布 GitHub Release（两个 exe，正文自动生成）
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.exe \
+            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
 
       - name: 上传 exe（两个产物都留：GUI 主程序 + MCP 控制台服务）
         if: always()

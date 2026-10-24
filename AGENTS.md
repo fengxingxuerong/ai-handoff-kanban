@@ -69,11 +69,11 @@
 | `scripts/release_regression.py` | 发版回归：自起独立实例（不碰真实数据），v1.1 新功能全链路（`--no-ai` 下 16 项真断言 + 2 项标「未验」；不带 `--no-ai` 才会跑 AI 链路）；真实 Key 从 `KANBAN_REAL_DATA_DIR` 指向的配置读取 |
 | `scripts/test_all_llm.py` | LLM 端点全量实测：端点×Key×模型 健康矩阵 |
 | `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
-| `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复"。**MCP 产物有它自己的一份，见下行**（两者对标准流的处理完全不同）。**2026-10-24 起管进程卫生**：`--sweep [exe]` 按可执行路径清同 exe 残留进程（ci_local 打包前调；起跑前自己也会清一遍，清不掉就停）—— 树杀漏掉的竞态孩子曾连续两轮触发"端口仍在监听"警告、把下一轮打包毒成 WinError 5；收尾兜底后要**验证**端口释放才报"已关闭应用" |
+| `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复"。**MCP 产物有它自己的一份，见下行**（两者对标准流的处理完全不同）。**2026-10-24 起管进程卫生**：起跑前清场（清不掉就停）、收尾兜底并**验证**端口释放；`--sweep [exe]` 供 ci_local 打包前调（残留进程曾把下一轮打包毒成 WinError 5）。详版见档案 v1.9.4 |
 | `scripts/mcp_frozen_smoke.py` | **MCP 冻结版自查**（2026-10-23，与 `frozen_smoke` 并列）：真的启动 `dist\AI交接看板-MCP.exe`，走真实 stdio 打一遍，钉四件事 —— ① `tools/list` 拿得到 23 个工具；② **stdout 每一行都是合法 JSON-RPC**（一行日志就能让客户端解崩、整个服务等于没发布）；③ **中文双向不乱码**（写进去再读回来逐字一致：出方向工具目录被编成 cp936 客户端就崩、入方向中文标题静默变乱码入库）；④ 真写进了隔离临时目录（不信回执的一面之词）。九条断言，退出码 0 才算过。**「打包才会坏、源码态永远看不出来」的那一类**，所以必须跟着 exe 一起跑（`ci_local --with-exe` 里是独立一步）；`--source` 可对着源码跑同一套断言（先自证门禁本身有效） |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往源码注入 85 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"）；2026-10-14 拆出 `app/security.py` 时把四条安全探针的 `file` 串同步改到新家（不改就是哑火），并按用户拍板收紧 fail-closed 边界，新增 `forbidden_target_fails_open` 与 `forbidden_root_unresolvable_allowed` 增至 55 条。**2026-10-18**：还原时**连 mtime 一起拨回**（`_restore_mtime`，用例 `tests/test_mutation_probe.py`）—— 探针每跑一次会把探过的文件改写两遍，只还原内容就会把它们全刷成"刚刚改过"，而 `frozen_smoke` 判断"exe 是否落后于源码"靠的正是 mtime，于是那条门禁在**每次跑完探针之后稳定假红**（实测 2026-10-18：10 通过 / 1 失败，点名一串刚改过的文件，而同一次里"内嵌前端就是仓库这一份"是过的 —— 产物其实不旧）。一条本该只报"忘重打包"的门禁被噪音盖住，人很快就对它脱敏。2026-10-18 晚随雷达收口（v1.7.3）再加 9 条（55→64）：首扫脏仓库静默、建议把进度往回拽、审计无上限、总览绕过缓存、删项目留孤儿基线、备注无长度上限；备份/恢复同拍同回滚的三条（备份丢基线、坏来源清基线、同目录假回滚）—— 每条先 `--only` 单跑确认被杀、再随全量复跑。2026-10-19 第六轮竞品吸取再加 4 条（64→68）：离开阻塞不清原因、stale 判定失效、去重返回假 id、URL ref 被当本机坐标 —— 同样先 `--only` 确认被杀。2026-10-19 v1.8.1 评测修复轮再加 4 条（68→72）：空回复当成功直接返回（降级链不触发）、/next 丢阻塞原因、分配器吃阻塞任务、MCP 可做列表无 ⛔ 标记 —— 同样先 `--only` 确认被杀；`assign_ignores_priority` 的 `old` 随 allocatable 改写同步更新（不改就是哑火）。2026-10-21 第七轮竞品吸取再加 3 条（72→75）：不认识的 sections 被静默忽略、since 改成开区间漏掉同分钟改动、增量包把 start_here 也裁成"只列变化的"——同样先 `--only` 单跑确认被杀。2026-10-22 用户视角收尾轮再加 3 条（75→78）：详情就绪度不再随项目返回、今日列表丢阻塞原因、示例日期退回写死 —— 同样先 `--only` 确认被杀。2026-10-22 遮挡修复轮再加 3 条（78→81）：记忆表单不换行、输入框保住默认 min-width、头栏与滚动区合成一个块 —— 这三条是本轮 E2E 红点的"反向钉子"，同样先 `--only` 确认被杀。**被外部信号打断时不会走到 `finally`**：2026-10-22 前台跑探针被沙箱 SIGTERM（进程外杀），变异留在 `web/index.html` 里没还原，下一次跑报"变异文本没匹配上"才暴露 —— 中断过的探针一律先 `git status` 自检再继续。**2026-10-24 起有启动预检**：`--preflight`（ci_local 两种模式都先跑这一步，约 2 秒）把"old 命不中"分两档说破 —— new 文本还在源码里 = **残渣**（上次中断未还原，报 `git checkout -- <file>`）、否则 = **表没同步**（哑火）—— 当日实测残渣让 pytest 先红 80 秒、探针空跑 8.5 分钟，结论却只有一行"存活/异常 1"；删除型变异的 new 为空，残渣判不出来，落"表没同步"档（空串 `in` 任何文本都为真，必须先排除，否则每条删除型变异都被诬告成残渣）。 |
+| `scripts/mutation_probe.py` | **变异探针**：往源码注入 85 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。2026-09-29 把存活数从 12 清到 0（大文件拆分后 killer 清单没跟上搬家 + 6 处真盲区补测），2026-10-01 随「待审查」新增 readiness_active_narrowed 探针（旧 old 串被改掉后替换不中，探针变哑火——教训：改被探针盯着的代码要同步改 `old`。kill 用例：待审查任务也算推进，只认进行中即掉 10 分）。`ci_local.py` 的 full 模式含这一步（`--quick` 不含）；新增业务规则时**顺手往 `MUTATIONS` 里加一条**，否则新规则等于没有门禁。2026-10-11 随「停滞检测」「记忆加权召回」「条目级尺寸估算」增至 53 条（新增 `memory_recall_not_weighted`：把类型权重抹平 = 退回纯时间序；`memory_size_always_zero`：尺寸恒 0 = 渐进披露的决策依据失效且界面上看着"有个数字"）；2026-10-14 拆出 `app/security.py` 时把四条安全探针的 `file` 串同步改到新家（不改就是哑火），并按用户拍板收紧 fail-closed 边界，新增 `forbidden_target_fails_open` 与 `forbidden_root_unresolvable_allowed` 增至 55 条。**2026-10-18**：还原时**连 mtime 一起拨回**（`_restore_mtime`，用例 `tests/test_mutation_probe.py`）—— 探针每跑一次会把探过的文件改写两遍，只还原内容就会把它们全刷成"刚刚改过"，而 `frozen_smoke` 判断"exe 是否落后于源码"靠的正是 mtime，于是那条门禁在**每次跑完探针之后稳定假红**（实测 2026-10-18：10 通过 / 1 失败，点名一串刚改过的文件，而同一次里"内嵌前端就是仓库这一份"是过的 —— 产物其实不旧）。一条本该只报"忘重打包"的门禁被噪音盖住，人很快就对它脱敏。2026-10-18 晚随雷达收口（v1.7.3）再加 9 条（55→64）：首扫脏仓库静默、建议把进度往回拽、审计无上限、总览绕过缓存、删项目留孤儿基线、备注无长度上限；备份/恢复同拍同回滚的三条（备份丢基线、坏来源清基线、同目录假回滚）—— 每条先 `--only` 单跑确认被杀、再随全量复跑。2026-10-19 第六轮竞品吸取再加 4 条（64→68）：离开阻塞不清原因、stale 判定失效、去重返回假 id、URL ref 被当本机坐标 —— 同样先 `--only` 确认被杀。2026-10-19 v1.8.1 评测修复轮再加 4 条（68→72）：空回复当成功直接返回（降级链不触发）、/next 丢阻塞原因、分配器吃阻塞任务、MCP 可做列表无 ⛔ 标记 —— 同样先 `--only` 确认被杀；`assign_ignores_priority` 的 `old` 随 allocatable 改写同步更新（不改就是哑火）。2026-10-21 第七轮竞品吸取再加 3 条（72→75）：不认识的 sections 被静默忽略、since 改成开区间漏掉同分钟改动、增量包把 start_here 也裁成"只列变化的"——同样先 `--only` 单跑确认被杀。2026-10-22 用户视角收尾轮再加 3 条（75→78）：详情就绪度不再随项目返回、今日列表丢阻塞原因、示例日期退回写死 —— 同样先 `--only` 确认被杀。2026-10-22 遮挡修复轮再加 3 条（78→81）：记忆表单不换行、输入框保住默认 min-width、头栏与滚动区合成一个块 —— 这三条是本轮 E2E 红点的"反向钉子"，同样先 `--only` 确认被杀。**被外部信号打断时不会走到 `finally`**：2026-10-22 前台跑探针被沙箱 SIGTERM（进程外杀），变异留在 `web/index.html` 里没还原，下一次跑报"变异文本没匹配上"才暴露 —— 中断过的探针一律先 `git status` 自检再继续。**2026-10-24 起有启动预检**（`--preflight`，ci_local 两种模式都先跑）：old 命不中而 new 还在源码里 = **残渣**（报 `git checkout` 处置）；否则 = **表没同步**（哑火）。删除型变异 new 为空判不出残渣（空串 `in` 恒真，必须先排除）。详版见档案 v1.9.4。 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打**两个**产物：`AI交接看板.exe`（GUI，`-w`，带 `web/`）与 `AI交接看板-MCP.exe`（**控制台子系统，故意不加 `-w`** —— MCP 走 stdio，而 `-w` 的 GUI 程序在 Windows 上拿不到标准流）。第二份是「只装了 exe 的用户没有 .venv，MCP 因此不可用」这个缺口的正解 |
 
@@ -96,6 +96,9 @@ rem 这是 CI 的本地等价物，也是**发版前的唯一判据**；--with-e
 .venv\Scripts\python.exe scripts\ci_local.py
 .venv\Scripts\python.exe scripts\ci_local.py --quick
 .venv\Scripts\python.exe scripts\ci_local.py --with-exe
+
+rem 发 GitHub Release：--with-exe 全绿 → 推 main 等 CI 绿 → 打 tag（v + version.py 的数）推送
+rem CI 在 tag 上自动发 Release（两个 exe）；tag 与 version.py 不同源会被 CI 拦下
 
 rem 依赖可复现：requirements*.txt 写的是兼容下限，requirements.lock.txt 是实测闭包
 .venv\Scripts\python.exe scripts\make_lock.py        # 在跑过全量测试的 venv 里重新生成
@@ -183,11 +186,8 @@ rem 打包后必跑二：MCP 冻结版自查（只装 exe 的用户的命脉；-
    并对 400 Temperature 错误自动用 1 重试兜底。新增模型时若报该错，优先在 `_model_temp` 加适配，不要绕过网关直调。
 5. **杀 exe 进程树必须 `taskkill /F /T /PID`**。PyInstaller -F 单文件会拉起子进程跑实际服务，
    `terminate()` 只杀父进程，子进程残留会占用端口与 exe 文件（历史事故：打包时 PermissionError 拒绝访问）。
-   `frozen_smoke.py` 已内置进程树清理 + 端口兜底检查。**2026-10-24 起双保险**：起跑前先按
-   **可执行路径**清一次同 exe 残留（清不掉就停，绝不带着污染源跑）；收尾再兜一轮并**验证**
-   端口真的释放；`ci_local` 打包两个产物前各调一次 `frozen_smoke.py --sweep`（残留进程当日
-   实测把下一轮打包毒成 WinError 5）。过滤条件必须是路径不是映像名 —— 用户可能正开着装在
-   别处的副本，按名字杀等于杀他正在用的应用。
+   `frozen_smoke.py` 已内置进程树清理 + 端口兜底检查，且起跑/收尾都按**可执行路径**清同 exe
+   残留（`--sweep`，ci_local 打包前也调）—— 路径不是映像名，按名杀会误杀用户装在别处的副本。
 6. **状态与优先级只能取固定值**：项目 `规划中/进行中/已暂停/已完成`，任务 `待办/进行中/待审查/已完成/阻塞`，
    优先级 `高/中/低`。前后端各有一层白名单：后端 `ProjectIn/TaskIn` 用 `Literal` 返回 422，
    前端用 `STATUS_SET/PRIORITY_SET` 兜底（这两个值会被拼进 class 名与文本）。
@@ -538,20 +538,14 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 变异探针 85 条全被杀。**逐轮明细、每轮改了什么为什么、性能基线** → [docs/进度与版本档案.md](docs/进度与版本档案.md)。
 
 **下一步（按价值排序，详版在档案里）**：
-1. **`app/main.py` 继续拆分** —— 已拆出 `app/gitinfo.py`（有状态，patch 点随迁）、
-   `app/handoff_md.py` / `app/agentsmd.py`（先做依赖注入再搬：渲染/生成本体只收现成数据，
-   回退/取盘留在 main 包装里，原签名不变）、`app/paths.py` + `app/aireports.py`
-   （数据目录根 + 报告落盘簇，编排 `_run_analyze` 留在 main）、`app/aiprompt.py`
-   （AI 只读计算层：看板简报 + 会话提炼；`_memory_expired` 随日期判定迁入 `app/due.py`，
-   探针目标已同步）、`app/journal.py`（2026-10-07：journal/acceptance 清洗与上限，
-   常量的 monkeypatch 点随迁；`_merge_keys` 迁入 `llm.merge_keys`）、
-   `app/security.py`（2026-10-14：Host/Origin/Token 三关判定收成一个纯函数 `request_verdict`、
-   落盘黑名单与 fail-closed 分支、`EXPORT_SUFFIXES`；被它盯着的四条探针 `file` 串同步改过——
-   这类"搬完还得改门禁指针"的活，搬之前先 `grep` 探针表）。
-   `ai_command` 的提示词**有意留在 main**：前端契约测试
-   `test_ai_command_prompt_keys_on_ids_not_titles` 直接 inspect 端点源码，
-   搬它要连测试一起迁，收益不值。再往下只剩数据层本体（mutate / _load_data / 自愈备份）——
-   **那是临界区的心脏，不拆**；守住「写操作必须走 `mutate()`」，别顺手把临界区拆散。
+1. **`app/main.py` 的拆分已到头**（3596 → 3255 行，历次拆出与纪律见目录表与档案）：
+   再往下只剩数据层本体（mutate / _load_data / 自愈备份）—— **那是临界区的心脏，不拆**；
+   守住「写操作必须走 `mutate()`」。`ai_command` 的提示词**有意留在 main**
+   （`test_ai_command_prompt_keys_on_ids_not_titles` 直接 inspect 端点源码，搬它要连测试迁，收益不值）。
+   以后搬任何模块，先 `grep` 探针表把门禁的 `file` 指针一起搬（哑火教训见档案）。
+2. **发版节奏（2026-10-24 起）**：`ci_local --with-exe` 全绿 → 推 main 等 CI 绿 →
+   打 tag（`v` + version.py 的数，不同源 CI 会拦）→ CI 自动发 GitHub Release（两个 exe）。
+   仓库已更名 `fengxingxuerong/ai-handoff-kanban`（旧 URL 自动重定向），配了 description/topics 与英文 README。
 
 > ⚠️ **本文件可能被加载预算截断**（实测 65536 字节）。若你读到的内容在中途断掉，
 > 按上面那张「去哪看」的表去 `docs/` 取对应小节 —— **没读到不等于没有**。
