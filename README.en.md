@@ -92,6 +92,10 @@ dependencies, stamps the build, packs both exes).
 The MCP server talks to the local board over stdio and never exposes anything beyond
 `127.0.0.1`. See [docs/MCP-契约.md](docs/MCP-契约.md) for the full tool contract (Chinese).
 
+On Linux/macOS (or for directory health checks), run the same console server in Docker:
+`docker run -i --rm -v ~/.ai-kanban:/data <image built from Dockerfile>` — the board data
+stays on the host via the mounted volume.
+
 ## Data & privacy
 
 - All data lives in `%USERPROFILE%\.ai-kanban` (plain JSON files + backups). Nothing is
