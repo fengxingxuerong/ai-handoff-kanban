@@ -9,6 +9,7 @@
 用法：
     python scripts/frozen_smoke.py                    # 默认 dist\\AI交接看板.exe
     python scripts/frozen_smoke.py 路径\\到\\x.exe 18395
+    python scripts/frozen_smoke.py --sweep [x.exe]    # 只清同路径残留进程（ci_local 打包前调）
 退出码 0 表示通过。
 """
 from __future__ import annotations
@@ -50,9 +51,61 @@ def check(name: str, cond: bool, extra: str = "") -> None:
     print(("  [OK] " if cond else "  [FAIL] ") + name + ("" if cond else "  " + extra))
 
 
+def _parse_pid_lines(text: str) -> list[int]:
+    """PowerShell 输出里只信纯数字行：空行/告警/本地化文案一律忽略。"""
+    return [int(ln.strip()) for ln in text.splitlines() if ln.strip().isdigit()]
+
+
+def _ps_pids(exe: Path) -> list[int]:
+    """按**可执行文件路径**精确找残留进程的 PID（读不到路径的进程直接不算）。
+
+    为什么过滤条件是路径而不是映像名：用户可能正开着装在别处的副本（安装版、
+    桌面拷贝），按名字 `taskkill /IM` 等于杀掉他正在用的应用 —— 那是真正的破坏。
+    而 PyInstaller 打包要求没有任何进程握着这个 exe 文件，所以"同一路径的实例"
+    恰好是唯一**可以杀也必须杀**的对象：杀得少算失败（打包会 WinError 5 红出来），
+    杀错了才是事故。与 `app/security.py` 落盘黑名单同一 asymmetry：宁可少清，不可错杀。
+    """
+    if os.name != "nt":
+        return []
+    ps = ("Get-Process -Name '{name}' -ErrorAction SilentlyContinue | "
+          "Where-Object {{ $_.Path -and $_.Path -ieq '{path}' }} | "
+          "ForEach-Object {{ $_.Id }}").format(
+        name=exe.stem.replace("'", "''"), path=str(exe).replace("'", "''"))
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60)
+    except (OSError, subprocess.TimeoutExpired):                # noqa: BLE001
+        return []
+    return _parse_pid_lines(r.stdout or "")
+
+
+def sweep_stale(exe: Path) -> list[int]:
+    """清掉握着这个 exe 的同路径残留进程，返回清完后仍存活的 PID。
+
+    双层用法：`ci_local` 打包前调一次（残渣会让 PyInstaller WinError 5，2026-10-24
+    实测）；本脚本自己的收尾也兜一轮 —— taskkill /T 可能漏掉竞态期刚拉起的孩子，
+    之前两轮连续警告"端口仍在监听"就是这么漏的。
+    """
+    pids = _ps_pids(exe)
+    for pid in pids:
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+    if pids:
+        time.sleep(1.0)                     # 等 socket/文件句柄释放，再复查才算数
+    return _ps_pids(exe)
+
+
 def main() -> int:
     if not EXE.exists():
         print(f"找不到 {EXE}，先运行 build.bat")
+        return 1
+
+    # 先清场再开跑：上一轮如果没清干净，残留实例会占着端口/数据目录，
+    # 本轮的所有检查就会打到那个旧进程上 —— 结论全是它的。清不掉就停，
+    # 别带着一个已知污染源继续跑（结论作废比结论错误好修得多）。
+    stale = sweep_stale(EXE)
+    if stale:
+        print(f"警告：同路径实例残留且清不掉（PID {stale}），为避免检查打到旧进程，本轮不跑")
         return 1
 
     data_dir = Path(tempfile.gettempdir()) / "kanban_frozen_smoke"
@@ -195,8 +248,13 @@ def main() -> int:
             _time.sleep(1.2)  # 等 socket 释放
             if not port_listening(port):
                 break
-        if port_listening(port):
-            print("警告：端口仍在监听，进程树未清理干净")
+        # 兜底：树杀可能漏掉竞态期刚拉起的孩子（2026-10-24 实测连续两轮警告
+        # "端口仍在监听"，残留进程把下一轮打包毒成 WinError 5）。按可执行路径
+        # 再扫一轮同 exe 残留，然后才下"清干净了"的结论。
+        remain = sweep_stale(EXE)
+        if port_listening(port) or remain:
+            print(f"警告：端口仍在监听/进程未清干净（残留 PID {remain}），"
+                  f"会毒害下一次打包 —— 手动 taskkill /F /T /PID 后重跑")
         else:
             print("已关闭应用")
 
@@ -213,4 +271,15 @@ def report(data_dir: Path) -> int:
 
 
 if __name__ == "__main__":
+    # --sweep：只清这个 exe 的同路径残留，不起服务。ci_local 打包前调它；
+    # 有残留清不掉时 exit 1（打包反正会 WinError 5，早说早处理）。
+    if len(sys.argv) > 1 and sys.argv[1] == "--sweep":
+        target = Path(sys.argv[2]) if len(sys.argv) > 2 else ROOT / "dist" / "AI交接看板.exe"
+        hit = len(_ps_pids(target))
+        remain = sweep_stale(target)
+        if hit:
+            print(f"清掉 {hit - len(remain)} 个残留进程"
+                  + (f"，仍有 {len(remain)} 个清不掉（PID {remain}）" if remain else ""))
+            raise SystemExit(1 if remain else 0)
+        raise SystemExit(0)
     raise SystemExit(main())

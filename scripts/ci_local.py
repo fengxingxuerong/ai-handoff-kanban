@@ -177,6 +177,9 @@ def main() -> int:
         #
         # `--cov-fail-under` 必须**显式传**（见 coverage_floor 的说明）：pytest.ini 里的
         # `fail_under` 自己拦不住退出码，不传它，这一步的"含覆盖率门槛"就是一句空话。
+        # 预检排在 pytest 之前：它 2 秒就能说出"pytest 要红 80 秒 + 探针要空跑 8 分钟
+        # 才能绕出来"的事（2026-10-24 实测的残渣事故），两种模式的成本都可以忽略。
+        step("探针预检（残渣/哑火）", [PY, "scripts/mutation_probe.py", "--preflight"], 120)
         step("pytest 全量（含覆盖率门槛）",
              [PY, "-m", "pytest", "-q", "--cov-fail-under", coverage_floor(),
               "--basetemp", os.path.join(tmp, "basetemp")], 1800)
@@ -231,6 +234,11 @@ def main() -> int:
                  live=True)
 
         if MODE == "exe":
+            # 打包前按可执行路径清一次残留实例：打包要求没有任何进程握着 exe 文件，
+            # 而上一轮 frozen_smoke 的树杀可能漏（2026-10-24 实测：残留进程把这一步
+            # 毒成 WinError 5 拒绝访问）。清不掉它自己会 exit 1 并印出来 —— 打包那步
+            # 反正也会红，早说早处理。清场是家务活，不算门禁步骤。
+            _sweep_dist("AI交接看板.exe")
             step("生成构建戳", [PY, "scripts/make_stamp.py"], 120)
             step("生成 exe 版本资源", [PY, "scripts/make_versionfile.py"], 120)
             step("打包 PyInstaller", [PY, "-m", "PyInstaller", "-F", "-w", "-n", "AI交接看板",
@@ -245,6 +253,7 @@ def main() -> int:
             step("冻结版冒烟 frozen_smoke", [PY, "scripts/frozen_smoke.py"], 900, True)
             # 第二个产物：MCP 服务，**故意不加 -w** —— 它走 stdio，而 GUI 子系统程序拿不到标准流。
             # 只装 exe 的用户没有 .venv，"让代理直接读写看板"这个卖点此前对他不可用（2026-10-23 评测）。
+            _sweep_dist("AI交接看板-MCP.exe")
             step("打包 PyInstaller（MCP 控制台产物）",
                  [PY, "-m", "PyInstaller", "-F", "-n", "AI交接看板-MCP",
                   "scripts/mcp_server.py", "--hidden-import", "app.main",
@@ -258,6 +267,13 @@ def main() -> int:
         if server is not None and server.poll() is None:
             _kill_tree(server.pid)
         time.sleep(0.5)
+        # 杀完必须**验证**端口真的释放：taskkill 偶发静默漏杀（2026-10-24 实测
+        # 残留过一个 python.exe 占着本轮端口到下轮才发现）。补一刀；还占着就大声说。
+        if server is not None and _port_listening(port):
+            _kill_tree(server.pid)
+            time.sleep(1.0)
+            if _port_listening(port):
+                print(f"警告：隔离实例端口 {port} 仍未释放，请排查占用进程", flush=True)
         shutil.rmtree(tmp, ignore_errors=True)
         shutil.rmtree(live_dir, ignore_errors=True)
 
@@ -287,6 +303,28 @@ def _health_data_file(base: str) -> str:
             return str(json.loads(r.read().decode("utf-8", "replace")).get("data_file", ""))
     except Exception:                                          # noqa: BLE001
         return ""
+
+
+def _sweep_dist(exe_name: str) -> None:
+    """打包前调 frozen_smoke --sweep 清同路径残留。家务活：有动静才印一行，不算门禁步骤。"""
+    try:
+        r = subprocess.run([PY, str(ROOT / "scripts" / "frozen_smoke.py"), "--sweep",
+                            str(ROOT / "dist" / exe_name)],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:           # noqa: BLE001
+        print(f"  [i] 打包前清场没跑成（{e}）；若打包报拒绝访问，先手动 taskkill", flush=True)
+        return
+    out = ((r.stdout or "") + (r.stderr or "")).strip()
+    if r.returncode != 0 or out:
+        print(f"  [i] 打包前清场：{out.splitlines()[-1] if out else f'exit={r.returncode}'}",
+              flush=True)
+
+
+def _port_listening(port: int) -> bool:
+    with socket.socket() as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) == 0
 
 
 def _kill_tree(pid: int) -> None:

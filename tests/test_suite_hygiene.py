@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import collections
+import importlib.util
 import re
 from pathlib import Path
 
@@ -133,3 +134,35 @@ def test_coverage_floor_is_enforced_by_the_release_gate():
         "这一行就成了装饰品")
     assert not re.search(r'"--cov-fail-under=\d+"', gate), (
         "门槛数字不许在门禁里再写死一份：从 pytest.ini 的 fail_under 读（coverage_floor）")
+
+
+def test_release_gate_preflights_probes_and_sweeps_before_packaging():
+    """发版门禁的两道便宜保险必须真的接上了：探针预检 + 打包前清场。
+
+    为什么需要它（2026-10-24 一晚实测的两类事故，都真发生在了同一次发版评估里）：
+    ① 上次探针被外部信号打断留下残渣，pytest 先红 80 秒、探针再空跑 8.5 分钟，
+       结论只有一行"存活/异常 1" —— 预检 2 秒就能说破"是残渣、怎么修"；
+    ② 上轮 frozen_smoke 没清干净的 exe 进程握着产物文件，下一轮打包直接
+       WinError 5 拒绝访问 —— 清场必须挂在打包**前**，而不是打包失败后靠人排查。
+    另钉清扫的过滤口径：按**可执行路径**不按映像名 —— 用户可能正开着装在别处的副本。
+    """
+    gate = (ROOT / "scripts" / "ci_local.py").read_text(encoding="utf-8")
+    assert '"--preflight"' in gate, (
+        "门禁没有先跑探针预检 —— 残渣要烧掉 pytest+探针共 9 分钟才以一行计数现形")
+    assert gate.index('"--preflight"') < gate.index("pytest 全量"), "预检应排在 pytest 之前"
+    assert '"--sweep"' in gate, "打包前不清场：残留实例握着 exe 文件，PyInstaller 直接 WinError 5"
+    assert '_sweep_dist("AI交接看板.exe")' in gate and '_sweep_dist("AI交接看板-MCP.exe")' in gate, (
+        "两个 PyInstaller 步骤（GUI / MCP）前都要清场，只清一个等于没清")
+    fs = (ROOT / "scripts" / "frozen_smoke.py").read_text(encoding="utf-8")
+    assert "-ieq" in fs, (
+        "残留清扫必须按可执行路径过滤：按映像名杀会误杀用户装在别处的副本")
+
+
+def test_stale_pid_parse_only_trusts_integer_lines():
+    """PID 解析只信纯数字行：PowerShell 的空行/告警/本地化文案混进来不能变成 PID 被杀。"""
+    spec = importlib.util.spec_from_file_location(
+        "frozen_smoke_under_test", ROOT / "scripts" / "frozen_smoke.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod._parse_pid_lines("123\nabc\n 456 \n警告：xxx\n") == [123, 456]
+    assert mod._parse_pid_lines("") == []

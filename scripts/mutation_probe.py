@@ -834,6 +834,45 @@ def _restore_mtime(path: Path, st: os.stat_result) -> None:
         pass
 
 
+def preflight(todo: list[dict] | None = None, root: Path | None = None) -> list[tuple[dict, str]]:
+    """第 0 秒预检：每条待跑变异的 `old` 必须能命中，返回 (变异, 问题) 列表（空 = 干净）。
+
+    为什么值得单独一步：`apply_and_run` 对"old 命不中"只会沉默地记一条 inconclusive，
+    几分钟后混进"存活/异常 N"的计数里 —— 2026-10-24 实测：一处残渣让 pytest 先红
+    80 秒、探针再空跑 8.5 分钟，结论里却只有一行谁也读不懂的计数，根因还要靠人去
+    对着变异表逐字比对才发现。两种死法必须在开跑前说破：
+
+    - old 缺、new 在（且 new 非空）：**残渣** —— 上次探针被外部信号打断（SIGTERM 等
+      进程外击杀不会走到 finally），注入文本留在源码里。处置：`git checkout -- <file>`
+      （该文件若另有手工改动就手工摘出那一行）；删除型变异的 new 为空，这条路判不出来。
+    - 其余 old 缺：**表没同步** —— 源码改了而 MUTATIONS 没跟上，这条探针已经哑火
+      （硬性约定里"改被探针盯着的代码要同步改 old"防的就是这个）。
+    """
+    root = root if root is not None else ROOT
+    todo = MUTATIONS if todo is None else todo
+    contents: dict[str, str | None] = {}
+    problems: list[tuple[dict, str]] = []
+    for m in todo:
+        f = str(m["file"])
+        if f not in contents:
+            try:
+                contents[f] = (root / m["file"]).read_text(encoding="utf-8")
+            except OSError:
+                contents[f] = None
+        text = contents[f]
+        if text is None:
+            problems.append((m, "文件读不到"))
+        elif m["old"] not in text:
+            if str(m["new"]).strip() and m["new"] in text:
+                problems.append((m, "残渣：注入文本还在源码里（上次中断未还原）"
+                                    f"→ git checkout -- {m['file']}"
+                                    "（该文件若另有手工改动，先手工摘出这一行再重跑）"))
+            else:
+                problems.append((m, "old 命不中：源码改了、MUTATIONS 没同步"
+                                    "（或删除型变异的残渣）—— 对照现源码同步 old/new"))
+    return problems
+
+
 def apply_and_run(m: dict, timeout: int) -> dict:
     path = ROOT / m["file"]
     original = path.read_text(encoding="utf-8")
@@ -855,10 +894,23 @@ def main() -> int:
     ap.add_argument("--only", default="", help="只跑这些 id（逗号分隔）")
     ap.add_argument("--timeout", type=int, default=600, help="每个变异的测试超时秒数")
     ap.add_argument("--json", default="", help="结果写到 JSON 文件")
+    ap.add_argument("--preflight", action="store_true",
+                    help="只做启动预检（old 能否命中），不跑变异")
     args = ap.parse_args()
 
     want = {s.strip() for s in args.only.split(",") if s.strip()}
     todo = [m for m in MUTATIONS if not want or m["id"] in want]
+
+    problems = preflight(todo)
+    if problems:
+        print("预检失败 —— 以下变异的 old 命不中，先处理再跑（否则注入/还原都不完整）：")
+        for m, why in problems:
+            print(f"  ✗ {m['id']}  {m['file']}\n      {why}")
+        print("探针被外部信号打断不会走到 finally，会留残渣；处理完重跑。")
+        return 1
+    print(f"预检：{len(todo)}/{len(MUTATIONS)} 条变异的 old 都能命中\n")
+    if args.preflight:
+        return 0
 
     print(f"变异探针：{len(todo)}/{len(MUTATIONS)} 条（判据：改了还全绿 = 盲区）\n")
     results = []
