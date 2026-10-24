@@ -3,7 +3,7 @@
   "name": "io.github.fengxingxuerong/ai-handoff-kanban",
   "title": "AI Handoff Kanban",
   "description": "Local-first kanban for people who switch AI coding agents: per-project handoff packs and self-contained takeover pages, AGENTS.md projected to 9 entry files, a 23-tool MCP server (stdio) with incremental context slices, and LLM self-supervision. Windows exe / Docker; all data stays local.",
-  "version": "1.9.5",
+  "version": "1.9.6",
   "repository": {
     "url": "https://github.com/fengxingxuerong/ai-handoff-kanban",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "oci",
       "identifier": "ghcr.io/fengxingxuerong/ai-handoff-kanban-mcp",
-      "version": "1.9.5",
+      "version": "1.9.6",
       "registryBaseUrl": "https://ghcr.io",
       "transport": {
         "type": "stdio"

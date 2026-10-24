@@ -171,7 +171,13 @@ from pathlib import Path
 # max_tokens 参数化；chat() 遇「空或 length」同 Key 立即用 4 倍预算（12000）重试，仍失败
 # 才走降级链。max_tokens 只是封顶、按实际用量计费，正常调用不多花一分钱。探针 85→86
 # （reasoning_budget_lift_removed：预算提升被退回 = 重试沦为原样重放）。
-__version__ = "1.9.5"
+# 1.9.6（2026-10-25）：API 形状闭合 —— GET 对无里程碑项目返回 milestones=null，
+# 而 PUT 要求 list（显式 null 不吃默认值 → 422），任何「读-改-写」客户端（MCP 脚本/
+# 集成）拿到 null 原样写回必撞。落地 AI 建议时实测撞上。修法两处同向：_sanitize 的
+# else 分支把 null/缺失/非 list 归一成 []（与 tags 同款，约定 30「字段形状自己闭合」）；
+# ProjectIn 的 milestones 放宽为 list | None、validator 把 None 视为 []（宽容旧客户端
+# 缓存的 null）。探针 86→87（milestones_null_passes_through）。
+__version__ = "1.9.6"
 
 ROOT = Path(__file__).resolve().parent.parent
 

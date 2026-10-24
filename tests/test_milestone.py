@@ -225,3 +225,35 @@ def test_frontend_milestone_contract():
     assert {"addMilestoneRow", "removeMilestoneRow"} <= keys
     # 内联事件红线：里程碑控件不许走 onclick
     assert not re.search(r'<input[^>]+\son(?:change|input|click)=', html)
+
+# ---------------- 形状闭合:存量的 null 里程碑 ----------------
+
+def test_null_milestones_are_normalized_for_read_write_clients(app_client):
+    """存量 null 里程碑归一成 []：读改写客户端拿到的形状要与 PUT 接受的形状一致。
+
+    2026-10-24 实测：GET /api/projects/{pid} 对无里程碑项目返回 milestones=null，
+    原样写回 PUT 直接 422 —— 任何「读-改-写」客户端（MCP 脚本 / 集成）都会撞。
+    约定 30：字段形状自己闭合，不许「读出来一个样、写回去另一个样」。
+    """
+    import json as _json
+    app_client.data_dir.mkdir(parents=True, exist_ok=True)
+    (app_client.data_dir / "projects.json").write_text(
+        _json.dumps({"projects": [
+            {"id": "nullmile00001", "name": "空里程碑项目", "status": "进行中",
+             "progress": 0, "priority": "中", "tags": [], "milestones": None,
+             "tasks": [], "created_at": "2026-10-24 10:00", "updated_at": "2026-10-24 10:00"}
+        ]}, ensure_ascii=False), encoding="utf-8")
+
+    st, detail = app_client.get("/api/projects/nullmile00001")
+    assert st == 200
+    assert detail["milestones"] == [], f"读路径必须归一，实际 {detail.get('milestones')!r}"
+
+    # 客户端把读到的形状（含可能缓存的旧 null）原样写回，都不该 422
+    payload = {k: (detail.get(k) if detail.get(k) is not None else ("中" if k == "priority" else ""))
+               for k in ("name", "status", "progress", "priority",
+                         "tags", "repo_path", "background",
+                         "handoff_note", "next_action")}
+    st, body = app_client.put("/api/projects/nullmile00001", {**payload, "milestones": None})
+    assert st == 200, body
+    _, after = app_client.get("/api/projects/nullmile00001")
+    assert after["milestones"] == []

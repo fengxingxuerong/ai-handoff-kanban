@@ -319,6 +319,11 @@ def _sanitize(data: dict) -> dict:
             # 里程碑是「追加型」字段，导入/恢复时同样收一道：
             # 同名、超长、超过上限的条目在这里清掉，保证前端拿到稳定形状。
             p["milestones"] = _clean_milestones(p["milestones"])
+        else:
+            # null/缺失/类型不对一律归一成 []：读改写的 API 客户端拿到的形状必须与
+            # PUT 接受的形状一致 —— 2026-10-24 实测 GET 返回 null 而 PUT 422，
+            # 任何「读-改-写」客户端都会撞（约定 30：字段形状自己闭合）。与上方 tags 同款。
+            p["milestones"] = []
         tasks = p.get("tasks")
         if not isinstance(tasks, list):
             p["tasks"] = tasks = []

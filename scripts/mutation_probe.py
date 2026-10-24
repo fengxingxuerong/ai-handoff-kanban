@@ -805,6 +805,15 @@ MUTATIONS: list[dict] = [
                "推理型模型依旧空返回/截断，监管分析继续连败（2026-10-24 实测 4 连败的根因）",
         "tests": ["tests/test_llm_gateway.py"],
     },
+    {
+        "id": "milestones_null_passes_through",
+        "file": "app/main.py",
+        "old": "            p[\"milestones\"] = []",
+        "new": "            p.pop(\"milestones\", None)",
+        "why": "存量的 null 里程碑原样透传给读路径：读改写客户端 GET 拿到 null、PUT 422，"
+               "「读-改-写」在 API 边界断掉（2026-10-24 实测）",
+        "tests": ["tests/test_milestone.py"],
+    },
 ]
 
 

@@ -41,10 +41,11 @@ class ProjectIn(BaseModel):
     background: str = ""
     handoff_note: str = ""
     next_action: str = ""
-    # 类型放宽为 list：清洗全部交给 _clean_milestones（非 dict 元素按规则丢弃、
+    # 类型放宽为 list | None：清洗全部交给 _clean_milestones（非 dict 元素按规则丢弃、
     # 不 422 —— 方案口径是「类型不对的整条丢弃」）。若钉死 list[dict]，
     # pydantic 会在 validator 之前就把非 dict 元素拒掉，容错永远走不到。
-    milestones: list = []
+    # None 视为 []：读改写客户端可能缓存了旧版 GET 返回的 null，别让它 422（2026-10-24）。
+    milestones: list | None = None
 
     @field_validator("tags")
     @classmethod
@@ -59,7 +60,7 @@ class ProjectIn(BaseModel):
     @field_validator("milestones")
     @classmethod
     def _clean_milestones_val(cls, v):
-        return _clean_milestones(v)
+        return _clean_milestones(v or [])
 class TaskIn(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     desc: str = ""
