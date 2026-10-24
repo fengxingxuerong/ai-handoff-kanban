@@ -86,3 +86,56 @@ jobs:
             dist/AI交接看板.exe
             dist/AI交接看板-MCP.exe
           if-no-files-found: warn
+
+  # OCI 产物是官方 MCP Registry 的发布前提（server.json 的 packages 指向 GHCR），
+  # 也是非 Windows 用户跑 MCP 的正路。挂在 gates 之后：门禁绿的提交才有资格出镜像。
+  container:
+    needs: gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 镜像版本取自 app/version.py（单一事实来源，不手填）
+        id: ver
+        run: |
+          echo "version=$(python -c "import re;print(re.search(r'^__version__ = \"([^\"]+)\"', open('app/version.py', encoding='utf-8').read(), re.M).group(1))")" >> "$GITHUB_OUTPUT"
+
+      - name: 构建镜像
+        run: |
+          docker build -t ghcr.io/fengxingxuerong/ai-handoff-kanban-mcp:${{ steps.ver.outputs.version }} \
+                       -t ghcr.io/fengxingxuerong/ai-handoff-kanban-mcp:latest .
+
+      # 无状态协议：一条 tools/list 直接打，不需要握手。断言 >= 23 个工具
+      # （阈值按实测值钉，与 live_check 的口径一致——砍掉一半工具这条必须红）。
+      - name: 容器真冒烟（tools/list 断言 23 工具）
+        run: |
+          echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | docker run -i --rm \
+            ghcr.io/fengxingxuerong/ai-handoff-kanban-mcp:${{ steps.ver.outputs.version }} > /tmp/mcp_out.jsonl
+          python3 - <<'PYEOF'
+          import json
+          tools = None
+          err = None
+          for ln in open('/tmp/mcp_out.jsonl', encoding='utf-8'):
+              ln = ln.strip()
+              if not ln:
+                  continue
+              d = json.loads(ln)
+              if d.get('id') == 1:
+                  if 'result' in d:
+                      tools = d['result'].get('tools', [])
+                  elif 'error' in d:
+                      err = d['error']
+          assert tools is not None, f'容器内 tools/list 没有回结果（error={err}）'
+          assert len(tools) >= 23, f'容器内工具数 {len(tools)} < 23 —— 镜像与源码漂移'
+          print(f'容器内 MCP 冒烟通过：{len(tools)} 个工具')
+          PYEOF
+
+      - name: 登录 GHCR 并推送（版本号 + latest 两个 tag）
+        run: |
+          echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker push ghcr.io/fengxingxuerong/ai-handoff-kanban-mcp:${{ steps.ver.outputs.version }}
+          docker push ghcr.io/fengxingxuerong/ai-handoff-kanban-mcp:latest

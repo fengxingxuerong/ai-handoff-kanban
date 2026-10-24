@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -121,6 +122,30 @@ def _current_version() -> str:
     m = re.search(r'^__version__ = "([^"]+)"', VERSION_SRC, re.M)
     assert m, "app/version.py 里应有 __version__ 定义"
     return m.group(1)
+
+
+def test_server_json_registry_entry_matches_the_repo():
+    """server.json（官方 MCP Registry 的发布元数据）必须与仓库事实同源。
+
+    为什么需要它：server.json 的 version 与 packages[].version 是**手写的第二份版本号**，
+    不钉住就会在升版时静默漂掉（本项目为"散文里的数字"付过 N 次学费）；OCI 标识符
+    （ghcr.io 路径）在 server.json 与 ci.yml 里各出现一处，仓库更名/改名镜像时两处必须
+    一起动 —— 2026-10-24 就经历过一次仓库改名，钉住它。
+    """
+    sj = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
+    v = _current_version()
+    assert sj["version"] == v, f"server.json 版本 {sj['version']} ≠ version.py 的 {v}，升版时两处一起动"
+    assert sj["name"].startswith("io.github.fengxingxuerong/"), (
+        "Registry 命名空间 io.github.<owner> 必须与 GitHub 账号一致，否则所有权验证过不了")
+    assert sj["repository"]["url"] == "https://github.com/fengxingxuerong/ai-handoff-kanban"
+    pkg = sj["packages"][0]
+    assert pkg["registryType"] == "oci" and pkg["transport"]["type"] == "stdio"
+    assert pkg["identifier"] == "ghcr.io/fengxingxuerong/ai-handoff-kanban-mcp", (
+        "OCI 标识符与 CI 推送目标漂了 —— 客户端会拉到不存在的镜像")
+    assert pkg["version"] == v, "包版本与 server.json 顶层版本不一致"
+    wf = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert pkg["identifier"] in wf, (
+        "ci.yml 的镜像构建/推送没有用 server.json 里那份 OCI 标识符 —— 两处各写一份必然漂")
 
 
 def test_version_in_docs_matches_version_py():
