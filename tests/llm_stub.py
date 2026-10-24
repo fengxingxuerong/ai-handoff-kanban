@@ -57,6 +57,12 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_raw(200, value)
             elif kind == "text":
                 self._send(200, {"choices": [{"message": {"content": value}}]})
+            elif kind == "textf":
+                # 带 finish_reason 的文本响应（真实协议里它属于每个 choice）：测
+                # 「截断(length)也触发预算提升」的路径
+                value_text, finish = value
+                self._send(200, {"choices": [{"message": {"content": value_text},
+                                              "finish_reason": finish}]})
             elif kind == "json":
                 self._send(200, {"choices": [{"message": {"content": json.dumps(value, ensure_ascii=False)}}]})
             elif kind == "status_body":
@@ -99,6 +105,10 @@ class StubLLM:
 
     def push_text(self, text: str) -> None:
         self.queue.append(("text", text))
+
+    def push_text_finish(self, text: str, finish: str) -> None:
+        """带 finish_reason 的文本响应（如 length = 被截断）"""
+        self.queue.append(("textf", (text, finish)))
 
     def push_raw(self, text: str) -> None:
         self.queue.append(("raw", text))

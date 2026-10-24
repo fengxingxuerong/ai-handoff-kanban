@@ -250,13 +250,14 @@ def merge_keys(old_keys: list[str], new_keys: list[str],
     return out
 
 
-def _post(base_url: str, api_key: str, model: str, messages: list, temperature: float, timeout: float) -> tuple[str, dict | None]:
+def _post(base_url: str, api_key: str, model: str, messages: list, temperature: float, timeout: float,
+          max_tokens: int = MAX_TOKENS) -> tuple[str, dict | None, str]:
     url = base_url.rstrip("/") + "/chat/completions"
     payload = {
         "model": model,
         "messages": messages,
         "temperature": temperature,
-        "max_tokens": MAX_TOKENS,
+        "max_tokens": max_tokens,
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="POST", headers={
@@ -267,7 +268,9 @@ def _post(base_url: str, api_key: str, model: str, messages: list, temperature: 
         raw = resp.read().decode("utf-8", "replace")
     data = json.loads(raw)
     usage = data.get("usage") if isinstance(data, dict) else None
-    return data["choices"][0]["message"]["content"], (usage if isinstance(usage, dict) else None)
+    choice = (data.get("choices") or [{}])[0]
+    finish = choice.get("finish_reason") or ""
+    return choice.get("message", {}).get("content", ""), (usage if isinstance(usage, dict) else None), finish
 
 
 def _usage_file() -> Path:
@@ -375,10 +378,19 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
         for key in keys:
             t0 = time.time()
             try:
-                content, usage = _post(ep["base_url"], key, model, messages, temp, timeout)
-                if _empty_reply(content):
+                content, usage, finish = _post(ep["base_url"], key, model, messages, temp, timeout)
+                if _empty_reply(content) or finish == "length":
+                    # 推理型模型（deepseek-v4 等）会把 3000 的预算烧在 reasoning 上：要么
+                    # content 空串，要么 JSON 写到一半被截断（finish_reason=length，内容
+                    # 非空但解析必败）—— 2026-10-24 实测监管分析因此 4 连败。同 Key 立即
+                    # 用 4 倍预算重试：max_tokens 只是封顶、按实际用量计费，正常调用不多
+                    # 花一分钱，只有原本颗粒无收的调用才值得多花。
+                    content, usage, finish = _post(ep["base_url"], key, model, messages, temp,
+                                                   timeout, max_tokens=MAX_TOKENS * 4)
+                if _empty_reply(content) or finish == "length":
                     _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t0, False)
-                    errors.append(f"{ep['name']}/{model}: 返回为空（max_tokens 可能被推理烧光）")
+                    errors.append(f"{ep['name']}/{model}: 返回为空/截断"
+                                  f"（提升 max_tokens={MAX_TOKENS * 4} 重试仍失败 finish={finish}）")
                     time.sleep(0.4)
                     continue
                 _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t0, True)
@@ -397,10 +409,13 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
                 if code == 400 and "emperature" in body and temp != 1:
                     try:
                         t1 = time.time()
-                        content, usage = _post(ep["base_url"], key, model, messages, 1, timeout)
-                        if _empty_reply(content):
+                        content, usage, finish = _post(ep["base_url"], key, model, messages, 1, timeout)
+                        if _empty_reply(content) or finish == "length":
+                            content, usage, finish = _post(ep["base_url"], key, model, messages, 1,
+                                                           timeout, max_tokens=MAX_TOKENS * 4)
+                        if _empty_reply(content) or finish == "length":
                             _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t1, False)
-                            errors.append(f"{ep['name']}/{model}: temp=1 重试返回为空")
+                            errors.append(f"{ep['name']}/{model}: temp=1 重试返回为空/截断")
                             time.sleep(0.4)
                             continue
                         _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t1, True)

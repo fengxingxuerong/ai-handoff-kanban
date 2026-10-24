@@ -261,10 +261,11 @@ def test_temperature_retry_still_failing(no_sleep):
 
 
 def test_temperature_retry_empty_content_is_a_failure(no_sleep):
-    """400 → 用 temp=1 重试，重试返回 200 但 content 空：依然算失败。
+    """400 → 用 temp=1 重试，重试返回 200 但 content 空：先提升预算重试，仍空才算失败。
 
     推理型模型在 temp=1 重试分支同样可能烧光 max_tokens 返回空 ——
-    这条分支 2026-10-19 前只做了"换个温度重试"，没做空回复检查。
+    这条分支 2026-10-19 前只做了"换个温度重试"，没做空回复检查；2026-10-24 起
+    temp=1 分支与主路径同款：空/截断先同 Key 用 4 倍预算重试，仍失败才报错。
     """
     import app.llm as llm
     from llm_stub import StubLLM
@@ -272,11 +273,14 @@ def test_temperature_retry_empty_content_is_a_failure(no_sleep):
     stub = StubLLM().start()
     try:
         stub.push_status_body(400, "invalid temperature value: only 1 is allowed")
-        stub.push_text("")
+        stub.push_text("")     # temp=1 重试第一发：空（推理烧光）
+        stub.push_text("")     # 提升预算重试：仍空
         cfg = {"ai": {"endpoints": [stub.endpoint("端点甲")], "active_model": "stub-model"}}
         with pytest.raises(llm.LLMError) as e:
             _chat(cfg)
         assert "temp=1 重试返回为空" in str(e.value), str(e.value)
+        assert stub.calls[2]["payload"]["max_tokens"] == llm.MAX_TOKENS * 4, (
+            "temp=1 分支的第二次尝试也必须带提升后的预算")
     finally:
         stub.stop()
 

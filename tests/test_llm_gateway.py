@@ -66,29 +66,59 @@ def test_endpoint_failover_on_5xx(stub):
     assert text == "备用端点成功" and name == "乙"
 
 
-def test_empty_content_counts_as_failure_and_falls_back(stub, no_sleep):
+def test_empty_content_retries_same_key_with_lifted_budget_then_falls_back(stub, no_sleep):
     """推理型模型把 max_tokens 烧在 reasoning_content 上 → HTTP 200 但 content 为空。
 
-    2026-10-19 实盘：网关把空回复当成功直接返回，降级链根本不触发 ——
-    监管分析 500「LLM 返回为空」、AGENTS.md 静默退回本地版，而当时明明还有可用端点。
-    空 = 失败，必须继续往下试。
+    2026-10-19 实盘：网关把空回复当成功直接返回，降级链根本不触发。
+    2026-10-24 升级：空回复不再直接跳下一个端点，而是**同 Key 先用 4 倍预算重试**
+    （deepseek-v4-flash 实测 4 连败的根因就是 3000 预算被推理烧光，而下一个端点
+    可能更糟——当晚 NVIDIA 持续超时）。重试仍空才算失败、才走降级链。
     """
-    stub.push_text("")            # 甲：200 但正文为空
-    stub.push_text("备用端点成功")  # 乙
+    stub.push_text("")              # 甲第一次：200 但正文为空（推理烧光）
+    stub.push_text("")              # 甲第二次（4 倍预算）：仍为空
+    stub.push_text("备用端点成功")    # 乙
     text, name = llm.chat(cfg_with(stub.endpoint("甲"), stub.endpoint("乙")), MSGS)
     assert text == "备用端点成功" and name == "乙"
+    assert stub.calls[1]["payload"]["max_tokens"] == llm.MAX_TOKENS * 4, (
+        "同 Key 的第二次尝试必须带着提升后的预算，否则等于原样重放")
+    assert stub.calls[2]["payload"]["max_tokens"] == llm.MAX_TOKENS, (
+        "换到乙端点要回到正常预算，别把提升值带过去")
 
 
 def test_blank_only_content_is_also_a_failure(stub, no_sleep):
     """纯空白也是空：`.strip()` 之后判断，别让一个换行当正文混过去"""
+    stub.push_text("   \n  ")
     stub.push_text("   \n  ")
     stub.push_text("乙来兜底")
     text, name = llm.chat(cfg_with(stub.endpoint("甲"), stub.endpoint("乙")), MSGS)
     assert text == "乙来兜底" and name == "乙"
 
 
+def test_reasoning_burn_succeeds_on_same_key_with_lifted_budget(stub, no_sleep):
+    """推理烧光但 4 倍预算下模型能吐出正文 → 同 Key 直接成功，不劳降级链"""
+    stub.push_text("")                        # 第一次：推理烧光
+    stub.push_text("提升预算后有正文了")         # 第二次：同 Key 成功
+    text, name = llm.chat(cfg_with(stub.endpoint("甲")), MSGS)
+    assert text == "提升预算后有正文了" and name == "甲"
+    assert len(stub.calls) == 2, "成功就不该再碰任何端点"
+    assert stub.calls[1]["payload"]["max_tokens"] == llm.MAX_TOKENS * 4
+
+
+def test_truncated_length_finish_reason_also_lifts_budget(stub, no_sleep):
+    """finish_reason=length（内容非空但被截断）同样触发预算提升 ——
+    JSON 写到一半必解析失败，这种形状此前被当成功返回给上层；监管分析报
+    「无法从 LLM 输出中解析 JSON」的另一半来源就是它"""
+    stub.push_text_finish('{"summary": "写到一半被截', "length")
+    stub.push_text_finish('{"summary": "这次完整了"}', "stop")
+    text, name = llm.chat(cfg_with(stub.endpoint("甲")), MSGS)
+    assert text == '{"summary": "这次完整了"}' and name == "甲"
+    assert stub.calls[1]["payload"]["max_tokens"] == llm.MAX_TOKENS * 4
+
+
 def test_all_empty_replies_raise_with_reason(stub, no_sleep):
     """全部端点都空 → 聚合成一个错误，理由里说清是"返回为空"而不是笼统的失败"""
+    stub.push_text("")
+    stub.push_text("")
     stub.push_text("")
     stub.push_text("")
     with pytest.raises(llm.LLMError) as e:

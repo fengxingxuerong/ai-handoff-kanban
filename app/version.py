@@ -163,7 +163,15 @@ from pathlib import Path
 # ③ ci_local 打包两个产物前各调一次 --sweep，收尾还要**验证**隔离实例端口真的释放 ——
 #    当日实测：上轮没清干净的 exe 进程把下一轮打包毒成 WinError 5 拒绝访问。
 # 测试 +5（预检三态 ×3、门禁接线钉子、PID 解析只信纯数字行）。
-__version__ = "1.9.4"
+# 1.9.5（2026-10-24）：推理型模型预算自适应 —— 用真实看板触发 AI 监管分析时 4 连败，
+# 离线复现抓到双根因：① deepseek-v4-flash 把 3000 的 max_tokens 烧在 reasoning 上，
+# content 空串（网关把它当失败走降级链，但下一个端点可能更糟——当晚 NVIDIA 持续超时）；
+# ② 内容非空但 finish_reason=length（JSON 写一半被截断），此前被当成功返回上层，
+# 报「无法从 LLM 输出中解析 JSON」。修法在网关层一次治两种形状：_post 返回 finish_reason、
+# max_tokens 参数化；chat() 遇「空或 length」同 Key 立即用 4 倍预算（12000）重试，仍失败
+# 才走降级链。max_tokens 只是封顶、按实际用量计费，正常调用不多花一分钱。探针 85→86
+# （reasoning_budget_lift_removed：预算提升被退回 = 重试沦为原样重放）。
+__version__ = "1.9.5"
 
 ROOT = Path(__file__).resolve().parent.parent
 

@@ -642,17 +642,21 @@ MUTATIONS: list[dict] = [
         # content 空、HTTP 200，降级链不触发，上层拿到 500「LLM 返回为空」）。
         "id": "llm_empty_reply_taken_as_success",
         "file": "app/llm.py",
-        "old": "                if _empty_reply(content):\n"
+        "old": "                if _empty_reply(content) or finish == \"length\":\n"
                "                    _record_usage(feature or \"未标注\", ep[\"name\"], model, usage, time.time() - t0, False)\n"
-               "                    errors.append(f\"{ep['name']}/{model}: 返回为空（max_tokens 可能被推理烧光）\")\n"
+               "                    errors.append(f\"{ep['name']}/{model}: 返回为空/截断\"\n"
+               "                                  f\"（提升 max_tokens={MAX_TOKENS * 4} 重试仍失败 finish={finish}）\")\n"
                "                    time.sleep(0.4)\n"
                "                    continue",
-        "new": "                if False:\n"
+        "new": "                if False and (_empty_reply(content) or finish == \"length\"):\n"
                "                    _record_usage(feature or \"未标注\", ep[\"name\"], model, usage, time.time() - t0, False)\n"
-               "                    errors.append(f\"{ep['name']}/{model}: 返回为空（max_tokens 可能被推理烧光）\")\n"
+               "                    errors.append(f\"{ep['name']}/{model}: 返回为空/截断\"\n"
+               "                                  f\"（提升 max_tokens={MAX_TOKENS * 4} 重试仍失败 finish={finish}）\")\n"
                "                    time.sleep(0.4)\n"
                "                    continue",
-        "why": "空回复当成功返回：别的可用端点永远轮不到，症状是随机的 500 与静默降级（本地兜底版冒充 AI 版）",
+        "why": "空回复/截断当成功返回：别的可用端点永远轮不到，症状是随机的 500 与静默降级"
+               "（本地兜底版冒充 AI 版）。2026-10-24 随预算提升改写：盯的是提升重试**之后**的"
+               "那次拒绝检查 —— 它失效时，4 倍预算也救不回的空/截断内容会被当成功直接返回",
         "tests": ["tests/test_llm_gateway.py"],
     },
     {
@@ -791,6 +795,15 @@ MUTATIONS: list[dict] = [
         "why": "「写前脱敏」开关被无视：勾了还是把原文写进仓库，而回执与界面都会宣称已脱敏 ——"
                "这正是「开关看着有反应、做的却是另一件事」的形状",
         "tests": ["tests/test_agent_files.py"],
+    },
+    {
+        "id": "reasoning_budget_lift_removed",
+        "file": "app/llm.py",
+        "old": "max_tokens=MAX_TOKENS * 4",
+        "new": "max_tokens=MAX_TOKENS",
+        "why": "推理烧光/截断后的预算提升被退回原预算：同 Key 重试等于原样重放，"
+               "推理型模型依旧空返回/截断，监管分析继续连败（2026-10-24 实测 4 连败的根因）",
+        "tests": ["tests/test_llm_gateway.py"],
     },
 ]
 
