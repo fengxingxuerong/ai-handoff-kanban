@@ -180,7 +180,48 @@ def test_agents_md_stays_inside_the_loading_budget():
     size = (ROOT / "AGENTS.md").stat().st_size
     assert size <= 65536, (
         f"AGENTS.md {size} 字节，超出加载预算 65536 —— 接手方只能读到前一半。"
-        f"把历史细节压进 docs/进度与版本档案.md（内容搬走不是删掉），别砍规则与命令")
+        f"把历史细节搬进 docs/（规则类的归宿是 docs/测试约定.md，逐轮叙事是 "
+        f"docs/进度与版本档案.md）—— 内容搬走不是删掉，别砍规则与命令")
+
+
+def test_agents_md_keeps_headroom_under_the_budget():
+    """AGENTS.md 不只要「没超」，还得**留出余量** —— 只剩几百字节时，下一句话就会撞墙。
+
+    为什么需要它（2026-10-25 实测）：撞墙那条门禁（≤65536）一直在，也确实没红 —— 但实测余量
+    只剩 **436 字节**，而本轮每一处要补的说明都是 300~800 字节。于是"加一句话"这件事会
+    突然变成"必须先搬走一整行"：**约束在最后一刻才现身**，而它本来完全可以在还剩 5KB 时就说。
+    这和 v1.9.4 那条「探针残留要能预检」是同一个形状：把"迟早会撞"变成"现在就能看见"。
+
+    余量低于阈值时的正确处置不是删信息，而是**把最占地的那一行整段搬进 docs/**（规则类的进
+    docs/测试约定.md，逐轮叙事进 docs/进度与版本档案.md）—— 本用例就是那次搬迁的产物。
+    """
+    size = (ROOT / "AGENTS.md").stat().st_size
+    headroom = 65536 - size
+    assert headroom >= 1500, (
+        f"AGENTS.md 只剩 {headroom} 字节余量（{size}/65536）—— 下一处补充说明就会撞上加载预算，"
+        f"而超出的部分（状态/验证基线/下一步）恰好是接手方最需要的。"
+        f"处置：把最占地的那一行整段搬进 docs/（规则类 → docs/测试约定.md，逐轮叙事 → "
+        f"docs/进度与版本档案.md），内容搬走不是删掉")
+
+
+def test_moved_history_is_still_reachable_from_agents_md():
+    """搬走的历史必须**留一句指得到的指针** —— 没有门禁看着，「搬走」会退化成「删掉」。
+
+    为什么需要它（2026-10-25）：常驻文件的正确瘦身是「内容搬走，不是删掉」。但"搬走"这件事
+    如果没有门禁看着，很容易在下一轮变成"删掉"：接手方在 AGENTS.md 里看不到，就会以为
+    从来没有过 —— 而逐轮史恰恰是"想查的时候查得到"才有价值的东西（哪一轮加了几条、
+    为什么加、每条 killer 是谁）。
+
+    判据两头都钉：AGENTS.md 里要有指向 docs 的指针句，docs 里要真有那一节。
+    探针表本身另有两条钉子（语法闸、前端 JS 覆盖数），这里只管"搬走了还找得回来"。
+    """
+    a = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "变异探针：逐轮史" in a, "探针行里没有指针 —— 搬走的历史再也找不回来了"
+    assert "docs/测试约定.md" in a, "指针没点名去哪看（只说「见文档」等于没说）"
+    t = (ROOT / "docs" / "测试约定.md").read_text(encoding="utf-8")
+    assert "## 变异探针：逐轮史" in t, "指针指向的那一节不存在 —— 搬走 ≠ 删掉"
+    # 逐轮史至少要留得住"哪一轮加了几条"这种可查的事实
+    assert "2026-09-29" in t and "2026-10-25" in t, "搬过去的内容不完整（首尾两轮都该在）"
 
 
 def test_e2e_keeps_the_bundled_chromium_fallback():
