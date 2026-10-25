@@ -181,3 +181,29 @@ def test_agents_md_stays_inside_the_loading_budget():
     assert size <= 65536, (
         f"AGENTS.md {size} 字节，超出加载预算 65536 —— 接手方只能读到前一半。"
         f"把历史细节压进 docs/进度与版本档案.md（内容搬走不是删掉），别砍规则与命令")
+
+
+def test_e2e_keeps_the_bundled_chromium_fallback():
+    """E2E 的浏览器探测必须保留「自带 chromium」这一级（`channel=None`）。
+
+    为什么需要它（2026-10-25 复核）：E2E 原先只有 `["msedge", "chrome"]`，而
+    `.github/workflows/ci.yml` 自己写着「Windows runner 上没有系统 Edge/Chrome」——
+    于是**这 75 条真浏览器用例在唯一自动化环境里整份静默跳过**（退出码照样 0），
+    而隔壁 `live_ui_check.py` 早就有第三级、CI 也真装了 chromium。
+    「同一个环境里两套探测不均等」正是这个项目最忌的形状：最强的一层覆盖从没在 CI 跑过。
+    判定它是"静默"而不是"没验"：conftest 只会在收尾印一句「跳过 N 条」，
+    而文档里的基线和人眼看到的都是"全绿"。
+
+    判据两条：① 最后一级必须是 `None`（自带 chromium，唯一与系统无关的那级）；
+    ② 系统浏览器排在前面（本地优先用用户真在用的那个，自带 chromium 殿后）。
+    只查形状，真启动由 E2E 自己验（本机已用 `playwright install chromium` 验过三级都能起）。
+    """
+    src = (TESTS / "test_frontend_e2e.py").read_text(encoding="utf-8")
+    m = re.search(r"^CHANNELS\s*=\s*(\[[^\]]*\])", src, re.M)
+    assert m, "test_frontend_e2e.py 里找不到 CHANNELS —— 改名请连这条门禁一起改"
+    channels = ast.literal_eval(m.group(1))
+    assert channels[-1] is None, (
+        f"CHANNELS 最后一级必须是 None（Playwright 自带 chromium），实测 {channels!r} —— "
+        "少了它，CI runner（无系统 Edge/Chrome）上这批 E2E 会整份静默跳过")
+    assert channels[:2] == ["msedge", "chrome"], (
+        f"系统浏览器应排在前面（本地优先用用户真在用的那个），实测 {channels!r}")

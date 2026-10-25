@@ -2,8 +2,14 @@
 """真实浏览器点击测试：前端此前只有静态契约检查（内联事件归零 / data-act 已注册），
 渲染与真实交互零覆盖 —— 这里点真页面、断言真 DOM。
 
-用 Playwright 驱动**系统自带的 Edge/Chrome**（channel=msedge/chrome），不下载 Chromium。
-没装 playwright、或机器上没有浏览器时自动跳过：常规套件与 CI 的确定性不受影响。
+用 Playwright 驱动浏览器，三级降级：**系统 Edge → 系统 Chrome → Playwright 自带的 chromium**
+（`channel=None`；CI 的 runner 上没有系统浏览器，走的就是这级）。没装 playwright 时整份跳过。
+
+⚠️ **第三级不是可选项**（2026-10-25 补）：此前只有 `["msedge", "chrome"]` 两级，
+而 `.github/workflows/ci.yml` 自己就写着「Windows runner 上没有系统 Edge/Chrome」——
+于是这 75 条真浏览器用例在**唯一自动化环境里整份静默跳过**（退出码照样 0，
+只有 conftest 结尾那句「跳过 N 条」拦着），而隔壁 `live_ui_check.py` 早就有这级降级、
+CI 也真装了 chromium。**同一个环境里两套探测不均等 = 最强的一层覆盖从未在 CI 跑过。**
 
 常见断言：卡片渲染、弹窗保存流程、任务落到看板列、全局搜索、特殊字符不炸按钮、
 删除确认、任何 console error / pageerror 直接判失败。
@@ -19,7 +25,10 @@ pytest.importorskip("playwright.sync_api", reason="未安装 playwright（pip in
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-CHANNELS = ["msedge", "chrome"]
+# 顺序即优先级：先用户真实在用的浏览器，最后才是自带 chromium（体积大、但与系统无关，
+# 也是 CI 上唯一能用的那级）。**最后一级必须保留**，钉子见
+# tests/test_suite_hygiene.py::test_e2e_keeps_the_bundled_chromium_fallback
+CHANNELS = ["msedge", "chrome", None]
 
 
 def open_header_menu(page, act: str):
@@ -47,7 +56,10 @@ def browser():
             b = None
     if b is None:
         pw.stop()
-        pytest.skip(f"没有可用的 Edge/Chrome：{err}")
+        # 说清三级都试过什么，并给出可行动的那一步 —— 只报"没有 Edge/Chrome"会让
+        # 人以为环境本来就该有浏览器（CI 上就没有，它的正解是自带 chromium 那级）
+        pytest.skip("三级浏览器都不可用（系统 Edge / 系统 Chrome / 自带 chromium）："
+                    f"{err}；试 `python -m playwright install chromium`")
     yield b
     b.close()
     pw.stop()

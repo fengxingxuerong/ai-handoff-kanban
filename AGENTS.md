@@ -59,10 +59,11 @@
 | `app/sampledata.py` | 首次运行的示例数据 `sample_data()`（纯函数，2026-10-24 拆出）。两条纪律跟着搬：时间戳按相对今天生成、**保持脱敏**（随 exe 分发，硬性约定 8）。探针 `sample_dates_hardcoded_again` 在这里 |
 | `web/index.html` + `web/js-*.js` + `web/style.css` | 前端。**2026-10-18 起 JS 按关注点分成 10 个文件**（加载顺序：`js-core` 基础设施与 ACTIONS 分发表 → `js-overview` 总览 → `js-detail` 详情 → `js-render` 渲染工具 → `js-reality` 代码现实 → `js-handoff` 交接物 → `js-edit` 表单编辑 → `js-ai` AI → `js-data` 数据 → `js-boot` 启动序列），index.html **零内联脚本**；无构建、无 CDN 依赖，全部函数是全局函数，交互统一走 `data-act` 事件委托。拆的是**关注点**不是字节数；静态契约一律用 `tests/frontend_src.py:frontend_source()` 对着"整个前端"判，**不要写具体文件名**（`test_p0_stats.py` 里曾写死 `js-core.js`，搬家当天就红） |
 | `docs/` | AGENTS.md 的延伸（**按需读，不常驻**，2026-10-24 从本文件切出、内容逐字未删）：`数据层约定.md`（18 条）/ `MCP-契约.md` / `测试约定.md` / `性能基线.md` / `进度与版本档案.md`（逐轮叙事与验证基线）+ 界面截图。切分理由与「去哪看」表在本文件开头 —— **没读到不等于没有** |
-| `tests/` | pytest 套件（用例数见文末「验证基线」，此处不写死）+ 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测数字只写在文末基线那一处）。含真实浏览器点击测试 `test_frontend_e2e.py` |
+| `tests/` | pytest 套件（用例数见文末「验证基线」，此处不写死）+ 内置假 LLM 端点（`llm_stub.py`），覆盖率门槛 90%（实测数字只写在文末基线那一处）。含真实浏览器点击测试 `test_frontend_e2e.py`（浏览器三级降级：系统 Edge → 系统 Chrome → **自带 chromium**；最后一级不可删 —— CI runner 没有系统浏览器，少了它就整份静默跳过；钉子 `test_e2e_keeps_the_bundled_chromium_fallback`） |
 | `scripts/desktop.py` | 桌面壳：补标准流 → 探测端口 → 后台起 uvicorn → 真实 HTTP 探活 → 开 Pywebview 窗口；启动过程写 `<数据目录>\startup.log`。`KANBAN_NO_WINDOW=1` 时只服务不开窗（CI / 服务器 / 调试用） |
 | `scripts/live_check.py` | 对着**已在跑**的实例打接口做只读体检（不写数据）；替代了原来的三个手工冒烟脚本 |
 | `scripts/live_ui_check.py` | 对着**已在跑**的实例开真浏览器做只读校验（Playwright + 系统 Edge/Chrome）：证明界面真的渲染出来了，不是白屏。全程只点导航类操作，不写一个字节 |
+| `scripts/e2e_ci_browser_check.py` | **在 CI 的浏览器环境下真跑 E2E**（2026-10-25）：进程内把浏览器链强制成「只有自带 chromium」（第一级必然失败，只有真 fallback 才起得来），并**记录实际使用的 channel** 证明它真用了第三级 —— 本机系统浏览器都在时默认跑的是第一级，那条路在这里才复算得了。不改源码（pytest 插件进程内改，避免「改文件再还原」的残渣风险）。CI 的 runner 没有系统浏览器，跑的就是这一级 |
 | `scripts/scenario_test.py` | 真实场景测试 32 例（真服务 + 真 MCP + 真实业务数据，可导出报告） |
 | `scripts/delivery_drill.py` | 交付演练：模拟换智能体接手，端到端 21 项（接手→执行→交接物→脱敏→迁移）。**不传参数时自起隔离实例**；传 base_url 则先读该实例 `/api/health` 的 `data_file` 自证不是真实数据目录，否则拒绝运行（演练会用 `/api/data/import` 整份覆盖） |
 | `scripts/real_ai_test.py` | 真实模型 AI 功能测试：5 大功能 × 6 模型通道（消耗真实配额） |
@@ -109,6 +110,9 @@ rem exe 版本资源（右键属性看得到版本与构建时间；由 build.ba
 
 rem 只跑前端真实点击测试（复用系统 Edge/Chrome，无需下载 Chromium）
 .venv\Scripts\python.exe -m pytest tests\test_frontend_e2e.py -v
+
+rem 模拟 CI 的浏览器环境跑 E2E（只用自带 chromium，并核验真的用了那一级）
+.venv\Scripts\python.exe scripts\e2e_ci_browser_check.py
 
 rem 性能基准（改数据层前先量）
 .venv\Scripts\python.exe scripts\bench.py 1000
@@ -391,12 +395,13 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 测试约定
 
-**16 条细则已移入 [docs/测试约定.md](docs/测试约定.md)**。四条最常被踩的留在这里：
+**17 条细则已移入 [docs/测试约定.md](docs/测试约定.md)**。五条最常被踩的留在这里：
 ① **拒绝 mock 自证** —— 慢用例必须是真的（真服务 / 真 MCP / 真浏览器）；
 ② 覆盖率门槛量的是**分支**覆盖，而且**必须由 `ci_local.py` 显式传 `--cov-fail-under`**
 （`pytest.ini` 里的 `fail_under` 对退出码无效，见硬性约定 21）；
 ③ **用例不能依赖墙钟**（日期类断了要能重跑，别让「9 天后再跑就红」活着）；
 ④ 改完前端**必须开一次真浏览器**再收工。
+⑤ 真实浏览器的探测是**三级降级**（系统 Edge → 系统 Chrome → **自带 chromium**），最后一级不可删：CI runner 没有系统浏览器，少了它就整份静默跳过（钉子 `test_e2e_keeps_the_bundled_chromium_fallback`）。
 
 ## 容易踩的坑
 
@@ -477,7 +482,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 写的是同一个数。
 
-**验证基线**：`pytest` 831 收集（826 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 94%（93.73%，门槛 90）/ 36 个测试文件、780 个 `def test_` 且无重名；
+**验证基线**：`pytest` 833 收集（828 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 94%（93.87%，门槛 90）/ 36 个测试文件、782 个 `def test_` 且无重名；
 变异探针 87 条全被杀。**逐轮明细、每轮改了什么为什么、性能基线** → [docs/进度与版本档案.md](docs/进度与版本档案.md)。
 
 **下一步（按价值排序，详版在档案里）**：
