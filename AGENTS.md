@@ -284,6 +284,13 @@ rem 打包后必跑二：MCP 冻结版自查（只装 exe 的用户的命脉；-
       别处出现跳过即红（`ALLOWED_SKIPS` / `_skip_audit`）。钉子
       `test_release_gate_audits_the_skip_count`；`KANBAN_LIVE` 在干净 env 里
       被显式摘掉，保证这个数是确定的、不随调用者环境漂。
+    - **步骤清单也要有钉子**（2026-10-25 自查发现的缺口）：守门禁自己的钉子此前有三条
+      （覆盖率门槛必须显式传、跳过数按文件对账、打包前先预检+清场），**但没有一条管「步骤还在不在」**。
+      于是删掉「变异探针」那一步（十几分钟的语义门禁）之后，表格只会从 8 步变 7 步，
+      结论**照样**印「全部通过，可以发版 ✓」—— 与当年 E2E 那 75+ 条整份静默跳过同一个形状。
+      现在 `test_release_gate_step_list_cannot_shrink_silently` 钉住三组步骤
+      （两种模式都跑 4 步 / full 专属 4 步 / `--with-exe` 专属 6 步）**加上标签指向的脚本** ——
+      标签留着、命令换掉同样等于把门禁换掉（用 AST 取清单，不靠正则凑字符串）。
     两个已踩过的前提：
     - **包装层的 env 要分两套**。被测步骤用干净 env，只有"要起服务/要连服务"的步骤才带
       `KANBAN_PORT`。把运行开关漏进被测 env，会造出与代码无关的假红
@@ -494,7 +501,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 写的是同一个数。
 
-**验证基线**：`pytest` 846 收集（841 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 94%（93.66%，门槛 90）/ 36 个测试文件、795 个 `def test_` 且无重名；
+**验证基线**：`pytest` 847 收集（842 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 94%（93.66%，门槛 90）/ 36 个测试文件、796 个 `def test_` 且无重名；
 变异探针 102 条全被杀。**逐轮明细、每轮改了什么为什么、性能基线** → [docs/进度与版本档案.md](docs/进度与版本档案.md)。
 
 **下一步（按价值排序，详版在档案里）**：

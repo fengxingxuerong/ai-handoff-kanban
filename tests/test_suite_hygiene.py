@@ -259,6 +259,89 @@ def _ci_local_module():
     return mod
 
 
+def _gate_steps() -> dict:
+    """从 `scripts/ci_local.py` 里取「步骤标签 → 它跑的那个脚本」（用 AST，不靠文本正则）。
+
+    为什么用 AST：这一步的判据就是"清单本身"，若用正则去凑字符串，改个引号写法就会假红/假绿 ——
+    而"守门的东西自己得先站得住"。
+    """
+    tree = ast.parse((ROOT / "scripts" / "ci_local.py").read_text(encoding="utf-8"))
+    steps = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        is_step = isinstance(node.func, ast.Name) and node.func.id == "step"
+        is_append = isinstance(node.func, ast.Attribute) and node.func.attr == "append"
+        if not (is_step or is_append):
+            continue
+        label, args = None, []
+
+        def _flat(nodes):
+            """把参数摊平：`step(标签, [PY, "scripts/x.py", …], …)` 里脚本名在**列表**里。"""
+            out = []
+            for n in nodes:
+                if isinstance(n, ast.Constant):
+                    out.append(n.value)
+                elif isinstance(n, ast.List):
+                    out.extend(e.value for e in n.elts if isinstance(e, ast.Constant))
+            return out
+
+        if is_step and node.args and isinstance(node.args[0], ast.Constant):
+            label = node.args[0].value
+            args = _flat(node.args[1:])
+        elif is_append:
+            for a in node.args:
+                if isinstance(a, ast.Tuple) and a.elts and isinstance(a.elts[0], ast.Constant):
+                    label = a.elts[0].value
+                    args = _flat(a.elts)
+        if label:
+            script = next((a for a in args if isinstance(a, str) and a.endswith(".py")), "")
+            steps[label] = script
+    return steps
+
+
+def test_release_gate_step_list_cannot_shrink_silently():
+    """`ci_local` 的步骤清单必须**一步不少** —— 少了谁都不会红，只会少打印一行。
+
+    为什么需要它（2026-10-25 自查发现的缺口）：守门禁自己的钉子已经有三条（覆盖率门槛必须显式传、
+    跳过数按文件对账、打包前先预检+清场），**但没有一条管"步骤还在不在"**。于是删掉
+    「变异探针 mutation_probe」那一步（十几分钟的语义门禁）之后，表格只会从 8 步变 7 步，
+    结论照样印「全部通过，可以发版 ✓」—— 与当年 E2E 那 75+ 条整份静默跳过是同一个形状：
+    **表格与结论长得一模一样，含义差一整层门禁**。
+
+    判据两头：① 三组步骤（两种模式都跑的 / 只有 full 跑的 / 只有 --with-exe 跑的）一个不缺；
+    ② 标签指向的脚本也要对得上 —— 标签留着、命令换成别的东西同样等于把门禁换掉。
+    """
+    steps = _gate_steps()
+    always = ["探针预检（残渣/哑火）", "pytest 全量（含覆盖率门槛+跳过审计）",
+              "只读体检 live_check --mcp", "真实浏览器 live_ui_check"]
+    full_only = ["变异探针 mutation_probe", "场景测试 scenario_test",
+                 "发版回归 release_regression", "交付演练 delivery_drill"]
+    exe_only = ["生成构建戳", "生成 exe 版本资源", "打包 PyInstaller",
+                "冻结版冒烟 frozen_smoke", "打包 PyInstaller（MCP 控制台产物）", "MCP 冻结版自查"]
+    for group, name in ((always, "两种模式都跑"), (full_only, "--quick 有意跳过（full 才跑）"),
+                        (exe_only, "--with-exe 才有")):
+        missing = [l for l in group if l not in steps]
+        assert not missing, (
+            f"发版门禁少了这些步骤（{name}）：{missing} —— "
+            f"少一步不会红，只会少打印一行，而结论照样写「全部通过，可以发版 ✓」")
+
+    expect = {
+        "探针预检（残渣/哑火）": "scripts/mutation_probe.py",
+        "pytest 全量（含覆盖率门槛+跳过审计）": "",
+        "变异探针 mutation_probe": "scripts/mutation_probe.py",
+        "场景测试 scenario_test": "scripts/scenario_test.py",
+        "发版回归 release_regression": "scripts/release_regression.py",
+        "交付演练 delivery_drill": "scripts/delivery_drill.py",
+        "只读体检 live_check --mcp": "scripts/live_check.py",
+        "真实浏览器 live_ui_check": "scripts/live_ui_check.py",
+        "冻结版冒烟 frozen_smoke": "scripts/frozen_smoke.py",
+        "MCP 冻结版自查": "scripts/mcp_frozen_smoke.py",
+    }
+    wrong = {l: steps[l] for l, want in expect.items() if want and want not in (steps.get(l) or "")}
+    assert not wrong, f"这些步骤标签还在、但跑的不是原来那个脚本了：{wrong}"
+
+
 def test_release_gate_audits_the_skip_count():
     """发版门禁必须**读** conftest 那份"跳过点名"，而且允许表要与事实一致。
 
