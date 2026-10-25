@@ -207,3 +207,61 @@ def test_e2e_keeps_the_bundled_chromium_fallback():
         "少了它，CI runner（无系统 Edge/Chrome）上这批 E2E 会整份静默跳过")
     assert channels[:2] == ["msedge", "chrome"], (
         f"系统浏览器应排在前面（本地优先用用户真在用的那个），实测 {channels!r}")
+
+
+def _ci_local_module():
+    """把 scripts/ci_local.py 当模块加载（它模块级只有常量与 argv 解析，无副作用）。"""
+    spec = importlib.util.spec_from_file_location(
+        "ci_local_under_test", ROOT / "scripts" / "ci_local.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_release_gate_audits_the_skip_count():
+    """发版门禁必须**读** conftest 那份"跳过点名"，而且允许表要与事实一致。
+
+    为什么需要它（2026-10-25）：跳过在报告里与全绿同形 —— E2E 那 75+ 条因缺第三级浏览器
+    在 CI 上整份跳过，而门禁只看 pytest 的退出码，于是"最强的一层从没在 CI 跑过"这件事
+    既没人看见也没人拦。conftest 早就把跳过的**名字**印在结尾了，缺的是**读者**。
+    现在门禁按文件对账：只有 `test_ai.py` 允许跳过（需 `KANBAN_LIVE=1`）。
+
+    四件事都钉：
+    ① 门禁真的调了审计，且**排在 pytest 那一步的执行里**（不是写着好看的辅助函数）；
+    ② 允许表里只有 `test_ai.py`，条数等于该文件的用例数 —— 数字只有一处（从文件数出来）；
+    ③ `KANBAN_LIVE` 必须在干净 env 里被显式摘掉：否则"跳过 5 条"这个前提本身是环境的函数，
+       开着它的人会得到 0 条 → 审计误红（伪造的红比没门禁更坏，下场是有人删门禁）；
+    ④ 解析与判定真的会红：多一个文件、期望的却没出现，两个方向都拦。
+    """
+    gate = (ROOT / "scripts" / "ci_local.py").read_text(encoding="utf-8")
+    assert "_skip_audit(_parse_skips(out), ALLOWED_SKIPS)" in gate, (
+        "发版门禁没有对账跳过数 —— 整份文件被静默跳过时它仍然是绿的")
+    assert gate.index("_skip_audit(_parse_skips(out), ALLOWED_SKIPS)") < gate.index("if MODE != \"quick\""), \
+        "跳过审计必须在 pytest 那一步里（在 --quick 分支之前），别挪到后面去"
+    assert 'env.pop("KANBAN_LIVE", None)' in gate, (
+        "干净 env 里没摘掉 KANBAN_LIVE —— 跳过数会随调用者环境漂，审计的前提就不成立了")
+
+    mod = _ci_local_module()
+    allowed = mod.ALLOWED_SKIPS
+    assert set(allowed) == {"test_ai.py"}, f"允许跳过只该有 test_ai.py，实测 {allowed}"
+    live = len(re.findall(r"^def test_", (TESTS / "test_ai.py").read_text(encoding="utf-8"), re.M))
+    assert allowed["test_ai.py"] == live, (
+        f"允许表写 {allowed['test_ai.py']} 条，而 test_ai.py 有 {live} 条 —— 数字只有一处：数文件")
+
+    good = ("============ 跳过 5 条（没验，不是通过） ============\n"
+            "  test_ai.py: 5 条\n"
+            "  整份跳过的文件意味着这条能力在本机从未被验证过；跑 CI 或补齐环境后再看这个数。\n")
+    assert mod._parse_skips(good) == {"test_ai.py": 5}, "conftest 的点名块读不出来"
+    assert mod._parse_skips("全绿，没有跳过\n") == {}, "没跳过 = 空字典，不是解析失败"
+    ok, note = mod._skip_audit(mod._parse_skips(good), allowed)
+    assert ok, f"允许表内的跳过被判红了（假红）：{note}"
+
+    # 多出一整个文件（E2E 缺浏览器时的真实形状）必须红，并点名是哪个文件
+    bad = good + "  test_frontend_e2e.py: 78 条\n"
+    ok2, note2 = mod._skip_audit(mod._parse_skips(bad), allowed)
+    assert not ok2 and "test_frontend_e2e.py" in note2 and "78" in note2, \
+        f"多出来的跳过必须红且点名：{note2}"
+
+    # 反向：期望的 5 条一条都没跳过（开着 KANBAN_LIVE 或那几条被删了）也要红
+    ok3, note3 = mod._skip_audit({}, allowed)
+    assert not ok3 and "test_ai.py" in note3, f"期望的跳过没出现也必须红：{note3}"

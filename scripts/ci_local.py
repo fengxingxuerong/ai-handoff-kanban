@@ -69,14 +69,77 @@ def coverage_floor() -> str:
     return m.group(1)
 
 
+# 允许跳过的用例：**只有** `test_ai.py` 那几条活体用例（需 KANBAN_LIVE=1 才跑，本门禁用干净 env）。
+# 别的文件出现跳过 = 某一层能力在这次环境里**没验**（没有 node / 没装 playwright /
+# 三级浏览器都不可用 / 没有 git …），而"整份静默跳过"在报告里与全绿长得一模一样 ——
+# 2026-10-25 就是这么发现 E2E 那 75+ 条在 CI 上从来没跑过的（缺第三级浏览器，退出码照样 0）。
+# conftest 早就把跳过的名字印在结尾，但**没有任何东西读它**；这条审计就是那个读者。
+ALLOWED_SKIPS = {"test_ai.py": 5}
+
+
+def _parse_skips(output: str) -> dict:
+    """从 conftest 的收尾点名块里读出"每个文件跳过了几条"。
+
+    格式（tests/conftest.py:pytest_terminal_summary）::
+
+        ============ 跳过 N 条（没验，不是通过） ============
+          test_ai.py: 5 条
+          整份跳过的文件意味着这条能力在本机从未被验证过；…
+
+    没有跳过时 conftest 直接 return，于是这里回空字典 —— **空 = 0 条**，不是"解析失败"。
+    这个区分很要紧：把"没跳过"当解析失败会让每次全绿都误报（假红的下场是有人把门禁删掉）。
+    """
+    out: dict = {}
+    for ln in output.splitlines():
+        m = re.match(r"^\s+([\w.\-]+\.py):\s+(\d+)\s+条\s*$", ln)
+        if m:
+            out[m.group(1)] = int(m.group(2))
+    return out
+
+
+def _skip_audit(observed: dict, allowed: dict) -> tuple:
+    """按文件对账跳过数，返回 `(是否通过, 说明)`。**两个方向都查**，缺一即红。
+
+    **适用范围**：只在"跑全量套件"时有定义 —— 允许表里的 `test_ai.py: 5` 之所以应当出现，
+    是因为那一步会收集到那个文件。拿子集（`-k` / 单个文件）去套它必然误报"0 条"。
+    门禁里那一步就是全量（`pytest -q --cov-fail-under …`），所以这个前提成立；
+    谁要改那一步的范围，就得连 `ALLOWED_SKIPS` 一起改 —— 报错文案里已经把这条写出来了。
+
+    为什么两个方向都查：只查"多出来的"留了个 fail-open 口子 —— conftest 的格式一旦变了，
+    解析回空字典，"多出来"就成了空集，审计静默通过。所以"期望有的却没有"也算不符。
+    """
+    problems = []
+    for name in sorted(set(observed) | set(allowed)):
+        got, want = observed.get(name, 0), allowed.get(name, 0)
+        if got == want:
+            continue
+        if want == 0:
+            problems.append(f"{name} {got} 条（不该跳过）")
+        elif got == 0:
+            problems.append(f"{name} 0 条（期望 {want} 条：那几条没被跳过 —— 开了 KANBAN_LIVE？"
+                            f"被删了？还是这一步不再跑全量了？）")
+        else:
+            problems.append(f"{name} {got} 条（期望 {want} 条）")
+    if not problems:
+        return True, f"跳过 {sum(observed.values())} 条，与允许表一致"
+    return False, ("跳过数对不上：" + "；".join(problems) +
+                   "。跳过 = 那一层能力这次**没验**（没有 node / 没装 playwright / "
+                   "三级浏览器都不可用 / 没有 git），而整份静默跳过跟全绿同形 —— "
+                   "要么补齐环境，要么像 test_ai.py 那样显式列进 ALLOWED_SKIPS 并写明理由")[:400]
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
-def run(argv: list[str], env: dict, timeout: int = 900) -> tuple:
-    """跑一步，返回 (是否通过, 耗时, 摘要行)。失败时摘要里带日志尾，别只说"红了"。"""
+def run_capture(argv: list[str], env: dict, timeout: int = 900) -> tuple:
+    """跑一步并**把原始输出也带回来**：`(是否通过, 耗时, 摘要行, 原始输出)`。
+
+    为什么要原始输出：跳过审计（见 `_skip_audit`）要读 conftest 印在结尾的点名块。
+    摘要行那 300 字是为"红了要能一眼看出是哪一步"设计的，不适合做判据。
+    """
     t0 = time.time()
     try:
         r = subprocess.run(argv, cwd=str(ROOT), env=env, capture_output=True,
@@ -92,7 +155,13 @@ def run(argv: list[str], env: dict, timeout: int = 900) -> tuple:
     tail = [ln for ln in lines if "[FAIL]" in ln or "✗" in ln][:3]
     note = " ⏎ ".join(tail + lines[-1:])[:300] if tail else \
         (" ⏎ ".join(lines[-2:])[:170] if lines else f"exit={code}")
-    return code == 0, dt, note
+    return code == 0, dt, note, out
+
+
+def run(argv: list[str], env: dict, timeout: int = 900) -> tuple:
+    """跑一步，返回 (是否通过, 耗时, 摘要行)。失败时摘要里带日志尾，别只说"红了"。"""
+    ok, dt, note, _ = run_capture(argv, env, timeout)
+    return ok, dt, note
 
 
 SEED = {
@@ -151,6 +220,10 @@ def main() -> int:
     # 但万一哪天漏了，宁可写进临时目录，也绝不能碰到用户真实的 ~/.ai-kanban。
     env = dict(os.environ, KANBAN_DATA_DIR=tmp,
                PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    # 活体用例（`KANBAN_LIVE=1`）**必须关着**：这一步是"干净 env"档，它既不该去烧真实配额，
+    # 也不该让跳过数随调用者的环境漂 —— 跳过审计（`_skip_audit`）要求这个数确定是 5。
+    # 这正是"包装层的 env 要分两套"那条纪律的又一例：运行开关漏进被测 env，会造出与代码无关的红。
+    env.pop("KANBAN_LIVE", None)
     # 端口不能省：桌面版默认占 18320，而 Windows 上 SO_REUSEADDR 允许两个进程
     # 同时"绑定成功"—— 抢不到端口的那个会静默存在，门禁就可能打到用户的真实实例上。
     srv_env = dict(env, KANBAN_PORT=str(port))
@@ -180,9 +253,20 @@ def main() -> int:
         # 预检排在 pytest 之前：它 2 秒就能说出"pytest 要红 80 秒 + 探针要空跑 8 分钟
         # 才能绕出来"的事（2026-10-24 实测的残渣事故），两种模式的成本都可以忽略。
         step("探针预检（残渣/哑火）", [PY, "scripts/mutation_probe.py", "--preflight"], 120)
-        step("pytest 全量（含覆盖率门槛）",
-             [PY, "-m", "pytest", "-q", "--cov-fail-under", coverage_floor(),
-              "--basetemp", os.path.join(tmp, "basetemp")], 1800)
+        # pytest 那一步不走 step()：它多一道**跳过审计**（见 `_skip_audit`）——
+        # 报告里的"跳过"与"全绿"长得一样，而跳过意味着那一层能力这次没验。
+        # 只读退出码的话，"整份文件被跳过"永远是绿的（E2E 那 75+ 条就这么在 CI 上消失了）。
+        ok, dt, note, out = run_capture(
+            [PY, "-m", "pytest", "-q", "--cov-fail-under", coverage_floor(),
+             "--basetemp", os.path.join(tmp, "basetemp")], env, 1800)
+        if ok:                                   # pytest 自己就红了的话，它的输出才是该看的现场
+            aok, anote = _skip_audit(_parse_skips(out), ALLOWED_SKIPS)
+            note, ok = (f"{note} ⏎ {anote}"[:300], aok)
+            if not aok:
+                note = anote                     # 红时只留可行动的那句，别被覆盖率数字挤掉
+        results.append(("pytest 全量（含覆盖率门槛+跳过审计）", ok, dt, note))
+        print(f"  [{'OK' if ok else 'FAIL'}] {'pytest 全量（含覆盖率门槛+跳过审计）':34s} "
+              f"{dt:6.1f}s  {note}", flush=True)
         if MODE != "quick":
             # 覆盖率只证明"这行被执行过"，不证明"这行错了会被发现"。
             # 变异探针是唯一能量化后者的门禁：**改了语义还全绿 = 盲区**，直接判失败。
