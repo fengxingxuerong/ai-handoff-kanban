@@ -726,6 +726,16 @@ MUTATIONS: list[dict] = [
         "tests": ["tests/test_api.py", "tests/test_mcp_server.py"],
     },
     {
+        "id": "repo_watch_baseline_write_unlocked",
+        "file": "app/repo_watch.py",
+        "old": '            with blocking_lock(_state_file().with_suffix(".lock"), timeout=10.0,\n'
+               '                               what="仓库雷达基线"):',
+        "new": '            if True:  # 探针：基线读改写退回只有线程锁',
+        "why": "基线 repo_watch.json 的读-改-写退回只有线程锁：第二个服务进程写同一份时"
+               "「A 读 → B 读 → A 写 → B 写」，A 的改动静默消失（没有任何报错）",
+        "tests": ["tests/test_repo_watch.py"],
+    },
+    {
         "id": "port_default_written_twice",
         "file": "app/handoff_page.py",
         "old": '                       port: str = DEFAULT_PORT, generated_at: str = "",',

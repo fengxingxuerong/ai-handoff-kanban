@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from .gitinfo import git_snapshot
 from .paths import data_dir
 
 _LOCK = threading.RLock()
+_LOCK_DEPTH = threading.local()   # _state_guard 的同线程重入计数（体例同 main._cross_process_lock）
 
 # 确认审计（repo_audit.jsonl）是追加型存储：用户每点一次「确认并同步/标记已读」落一行，
 # 不设上限就会一直涨，而 `recent_audit` 在每次巡检时都**整读**它（硬性约定 11）。
@@ -61,6 +63,44 @@ def _save_state(state: dict) -> None:
         with open(tmp, "w", encoding="utf-8") as fp:
             json.dump(state, fp, ensure_ascii=False, indent=2)
         os.replace(tmp, f)
+
+
+@contextmanager
+def _state_guard():
+    """基线 `repo_watch.json` 的**读-改-写**临界区：线程锁 + 跨进程文件锁。
+
+    为什么基线也要跨进程锁（2026-10-25）：这份文件由服务进程写入（总览巡检回写、
+    **点开单个项目要现值时也会回写**、ack、删项目清理），而同一个数据目录**可以同时被
+    第二个服务进程打开** —— 残留实例 + 新实例换端口起、或手工 `uvicorn app.main:app`
+    调试时（"残留进程握着文件"在本项目是实测过的坑）。那时"A 读 → B 读 → A 写 → B 写"
+    会让 A 的改动静默消失。**同一模块里 `repo_audit.jsonl` 的追加+裁减早就用了
+    `blocking_lock`（跨进程），基线这份却只有线程锁** —— 同一条纪律只做了一半的形状。
+
+    锁序固定：先线程锁、后文件锁。代价是可能等到 10 秒（另一进程正在写），
+    这与 `main._cross_process_lock` 对 projects.json 的取舍一致：宁可慢，不可丢。
+    锁加在侧车文件（`repo_watch.lock`）上而不是数据文件本身 —— 写入是"临时文件 +
+    `os.replace`"，Windows 下替换不掉一个还被别的进程开着的文件（同 `filelock` 的说明）。
+
+    同线程可重入：`blocking_lock` 按**句柄**生效、不可重入（见 `app/filelock.py`），
+    所以这里照 `main._cross_process_lock` 的体例记深度 —— 今天没有嵌套的改写点，
+    但这是搬过来的既有体例，不自己发明一套。
+    """
+    depth = getattr(_LOCK_DEPTH, "n", 0)
+    with _LOCK:
+        if depth:                      # 已在同一线程的临界区里：只加深计数，不再抢文件锁
+            _LOCK_DEPTH.n = depth + 1
+            try:
+                yield
+            finally:
+                _LOCK_DEPTH.n = depth
+            return
+        _LOCK_DEPTH.n = 1
+        try:
+            with blocking_lock(_state_file().with_suffix(".lock"), timeout=10.0,
+                               what="仓库雷达基线"):
+                yield
+        finally:
+            _LOCK_DEPTH.n = 0
 
 
 def _trim_audit(f: Path) -> None:
@@ -181,7 +221,7 @@ def scan_project(project: dict, state: dict | None = None, use_cache: bool = Fal
 
 def scan_projects(projects: list[dict], use_cache: bool = False) -> list[dict]:
     """扫描项目并更新基线状态；返回事件列表。"""
-    with _LOCK:
+    with _state_guard():
         state = _load_state()
         out = []
         now = _now()
@@ -207,7 +247,7 @@ def scan_projects(projects: list[dict], use_cache: bool = False) -> list[dict]:
 
 def ack(pid: str, evidence: dict, before: int | None, after: int | None, note: str = "", actor: str = "human") -> dict:
     """确认当前仓库状态为已读；若 after 提供，写一条进度审计。"""
-    with _LOCK:
+    with _state_guard():
         state = _load_state()
         now = _now()
         st = state.setdefault(str(pid), {})
@@ -245,7 +285,7 @@ def forget(pids: str | list[str]) -> int:
     不随项目消失（它自带行数上限，不会无界增长）。
     """
     ids = {pids} if isinstance(pids, str) else {str(p) for p in pids}
-    with _LOCK:
+    with _state_guard():
         state = _load_state()
         removed = sum(1 for p in ids if state.pop(p, None) is not None)
         if removed:
@@ -262,7 +302,9 @@ def replace_state(state: dict) -> int:
     与记忆层"来源里没有 memories.json = 不动现有记忆"同一语义。
     """
     clean = {str(k): v for k, v in state.items() if isinstance(v, dict)}
-    with _LOCK:
+    # 整份替换也要进临界区：否则「恢复备份」与并发的扫描回写会互相盖掉（谁后写谁赢，
+    # 而恢复方以为基线已经回到备份那一刻了）
+    with _state_guard():
         _save_state(clean)
     return len(clean)
 

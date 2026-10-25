@@ -263,3 +263,65 @@ def test_deleting_projects_clears_their_watch_baselines(app_client, tmp_path):
     assert status == 200
     state = json.loads(state_file.read_text(encoding="utf-8"))
     assert pb["id"] not in state
+
+
+def test_baseline_write_is_cross_process_locked(tmp_path, monkeypatch):
+    """基线 `repo_watch.json` 的读-改-写必须挡住**第二条进程**，不只是同进程线程。
+
+    为什么需要它（2026-10-25）：这份文件此前只有线程锁（`threading.RLock`），而同一个数据目录
+    **可以同时被第二个服务进程打开**（残留实例 + 新实例换端口起、或手工 `uvicorn app.main:app`
+    调试 —— "残留进程握着文件"在本项目是实测过的坑）。只挡线程时的丢更新形状是
+    "A 读 → B 读 → A 写 → B 写"：A 的改动静默消失，**没有任何报错**。
+    同一模块里 `repo_audit.jsonl` 的追加+裁减早就用了跨进程锁，基线这份却没有。
+
+    判据是**行为证据**，不是"代码里写了 blocking_lock"（那是断言动作，不是断言效果）：
+      ① 父进程先占住那把侧车锁；
+      ② 子进程去 ack —— 它先写一个"我已开始"标记（证明 import 已完成，免得把"启动慢"
+         误当成"被挡住"）；
+      ③ 占着锁的这段时间里，子进程**必须出不来**；
+      ④ 放锁后它必须成功，且落盘的基线里能看到它写的那条。
+    没有跨进程互斥时，②③之间子进程会立刻写完退出 → 这条红。
+    """
+    import sys
+    import time
+
+    from app.filelock import blocking_lock
+
+    root = Path(__file__).resolve().parent.parent
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setenv("KANBAN_DATA_DIR", str(data))
+
+    mark = tmp_path / "child_started.txt"
+    child = tmp_path / "child_ack.py"
+    child.write_text(
+        "import sys\n"
+        "import pathlib\n"
+        f"sys.path.insert(0, {str(root)!r})\n"
+        "from app import repo_watch as rw\n"
+        f"pathlib.Path({str(mark)!r}).write_text('started', encoding='utf-8')\n"
+        "rw.ack('proj-a', {'signature': 'sig-1'}, None, None)\n"
+        "print('acked')\n", encoding="utf-8")
+
+    env = dict(os.environ, KANBAN_DATA_DIR=str(data),
+               PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    lock = data / "repo_watch.lock"
+
+    with blocking_lock(lock, timeout=5.0, what="测试：占住仓库雷达基线锁"):
+        p = subprocess.Popen([sys.executable, str(child)], cwd=str(root), env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        deadline = time.time() + 30
+        while time.time() < deadline and not mark.exists() and p.poll() is None:
+            time.sleep(0.05)
+        assert mark.exists(), "子进程没能走到 ack（先看它自己吐了什么）"
+        time.sleep(1.2)                     # 占着锁的这段时间里，它不该把基线写完
+        blocked = p.poll() is None
+
+    assert blocked, ("父进程占着侧车锁时，子进程竟然把基线写完了 —— 说明基线的读-改-写"
+                     "没有跨进程互斥（只挡得住同进程线程）")
+
+    out = p.communicate(timeout=30)[0].decode("utf-8", "replace")
+    assert p.returncode == 0 and "acked" in out, f"放锁后子进程应当成功：rc={p.returncode}\n{out}"
+    state = json.loads((data / "repo_watch.json").read_text(encoding="utf-8"))
+    assert state.get("proj-a", {}).get("last_seen_signature") == "sig-1", \
+        "子进程确认过的基线没落盘"
