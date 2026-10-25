@@ -19,6 +19,8 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -55,6 +57,29 @@ def test_probe_ids_are_lowercase_snake_case():
     probe = _load_probe()
     bad = [m["id"] for m in probe.MUTATIONS if not re.fullmatch(r"[a-z0-9_]+", m["id"])]
     assert not bad, f"这些探针 id 不是全小写 snake_case：{bad}"
+
+
+def test_pid_alive_is_verified_against_real_processes():
+    """`_pid_alive` 必须对着**真进程**验 —— 它原来的用例全靠 monkeypatch，于是漏掉了真缺陷。
+
+    为什么单列一条（2026-10-25 检修发现，端到端验证揪出来的）：Windows 上
+    `os.kill(pid, 0)` **不是**「探测存活」，CPython 把它实现成 `TerminateProcess`
+    （以退出码 0 结束那个进程）。旧实现就是用它，于是两种坏结果各占一半：
+      · 对方是同用户的进程 → 探针把对方**杀掉**（护栏变成凶器）；
+      · 权限不足 → `OSError` → 判「已死」 → 活进程被当陈锁 → **第二份探针照常开跑**
+        （实测退出码 0 而不是该有的 3）。
+    而当时那两条护栏用例都 `monkeypatch.setattr(probe, "_pid_alive", ...)`，从没碰过真实现 ——
+    正是本项目「拒绝 mock 自证」警告的那件事。这条用例只用**真 PID**：
+    本进程（活）+ 刚退出的子进程（死），两个方向都钉。
+    """
+    probe = _load_probe()
+    assert probe._pid_alive(os.getpid()) is True, "自己的进程号当然活着"
+
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()                                    # 等它真退掉，PID 才算"死"
+    assert probe._pid_alive(p.pid) is False, (
+        f"已经退出的子进程（PID {p.pid}）被判成了活着 —— "
+        f"多半又用 os.kill(pid, 0) 当探测了（Windows 上那是 TerminateProcess）")
 
 
 def test_stale_probe_lock_is_cleared_when_that_process_is_gone(tmp_path, monkeypatch):

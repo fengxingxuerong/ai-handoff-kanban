@@ -1145,9 +1145,47 @@ def running_lock() -> Path:
 
 
 def _pid_alive(pid: int) -> bool:
-    """这个 PID 还活着吗（Windows 上 os.kill(pid, 0) 同样可用）。"""
+    """这个 PID 还活着吗。
+
+    ⚠️ **Windows 上不许用 `os.kill(pid, 0)`** —— 这是检修时被端到端验证揪出来的：
+    CPython 在 Windows 上把 `os.kill` 实现成 `TerminateProcess`，`sig=0` 不是「探测」
+    而是「以退出码 0 结束那个进程」；权限不足时它抛 OSError。于是这个"存活检测"
+    要么把对方杀掉、要么报错 —— 两种都不是我们要的。**实测后果**：另一份探针持锁时，
+    `_pid_alive` 返回了 False（把活进程当成了陈锁），于是第二份探针**照常开跑**，
+    护栏形同虚设（退出码 0，而不是拒绝的 3）。
+    而当时那两条单测都 monkeypatch 了本函数，所以从没验过真实现 ——
+    正是本项目「拒绝 mock 自证」警告的那件事。
+
+    Windows 改用 `OpenProcess(SYNCHRONIZE)` + `WaitForSingleObject(h, 0)`：
+    拿到句柄且**没**被信号（= 还没退出）就是活着。判别失败原因用 `GetLastError`：
+    `ERROR_INVALID_PARAMETER` = 这个 PID 不存在；`ERROR_ACCESS_DENIED` = 存在但没权限
+    —— 后者按**活着**处理（宁可少跑一份探针，也不能两份同时改源码）。
+    """
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        SYNCHRONIZE = 0x00100000
+        WAIT_TIMEOUT = 0x00000102
+        ERROR_INVALID_PARAMETER = 87
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+
+        handle = kernel32.OpenProcess(SYNCHRONIZE, False, int(pid))
+        if not handle:
+            err = ctypes.get_last_error()
+            return err != ERROR_INVALID_PARAMETER      # 没权限也算活着（见 docstring）
+        try:
+            return kernel32.WaitForSingleObject(handle, 0) == WAIT_TIMEOUT
+        finally:
+            kernel32.CloseHandle(handle)
+
     try:
-        os.kill(pid, 0)
+        os.kill(pid, 0)                     # POSIX 上这才是正确的存活探测
         return True
     except PermissionError:                 # 活着但不属于我们 —— 仍算活着
         return True
