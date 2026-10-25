@@ -132,3 +132,60 @@ def test_preflight_clean_when_every_old_matches(tmp_path):
     (tmp_path / "fake_module.py").write_text("OLD = 1\n", encoding="utf-8")
 
     assert probe.preflight([_pre("t", "OLD = 1", "OLD = 2")], root=tmp_path) == []
+
+
+def _pre_js(mid: str) -> dict:
+    return {"id": mid, "file": "web/fake.js", "old": "const A = 1;",
+            "new": "const A = 2;", "why": "测试用", "tests": []}
+
+
+def test_js_mutation_cannot_count_as_killed_by_breaking_syntax(tmp_path, monkeypatch):
+    """JS 探针必须先在「语法仍合法」上过闸，否则"被杀"可能只是"页面整个坏了"。
+
+    为什么需要它（2026-10-25，随第一批 js 探针一起）：Python 侧的对应情形是导入失败 →
+    pytest 收集错误 → 状态是 `error` 而不是 `killed`，天然被挡住；而 JS 语法错会让整页
+    脚本不执行、E2E 全红 —— 看起来正是"被杀"，测的却是"页面坏了"。这两件事混起来，
+    探针就会拿假功劳：真正语义正确但没人覆盖的写法，会被记成"有覆盖"。
+
+    三件事都钉：
+    ① 闸**接在** `apply_and_run` 里（只定义不接线等于没有）；
+    ② 语法坏的变异 → `error`，且说明里点名"语法错"；
+    ③ 本机没有 node → 也是 `error`（无法判定 === 没验，不是通过）。
+    """
+    probe = _load_probe()
+
+    src = (ROOT / "scripts" / "mutation_probe.py").read_text(encoding="utf-8")
+    assert '_js_syntax_ok(path)' in src, "语法闸没接在 apply_and_run 里"
+    assert 'path.suffix == ".js"' in src, "语法闸没有按扩展名生效"
+
+    good = tmp_path / "good.js"
+    good.write_text("const a = 1;\nexport default a;\n", encoding="utf-8")
+    ok, why = probe._js_syntax_ok(good)
+    assert ok and why == "", f"合法 JS 被判坏了（假红）：{why}"
+
+    bad = tmp_path / "bad.js"
+    bad.write_text("const a = ;\n", encoding="utf-8")
+    ok2, why2 = probe._js_syntax_ok(bad)
+    assert not ok2 and "语法错" in why2, f"语法坏的 JS 没被拦住：{ok2} {why2}"
+
+    monkeypatch.setattr(probe.shutil, "which", lambda _n: None)
+    ok3, why3 = probe._js_syntax_ok(good)
+    assert not ok3 and "node" in why3, "没有 node 时应当判「无法判定」并算 error，不能放行"
+
+
+def test_probe_table_keeps_covering_the_frontend_js():
+    """前端 JS（交互逻辑所在）必须在探针表里有位置，且条数不能悄悄缩水。
+
+    为什么需要它（2026-10-25 核对）：`web/` 下早有 3 条探针，但全在 `style.css` /
+    `index.html` 的**布局形状**上；10 个 `js-*.js`（全部交互逻辑）此前是零覆盖 ——
+    而覆盖率回答"这行跑过没有"，只有探针回答"这行错了会不会红"。
+    少数几条也要看得见：低于 5 条要么是漏了，要么是有人删了探针，两种都得人看一眼。
+    """
+    probe = _load_probe()
+    js = [m for m in probe.MUTATIONS if str(m["file"]).endswith(".js")]
+    assert len(js) >= 5, (
+        f"前端 js 探针只剩 {len(js)} 条（id: {[m['id'] for m in js]}）—— "
+        "交互逻辑这一层没有'错了会不会红'的守卫了")
+    for m in js:
+        assert m["tests"], f"{m['id']} 没有 killer 用例 —— 探针跑了也判不出"
+        assert str(m["file"]).startswith("web/"), f"{m['id']} 的 target 不在 web/ 下"

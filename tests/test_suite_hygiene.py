@@ -265,3 +265,45 @@ def test_release_gate_audits_the_skip_count():
     # 反向：期望的 5 条一条都没跳过（开着 KANBAN_LIVE 或那几条被删了）也要红
     ok3, note3 = mod._skip_audit({}, allowed)
     assert not ok3 and "test_ai.py" in note3, f"期望的跳过没出现也必须红：{note3}"
+
+
+def _script_module(name: str):
+    """按路径加载 scripts/ 下的脚本（它们模块级只有常量定义，import 无副作用）。"""
+    spec = importlib.util.spec_from_file_location(
+        f"{name}_under_test", ROOT / "scripts" / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_regression_instance_verifies_it_started_its_own_server():
+    """起实例的脚本必须**自证**「这个端口上是我的服务」—— 端口通了不等于服务是我们的。
+
+    为什么需要它（2026-10-25 实测，一次假失败的真根因）：`release_regression` 的 `PORT`
+    写死 18399，而 readiness 只等 `port_listening()`。端口上**已经有别人**（上次跑挂留下的
+    残留 uvicorn，"残留进程握着东西"在本项目是实测过的坑）时它会立刻"以为起来了"，
+    随后所有 HTTP 都打到那个别人的实例上（实测它回的 `data_file` 指向上一轮的临时目录），
+    而 MCP 子进程拿的是**本轮的空目录** → 没有 config.json → `mcp_readonly` 默认 False →
+    写没被拒 → 报出来的是「只读模式下写操作被拒」。**真原因（端口被占）与报出来的那一条
+    隔了十万八千里**，还会让人去查编码、查只读开关 —— 门禁自伤里最难查的一类。
+
+    纪律本身早写在 `docs/测试约定.md` 第 15 条（"起实例后必须问它自己读的是哪份数据"），
+    `delivery_drill` 与 `ci_local` 都照做了，**只有这个脚本没照做**。这条把它钉上：
+    ① 本轮的 data_file → 放行；② 别人的 → 拦住并点名是别人的、给出怎么清；
+    ③ 连 data_file 都不报 → 也算认不出，不放行；④ 自证必须排在 `return proc` **之前**。
+    """
+    mod = _script_module("release_regression")
+    own = {"data_file": str(Path(mod.DATA_DIR) / "projects.json")}
+    assert mod._own_instance_guard(own) == "", "本轮的实例被误拦（假红）"
+
+    foreign = {"data_file": r"C:\Temp\kanban_regression_OLD\projects.json"}
+    why = mod._own_instance_guard(foreign)
+    assert why, "别人的实例没被拦住 —— 那就会拿它的回包当本轮结论"
+    assert "别人的" in why and "data_file=" in why, f"没点名是别人的、也没给现场：{why}"
+    assert "taskkill" in why or "清掉" in why, f"没说怎么处置：{why}"
+    assert mod._own_instance_guard({}) != "", "连 data_file 都不报也算认不出，不能放行"
+
+    src = (ROOT / "scripts" / "release_regression.py").read_text(encoding="utf-8")
+    assert "_own_instance_guard(health" in src, "自证没接在 start_server 里（只定义不接线等于没有）"
+    assert src.index("_own_instance_guard(health") < src.index("return proc"), \
+        "自证必须排在 return proc 之前 —— 排在后面等于没验"

@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -735,6 +736,50 @@ MUTATIONS: list[dict] = [
                "「A 读 → B 读 → A 写 → B 写」，A 的改动静默消失（没有任何报错）",
         "tests": ["tests/test_repo_watch.py"],
     },
+    # ---- 前端（web/js-*.js）：2026-10-25 首批 ----
+    # 此前前端只有 3 条探针，且全在 style.css / index.html 的**布局形状**上；
+    # 10 个 js-*.js（全部交互逻辑）零覆盖。这批每条都挑「有明确 killer」的语义：
+    # 静态的走 tests/test_frontend.py（快），行为只能开浏览器的走 E2E 单点（慢但真）。
+    {
+        "id": "js_open_report_handler_drops_data_arg",
+        "file": 'web/js-core.js',
+        "old": '  openReport: (arg) => openReport(arg),',
+        "new": '  openReport: () => openReport(),',
+        "why": '把 2026-09-20 那个真实事故原样放回去：处理器不收 data-arg，「回看某份历史报告」变成「重新跑一次分析」—— 按钮看着有反应，做的却是另一件事，连截图都看不出差别',
+        "tests": ['tests/test_frontend.py::test_actions_that_receive_data_arg_actually_forward_it'],
+    },
+    {
+        "id": "js_esc_stops_escaping_angle_brackets",
+        "file": 'web/js-core.js',
+        "old": '  return String(s ?? "").replace(/[&<>"\']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", \'"\': "&quot;", "\'": "&#39;" }[c]));',
+        "new": '  return String(s ?? "").replace(/[&"\']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", \'"\': "&quot;", "\'": "&#39;" }[c]));',
+        "why": '转义表不再管尖括号：项目名里的 <b> 会被当标签渲染（注入），而卡片文本看着还是那个名字',
+        "tests": ['tests/test_frontend_e2e.py::test_special_chars_in_name_do_not_break_buttons'],
+    },
+    {
+        "id": "js_edit_form_backfills_from_list_again",
+        "file": 'web/js-edit.js',
+        "old": '    try { full = await api("/api/projects/" + id); } catch (e) { full = null; }',
+        "new": '    try { full = await api("/api/projects"); } catch (e) { full = null; }',
+        "why": '编辑表单又改从总览列表回填：列表接口不含 background / handoff_note，而 PUT 是整体覆盖 —— 一保存就把用户手写的两段清空，界面毫无痕迹',
+        "tests": ['tests/test_frontend.py::test_project_edit_form_is_filled_from_the_single_project_endpoint'],
+    },
+    {
+        "id": "js_milestone_delete_by_parent_again",
+        "file": 'web/js-edit.js',
+        "old": '  const row = btn.closest(".ms-row");',
+        "new": '  const row = btn.parentElement.parentElement;',
+        "why": '里程碑行删除退回「按 DOM 位置找行」：data-arg 是渲染时写死的序号，删过一行后与 DOM 下标错位，点第三行的 ✕ 会删错行甚至删不到',
+        "tests": ['tests/test_frontend.py::test_milestone_rows_delete_by_element_not_stale_index'],
+    },
+    {
+        "id": "js_nomatch_claims_empty_board_again",
+        "file": 'web/js-overview.js',
+        "old": '    msg.textContent = `没有匹配「${q}」的项目（共 ${projects.length} 个）—— 换个词，或清空搜索框`;',
+        "new": '    msg.textContent = "还没有项目。先建一个，把交接说明和下一步写进去；换智能体时一键复制即可。";',
+        "why": '搜索打了个不匹配的词就宣布「还没有项目」—— 手里有 5 个项目的人看着像数据被谁清空了（三种「屏幕上没卡片」必须分开说：真没项目 / 筛选空 / 搜索不匹配）',
+        "tests": ['tests/test_frontend_e2e.py::test_search_with_no_match_does_not_claim_the_board_is_empty'],
+    },
     {
         "id": "port_default_written_twice",
         "file": "app/handoff_page.py",
@@ -827,6 +872,27 @@ MUTATIONS: list[dict] = [
 ]
 
 
+def _js_syntax_ok(path: Path) -> tuple[bool, str]:
+    """变异后的 JS 必须**语法仍然合法**，否则这次「红」不算数。
+
+    为什么需要它（2026-10-25，随第一批 js 探针一起加）：JS 一旦语法错，整页脚本不执行、
+    E2E 会全红 —— 那看起来像「被杀」，其实测的是「页面整个坏了」，与「语义改动被抓住」
+    是两件事（Python 侧的对应情形是导入失败 → pytest 收集错误 → 状态是 error 而非 killed）。
+    没有 node 时报「无法判定」，也算 error：**宁可红，不可伪绿** ——
+    与门禁的跳过审计同一口径（跳过 = 没验，不是验过）。
+    """
+    node = shutil.which("node")
+    if not node:
+        return False, "本机没有 node，无法确认变异后的 JS 语法仍然合法（这条不算被杀）"
+    r = subprocess.run([node, "--check", str(path)], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=60)
+    if r.returncode != 0:
+        detail = (r.stderr or r.stdout).strip().splitlines()
+        return False, ("变异把 JS 改出了语法错 —— 这种红是「页面整个坏了」，不算语义被抓："
+                       + (detail[0][:150] if detail else ""))
+    return True, ""
+
+
 def run_tests(files: list[str], timeout: int) -> tuple[str, float]:
     """跑测试子集。返回 (killed|survived|error, 耗时)。"""
     t0 = time.time()
@@ -914,6 +980,10 @@ def apply_and_run(m: dict, timeout: int) -> dict:
     st = path.stat()
     try:
         path.write_text(original.replace(m["old"], m["new"], 1), encoding="utf-8")
+        if path.suffix == ".js":                       # 前端探针：先确认语法没被改坏
+            ok, why = _js_syntax_ok(path)
+            if not ok:
+                return {**m, "status": "error", "note": why, "dt": 0.0}
         status, dt = run_tests(m["tests"], timeout)
         return {**m, "status": status, "note": "", "dt": dt}
     finally:

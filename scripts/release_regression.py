@@ -86,6 +86,31 @@ def port_listening(port):
 
 # ---------------- 服务生命周期 ----------------
 
+def _own_instance_guard(health: dict) -> str:
+    """端口上是不是**本轮起的那个**实例？空串 = 是；否则返回给人看的、可行动的原因。
+
+    为什么需要它（2026-10-25 实测，一次假失败的真根因）：`PORT` 是写死的 18399，
+    而 readiness 只等 `port_listening()` —— 端口上**已经有别人**（上次跑挂留下的残留
+    uvicorn，"残留进程握着东西"在本项目是实测过的坑）时，它会立刻"以为起来了"，
+    随后**所有 HTTP 都打到那个别人的实例**上（实测它回的 `data_file` 指向上一轮的临时目录），
+    而 MCP 子进程拿的是**本轮**那个空目录 → 没有 config.json → `mcp_readonly` 默认 False →
+    写没被拒 → 报出来的是「只读模式下写操作被拒」失败。**真原因（端口被占）与报出来的
+    那一条隔了十万八千里**，还会让人去查编码、查只读开关 —— 门禁自伤里最难查的一类。
+
+    `delivery_drill` 与 `ci_local` 早就有这道自证（读 `/api/health` 的 `data_file`），
+    这里补齐；**宁可红得早且说人话，不可拿别人的回包当本轮结论**。
+    """
+    df = str((health or {}).get("data_file") or "")
+    if not df:
+        return f"端口 {PORT} 上的服务没报 data_file —— 认不出是不是本轮起的实例"
+    if Path(df).parent != DATA_DIR:
+        return (f"端口 {PORT} 上是个**别人的**服务：它报的 data_file={df}，"
+                f"而本轮的数据目录是 {DATA_DIR}。多半是上次跑挂留下的残留 —— "
+                f"先清掉再重跑（`taskkill /F /T /PID <上面的 pid>`）；"
+                f"用别的端口跑本轮也行（改 PORT 常量）")
+    return ""
+
+
 def start_server() -> subprocess.Popen:
     env = dict(os.environ)
     env["KANBAN_DATA_DIR"] = str(DATA_DIR)
@@ -99,11 +124,23 @@ def start_server() -> subprocess.Popen:
                              "--log-level", "warning"],
                             cwd=str(ROOT), env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    last = ""
     for _ in range(50):
         if port_listening(PORT):
+            # 端口通了**不等于**本轮的服务起来了 —— 先自证这一个是我们的（见 _own_instance_guard）
+            try:
+                _status, health = req("GET", "/api/health", timeout=10)
+            except Exception as e:                              # noqa: BLE001
+                last = f"探活失败：{e}"
+                time.sleep(0.3)
+                continue
+            why = _own_instance_guard(health if isinstance(health, dict) else {})
+            if why:
+                stop_server(proc)
+                raise RuntimeError(why)
             return proc
         time.sleep(0.3)
-    raise RuntimeError("回归实例启动超时")
+    raise RuntimeError(f"回归实例启动超时（{last or '端口一直没通'}）")
 
 
 def stop_server(proc: subprocess.Popen) -> None:
