@@ -74,7 +74,7 @@
 | `scripts/mcp_frozen_smoke.py` | **MCP 冻结版自查**（2026-10-23，与 `frozen_smoke` 并列）：真的启动 `dist\AI交接看板-MCP.exe`，走真实 stdio 打一遍，钉四件事 —— ① `tools/list` 拿得到 23 个工具；② **stdout 每一行都是合法 JSON-RPC**（一行日志就能让客户端解崩、整个服务等于没发布）；③ **中文双向不乱码**（写进去再读回来逐字一致：出方向工具目录被编成 cp936 客户端就崩、入方向中文标题静默变乱码入库）；④ 真写进了隔离临时目录（不信回执的一面之词）。九条断言，退出码 0 才算过。**「打包才会坏、源码态永远看不出来」的那一类**，所以必须跟着 exe 一起跑（`ci_local --with-exe` 里是独立一步）；`--source` 可对着源码跑同一套断言（先自证门禁本身有效） |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往源码注入 102 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。 **逐轮史**（哪一轮加了几条、为什么、每条 killer 是谁）已整段搬进 [docs/测试约定.md](docs/测试约定.md) 的「变异探针：逐轮史」一节 —— 内容搬走，不是删掉。**被外部信号打断时不会走到 `finally`**：2026-10-22 前台跑探针被沙箱 SIGTERM（进程外杀），变异留在 `web/index.html` 里没还原，下一次跑报"变异文本没匹配上"才暴露 —— 中断过的探针一律先 `git status` 自检再继续。**2026-10-24 起有启动预检**（`--preflight`，ci_local 两种模式都先跑）：old 命不中而 new 还在源码里 = **残渣**（报 `git checkout` 处置）；否则 = **表没同步**（哑火）。删除型变异 new 为空判不出残渣（空串 `in` 恒真，必须先排除）。**2026-10-25 首批前端 JS 探针（88→93）**：`web/` 下原本只有 3 条、且全在 `style.css` / `index.html` 的布局形状上，10 个 `js-*.js`（全部交互逻辑）零覆盖。新增 5 条打语义的：data-arg 分发、转义表漏尖括号、编辑表单回填来源、里程碑按元素删、空态文案说成「还没有项目」。**JS 探针多一道语法闸**（`_js_syntax_ok`：变异后必须 `node --check` 仍合法，否则算 `error` 不算 `killed` —— 语法错会让整页坏掉、E2E 全红，那是「页面坏了」不是「语义被抓」）。killer 收窄到单用例：44s → 2.6s/条。钉子 `test_js_mutation_cannot_count_as_killed_by_breaking_syntax` 与 `test_probe_table_keeps_covering_the_frontend_js`。**2026-10-25 第二批 JS 探针（93→97）**：每条都把当年那个真 bug 原样放回去 —— ① 分歧判据又被 `!p.repo_path` 挡在门外；② 「阻塞」又被兜底塞进待办列；③ AI 指令单字段改动退回「读整份 → 改一处 → PUT 整份」（约定 1 的形状）；④ 搜索命中到上限却不说「后面还有」。其中两条是行为判据（静态契约碰不到、全仓确认无第二处钉子），红时要等满 E2E 超时（约 54s / 39s 一条）—— 成本有意接受：那条规则只有开浏览器才验得了。**还原改成「字节进、字节出」**（2026-10-25，两个方向都被实测咬过）：`read_text` 会做 universal newlines（CRLF→LF）、`write_text` 在 Windows 上又把 `\n` 翻成 `\r\n` —— 一头在归一、一头在翻译，「注入 → 还原」两遍下来行尾就变了（LF→CRLF 或 CRLF→LF，看先修了哪边）。内容读起来一样（`git diff` 归一化后是空的），但**不是逐字节还原**，症状是 `git status` 里的幽灵改动。现在 `raw = read_bytes()` 进、`write_bytes(raw)` 出，逐字节相等是**构造上成立**；变异表里的 LF 文本由 `_native()` 适配成文件自己的行尾。钉子 `test_apply_and_run_restores_bytes_for_both_line_endings`（两种行尾各一条，比 `read_bytes`）。**2026-10-25 第三批（97→102）全部用静态判据做 killer**：统计求和漏「待审查」、执行结果不走 toast、扫描收尾离开 finally、Esc 绕过 `closeOneModal`、清空搜索不刷新按钮显隐 —— 五条 13 秒跑完（对比两条 E2E 判据要 95 秒）。**能用静态钉住的规则别拿浏览器去验**。**跑的时候挂 `running_lock()`**（TEMP 里一份带 PID 的锁）：源码此刻是「活的」，同时跑别的门禁会得到与真故障无关的红 —— 所以第二份探针会**拒绝开跑**（退出码 3 并说人话），陈锁（进程已不在）自动清掉。id 一律全小写 snake_case。 |
+| `scripts/mutation_probe.py` | **变异探针**：往源码注入 102 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。 **逐轮史**（哪一轮加了几条、为什么、每条 killer 是谁）已整段搬进 [docs/测试约定.md](docs/测试约定.md) 的「变异探针：逐轮史」一节 —— 内容搬走，不是删掉（**每一批加了哪几条、为什么**也在那一节）。**被外部信号打断时不会走到 `finally`**：2026-10-22 前台跑探针被沙箱 SIGTERM（进程外杀），变异留在 `web/index.html` 里没还原，下一次跑报"变异文本没匹配上"才暴露 —— 中断过的探针一律先 `git status` 自检再继续。**2026-10-24 起有启动预检**（`--preflight`，ci_local 两种模式都先跑）：old 命不中而 new 还在源码里 = **残渣**（报 `git checkout` 处置）；否则 = **表没同步**（哑火）。删除型变异 new 为空判不出残渣（空串 `in` 恒真，必须先排除）。**还原改成「字节进、字节出」**（2026-10-25，两个方向都被实测咬过）：`read_text` 会做 universal newlines（CRLF→LF）、`write_text` 在 Windows 上又把 `\n` 翻成 `\r\n` —— 一头在归一、一头在翻译，「注入 → 还原」两遍下来行尾就变了（LF→CRLF 或 CRLF→LF，看先修了哪边）。内容读起来一样（`git diff` 归一化后是空的），但**不是逐字节还原**，症状是 `git status` 里的幽灵改动。现在 `raw = read_bytes()` 进、`write_bytes(raw)` 出，逐字节相等是**构造上成立**；变异表里的 LF 文本由 `_native()` 适配成文件自己的行尾。钉子 `test_apply_and_run_restores_bytes_for_both_line_endings`（两种行尾各一条，比 `read_bytes`）。**跑的时候挂 `running_lock()`**（TEMP 里一份带 PID 的锁）：源码此刻是「活的」，同时跑别的门禁会得到与真故障无关的红 —— 所以第二份探针会**拒绝开跑**（退出码 3 并说人话），陈锁（进程已不在）自动清掉。id 一律全小写 snake_case。 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打**两个**产物：`AI交接看板.exe`（GUI，`-w`，带 `web/`）与 `AI交接看板-MCP.exe`（**控制台子系统，故意不加 `-w`** —— MCP 走 stdio，而 `-w` 的 GUI 程序在 Windows 上拿不到标准流）。第二份是「只装了 exe 的用户没有 .venv，MCP 因此不可用」这个缺口的正解 |
 
@@ -303,6 +303,14 @@ rem 打包后必跑二：MCP 冻结版自查（只装 exe 的用户的命脉；-
     只留 `>=` 的话，"我这边是绿的"在别人机器上可能是另一套版本 —— 而这是个卖点是"交接"的工具。
     CI 工作流（`.github/workflows/ci.yml`）**按锁文件装、跑同一条 `ci_local.py --with-exe`**，
     且只在 `windows-latest` 上跑：发的是 Windows 桌面 exe，拿 ubuntu 测的是永不交付的路径。
+    这句承诺现在**有钉子看着**（2026-10-25 补）：`test_ci_runs_the_same_release_gate_with_the_exe`
+    要求 CI **恰好一个** `run` 块跑 `ci_local.py`、且带 `--with-exe`、全文件不出现 `--quick` ——
+    此前三种坏法都不会红：① 改成 `--quick`（跳过的恰好是「改了语义会不会红」那一层，
+    而 CI 结论照样绿）；② 删掉 `--with-exe`（不打包、不跑冻结自查）；③ 换成手敲清单
+    （正是工作流开头明确拒绝的形状）。另一条 `test_ci_installs_chromium_for_the_e2e_downgrade`
+    钉住「CI 真装了 chromium」—— 与「代码里保留第三级」那是一条的对偶：只留代码不装浏览器，
+    E2E 仍会整份静默跳过。两条都用**标准库**解析 `run:` 块（PyYAML 不在 requirements-dev 里，
+    用它就得 `importorskip` —— 那等于让钉子在干净环境里静默跳过）。
 23. **exe 的版本资源与 `/api/health` 必须是同一个事实**。`scripts/make_versionfile.py` 从
     `app/version.py` 取版本号、从 `make_stamp.py` 写的构建戳取时间，填进 PE 的
     `FileVersion`/`PrivateBuild`，于是右键属性能看到的数字和程序里报的一致。
@@ -501,7 +509,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 写的是同一个数。
 
-**验证基线**：`pytest` 847 收集（842 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 94%（93.66%，门槛 90）/ 36 个测试文件、796 个 `def test_` 且无重名；
+**验证基线**：`pytest` 849 收集（844 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 94%（93.66%，门槛 90）/ 36 个测试文件、798 个 `def test_` 且无重名；
 变异探针 102 条全被杀。**逐轮明细、每轮改了什么为什么、性能基线** → [docs/进度与版本档案.md](docs/进度与版本档案.md)。
 
 **下一步（按价值排序，详版在档案里）**：

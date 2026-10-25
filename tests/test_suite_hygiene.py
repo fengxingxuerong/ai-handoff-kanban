@@ -300,6 +300,86 @@ def _gate_steps() -> dict:
     return steps
 
 
+def _ci_run_blocks() -> list[str]:
+    """从 `ci.yml` 里取出每个 `run:` 块的内容（**标准库解析**，不引第三方依赖）。
+
+    为什么不用 PyYAML（2026-10-25 实测）：它在这台机器上恰好装着（6.0.3），但**不在
+    `requirements-dev.txt` 里** —— 是某个依赖的传递依赖。用 `importorskip("yaml")` 就等于
+    让这条钉子在干净环境里**静默跳过**，而这正是本项目最忌的形状（跳过与全绿同形、
+    漏的恰好是门禁自己）。所以：只靠标准库，只认这个工作流的**固定形状**
+    （`run:` 后接 `|` 块标量，或同一行内联命令）。
+
+    形状变了就会**红**而不是静默放过 —— 这是有意的：这条钉子的职责就是"CI 还在跑同一条入口"，
+    形状变了正该有人看一眼。
+    """
+    lines = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8").splitlines()
+    blocks, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if stripped.startswith("run:"):
+            rest = stripped[len("run:"):].strip()
+            if rest and rest != "|":                         # 内联写法
+                blocks.append(rest)
+                i += 1
+                continue
+            indent = len(line) - len(line.lstrip())
+            body, i = [], i + 1
+            while i < len(lines):
+                nxt = lines[i]
+                if nxt.strip() and (len(nxt) - len(nxt.lstrip())) <= indent:
+                    break                                    # 块结束
+                body.append(nxt)
+                i += 1
+            text = "\n".join(body).strip()
+            if text:
+                blocks.append(text)
+            continue
+        i += 1
+    return blocks
+
+
+def test_ci_runs_the_same_release_gate_with_the_exe():
+    """CI 必须跑**同一条** `ci_local.py --with-exe`，而**不能**退化成 `--quick` 或手敲清单。
+
+    为什么需要它（2026-10-25 自查发现的缺口）：AGENTS.md 硬性约定 22 写着 CI「按锁文件安装、
+    跑同一条 `ci_local.py --with-exe`」，`ci.yml` 开头自己也写着「刻意不复刻一份步骤清单 ——
+    两处各写一遍必然漂」。**但没有门禁看着这句承诺**，于是三种坏法都不会红：
+      ① 改成 `--quick`（"省点 CI 时间"）—— 跳过的恰好是「改了语义会不会红」那一层，
+         而 CI 结论照样绿，与本地 `--quick` 结论分档打印的用心直接抵消；
+      ② 删掉 `--with-exe` —— 不再打包、不再跑两个冻结自查，「打包才会坏」的那一类从此无人验；
+      ③ 换成手敲的一串命令 —— 正是工作流开头明确拒绝的形状。
+    判据：**恰好一个** run 块提到 `ci_local.py`，且它带 `--with-exe`、不带 `--quick`；
+    全文件不出现 `--quick`。
+    """
+    blocks = _ci_run_blocks()
+    assert blocks, "ci.yml 里没有解析出任何 run 块 —— 工作流结构变了，看一眼再改这条钉子"
+
+    gate = [b for b in blocks if "ci_local.py" in b]
+    assert len(gate) == 1, f"应当恰好一个 run 块跑发版门禁，实测 {len(gate)} 个：{gate}"
+    assert "--with-exe" in gate[0], (
+        f"CI 的发版门禁少了 --with-exe（不打包、不跑冻结自查）：{gate[0]!r} —— "
+        f"「打包才会坏」的那一类（-w 下 stdout 为 None、内嵌前端过期、MCP 标准流）从此无人验")
+    assert "--quick" not in gate[0], (
+        "CI 跑的是 --quick：它跳过的恰好是「改了语义会不会红」那一层，而 CI 结论照样是绿")
+
+    quick = [b for b in blocks if "--quick" in b]
+    assert not quick, f"CI 里不该出现 --quick：{quick}"
+
+
+def test_ci_installs_chromium_for_the_e2e_downgrade():
+    """CI runner 没有系统浏览器，界面门禁的**第三级降级**要靠它装 chromium。
+
+    与 `test_e2e_keeps_the_bundled_chromium_fallback` 是一对：那条钉住"代码里保留第三级"，
+    这条钉住"CI 真的把它装上了" —— 只留代码不装浏览器，那一级仍然起不来，
+    而 E2E 会**整份静默跳过**（本项目为此付过一次代价）。
+    """
+    blocks = _ci_run_blocks()
+    assert any("playwright install chromium" in b for b in blocks), (
+        "CI 没有安装 Playwright 自带 chromium —— runner 上没有系统浏览器，"
+        "E2E 会整份静默跳过（跳过又和全绿同形）")
+
+
 def test_release_gate_step_list_cannot_shrink_silently():
     """`ci_local` 的步骤清单必须**一步不少** —— 少了谁都不会红，只会少打印一行。
 
