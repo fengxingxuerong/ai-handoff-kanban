@@ -32,6 +32,10 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# 选空闲端口收成一份实现（`app/service.py`）：此前这里与 delivery_drill / scenario_test
+# 各写了一遍，而 release_regression 干脆写死端口 —— 后果见 `app.service.free_port` 的说明。
+sys.path.insert(0, str(ROOT))
+from app.service import free_port                               # noqa: E402
 # 门禁输出里有中文与 ✓：重定向到文件时 Python 会按系统码页（本机 cp936）编码，
 # 打第一个特殊字符就崩 —— 门禁必须能被管道与重定向。
 try:
@@ -126,12 +130,6 @@ def _skip_audit(observed: dict, allowed: dict) -> tuple:
                    "。跳过 = 那一层能力这次**没验**（没有 node / 没装 playwright / "
                    "三级浏览器都不可用 / 没有 git），而整份静默跳过跟全绿同形 —— "
                    "要么补齐环境，要么像 test_ai.py 那样显式列进 ALLOWED_SKIPS 并写明理由")[:400]
-
-
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 def run_capture(argv: list[str], env: dict, timeout: int = 900) -> tuple:

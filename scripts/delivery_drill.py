@@ -25,6 +25,12 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# 选空闲端口与「起完自证」这一套收成一份实现（`app/service.py`，见 free_port 的说明）——
+# 此前这里、ci_local、scenario_test 各写了一遍，而 release_regression 写死端口且没自证，
+# 于是它成了唯一会被残留实例咬的那一个（2026-10-25 实测）。
+sys.path.insert(0, str(ROOT))
+from app.service import free_port                              # noqa: E402
+
 DRILL_NAME = "交付演练-临时项目"
 
 try:
@@ -38,17 +44,11 @@ _proc = None
 DATA_DIR = None
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
 def start_isolated() -> str:
     """自起一个只服务这份演练的实例"""
     global _proc, DATA_DIR
     DATA_DIR = Path(tempfile.mkdtemp(prefix="kanban_drill_"))
-    port = _free_port()
+    port = free_port()
     env = dict(os.environ)
     env["KANBAN_DATA_DIR"] = str(DATA_DIR)
     env["KANBAN_PORT"] = str(port)

@@ -134,8 +134,17 @@ def main() -> int:
             except Exception as e:
                 last = f"{type(e).__name__}: {e}"
                 time.sleep(1.0)
-        check("后端 HTTP 就绪", health is not None, last)
-        if health is None:
+        # 「就绪」要同时满足两件事：**它答了**，而且**它报的数据目录是我们这一个**。
+        # 只问"答没答"的话，端口上站着别人（残留实例，或你手动起的调试实例）时会拿它的回包
+        # 当本轮结论 —— 后面那几条「版本同源 / 内嵌前端一致」就会报出与真原因无关的失败。
+        # 同型事故 2026-10-25 在 release_regression 上真发生过（报的是「只读模式下写操作被拒」，
+        # 真原因是端口上是个残留实例）。这也正是硬性约定「起实例后必须问它自己读的是哪份数据」。
+        ours = (health is not None
+                and Path(str(health.get("data_file") or "")).parent == data_dir)
+        why = last if health is None else \
+            f"端口 {PORT} 上那个实例报的 data_file={health.get('data_file')}，本轮是 {data_dir}"
+        check("后端 HTTP 就绪且是本轮实例（数据目录自证）", ours, why)
+        if not ours:
             return report(data_dir)
 
         # 1b. 版本戳这条链必须真的一致：exe 自报的版本与构建时间要和仓库里那两份对得上。

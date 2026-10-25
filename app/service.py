@@ -14,6 +14,8 @@
 """
 from __future__ import annotations
 
+import socket
+
 # 兜底端口：桌面壳起服务、后端打印直链、MCP 给活数据链接，三者必须同源。
 DEFAULT_PORT = "18320"
 
@@ -27,3 +29,27 @@ def local_url(port: str, path: str) -> str:
     把它做成参数，这条契约就不会因为搬家而失效。
     """
     return f"http://127.0.0.1:{port}{path}"
+
+
+def free_port() -> int:
+    """挑一个当前空闲的本机端口 —— 门禁自起实例时用它，**别写死端口**。
+
+    为什么单独成函数（2026-10-25）：这段选端口此前在 `ci_local` / `delivery_drill` /
+    `scenario_test` 里**各写了一遍**（三份近似副本），而 `release_regression` 干脆写死
+    `18399` —— 于是它成了唯一会被"残留实例"咬的那一个：端口上一旦有别人（上次跑挂留下的
+    uvicorn，"残留进程握着东西"在本项目是实测过的坑），readiness 只等 `port_listening()`
+    就会立刻"以为起来了"，随后**所有请求都打到那个别人的实例上**（实测它报的 `data_file`
+    指向上一轮的临时目录，而 MCP 子进程读本轮的空目录 → 只读开关默认关 → 报出一句
+    与真原因隔了十万八千里的「只读模式下写操作被拒」）。
+
+    所以"自起实例"的标准配方是两条一起用，缺一不可：
+      ① **挑空闲端口**（这里）—— 让残留无处可撞；
+      ② **起完自证**（`/api/health` 的 `data_file` 指向本轮的数据目录）—— 挡 `SO_REUSEADDR`
+         允许两个进程"都绑定成功"的那个窗口，以及"挑完到绑定之间被别人抢走"的窗口。
+
+    实现说明：绑 `0` 让内核分配，拿到端口后**立刻关掉**，所以它只是"刚刚空闲"，不是预定
+    （这也是为什么 ② 不能省）。只探 `127.0.0.1`：本机服务从不对外（硬性约定 9）。
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])

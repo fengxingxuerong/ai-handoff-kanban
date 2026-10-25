@@ -307,3 +307,35 @@ def test_regression_instance_verifies_it_started_its_own_server():
     assert "_own_instance_guard(health" in src, "自证没接在 start_server 里（只定义不接线等于没有）"
     assert src.index("_own_instance_guard(health") < src.index("return proc"), \
         "自证必须排在 return proc 之前 —— 排在后面等于没验"
+
+
+def test_free_port_has_one_implementation_and_every_gate_uses_it():
+    """「挑空闲端口」只许有一份实现，且自起实例的门禁都要用它 —— **别写死端口**。
+
+    为什么需要它（2026-10-25 实测）：这段选端口此前在 `ci_local` / `delivery_drill` /
+    `scenario_test` 里**各写了一遍**（三份近似副本），而 `release_regression` 干脆写死
+    `18399` —— 于是它成了唯一会被"残留实例"咬的那一个：端口上站着别人时，readiness
+    只等 `port_listening()` 就"以为起来了"，之后**所有请求都打到那个别人身上**
+    （实测它报的 `data_file` 指向上一轮的临时目录），而报出来的失败
+    （「只读模式下写操作被拒」）与真原因（端口被占）隔了十万八千里。
+
+    标准配方是两条一起用：**挑空闲端口**（让残留无处可撞）+ **起完自证**
+    （`/api/health` 的 `data_file` 指向本轮数据目录，挡 `SO_REUSEADDR` 那个窗口）。
+    钉三件事：① 全仓只有一处 `def free_port`；② 四个自起实例的门禁都从它取、且不再写死端口；
+    ③ `frozen_smoke` 例外（它测的是**打包产物**，固定端口有它的理由）—— 但它必须自证
+    那个端口上是本轮实例，否则同样会拿别人的回包当结论。
+    """
+    for name in ("ci_local.py", "delivery_drill.py", "scenario_test.py", "release_regression.py"):
+        src = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        assert "from app.service import free_port" in src, f"{name} 没从唯一实现取端口"
+        assert re.search(r"(?:PORT|port) = free_port\(\)", src), f"{name} 没用 free_port() 取端口"
+        assert not re.search(r"^\s*PORT\s*=\s*\d{4,5}\s*$", src, re.M), \
+            f"{name} 又把实例端口写死了 —— 残留实例会占着它，门禁就会打到别人身上"
+
+    hits = [p.name for p in list((ROOT / "app").glob("*.py")) + list((ROOT / "scripts").glob("*.py"))
+            if re.search(r"^def _?free_port", p.read_text(encoding="utf-8"), re.M)]
+    assert hits == ["service.py"], f"free_port 的实现应当只有一处（app/service.py），实测 {hits}"
+
+    fs = (ROOT / "scripts" / "frozen_smoke.py").read_text(encoding="utf-8")
+    assert "是本轮实例" in fs and "data_file" in fs, \
+        "frozen_smoke 的就绪判定只问了「答没答」—— 端口上是别人时会拿它的回包当本轮结论"

@@ -30,6 +30,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# 选空闲端口收成一份实现（`app/service.py`）—— 此前与 ci_local / delivery_drill 各写了一遍
+sys.path.insert(0, str(ROOT))
+from app.service import free_port                              # noqa: E402
+
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 本机有代理，显式绕过
 # 输出里有 ✓ 和中文：重定向到文件时 Python 用系统 ANSI 码页（本机 cp936），
 # 打第一个 ✓ 就 UnicodeEncodeError 崩掉 —— 门禁脚本必须能被重定向与管道。
@@ -92,12 +96,6 @@ def expect(actual: str, ok: bool, note: str = "") -> tuple[str, bool, str]:
 
 
 # ============================ 真栈：HTTP ============================
-
-def free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
 
 class Http:
     def __init__(self, base: str):

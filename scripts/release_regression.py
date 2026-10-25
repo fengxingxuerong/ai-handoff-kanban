@@ -2,7 +2,7 @@
 """
 发版回归测试（Release Regression）：v1.1+ 新功能全链路验证。
 
-自起一个独立实例（专用端口 18399 + 临时数据目录），完全不碰真实数据与配置：
+自起一个独立实例（**挑空闲端口** + 临时数据目录，并自证这端口上是它），完全不碰真实数据与配置：
   1. 会话捕获全链路（假源 → 扫描 → 预览 → AI 提炼 → 应用 → 任务/记忆/下一步）
   2. 任务过程轨迹（状态流转自动记 journal）
   3. 项目记忆（CRUD / 去重 / 交接包召回）
@@ -30,7 +30,12 @@ ROOT = Path(__file__).resolve().parent.parent
 # 要做的是同一件事，读法写两遍迟早漂成两种行为（同 scripts/mcp_server.py 的引法）
 sys.path.insert(0, str(ROOT))
 from app import llm                                    # noqa: E402
-PORT = 18399
+from app.service import free_port                      # noqa: E402
+# 端口**挑空闲的**，不写死（2026-10-25 实测的教训）：此前写死 18399，端口上已有残留实例时
+# 所有请求都会打到那个"别人"身上，而 readiness 只等端口通就"以为起来了" —— 真原因与报出来的
+# 那一条隔了十万八千里。挑空闲端口让它无处可撞；`_own_instance_guard()` 仍要留着，
+# 挡 `SO_REUSEADDR` 与"挑完到绑定之间被抢走"的窗口（见 app.service.free_port 的说明）。
+PORT = free_port()
 BASE = f"http://127.0.0.1:{PORT}"
 NO_AI = "--no-ai" in sys.argv
 DATA_DIR = Path(tempfile.mkdtemp(prefix="kanban_regression_"))
@@ -105,9 +110,9 @@ def _own_instance_guard(health: dict) -> str:
         return f"端口 {PORT} 上的服务没报 data_file —— 认不出是不是本轮起的实例"
     if Path(df).parent != DATA_DIR:
         return (f"端口 {PORT} 上是个**别人的**服务：它报的 data_file={df}，"
-                f"而本轮的数据目录是 {DATA_DIR}。多半是上次跑挂留下的残留 —— "
-                f"先清掉再重跑（`taskkill /F /T /PID <上面的 pid>`）；"
-                f"用别的端口跑本轮也行（改 PORT 常量）")
+                f"而本轮的数据目录是 {DATA_DIR}。本轮端口是**刚挑的空闲端口**，"
+                f"还能撞上别人说明窗口极小（多半是你手动占了它，或并发跑了另一个门禁）—— "
+                f"先查那个进程再重跑；它要是上一轮跑挂留下的残留，用 taskkill /F /T /PID 清掉")
     return ""
 
 

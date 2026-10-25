@@ -53,7 +53,7 @@
 | `app/usage_stats.py` | LLM 用量聚合（纯函数，2026-10-01）：usage.jsonl 的按日/端点/模型聚合与预算水位，`/api/usage` 的口径 |
 | `app/aireports.py` | 监管报告的落盘/裁剪/历史/趋势（2026-10-06 拆出）：`reports_dir` / `_save_report` / `_trim_reports` / `_latest_report_before` / `_attach_trends` / 提示词构造。**`MAX_REPORTS` 的 monkeypatch 点在这里**（main 是转发别名）；`_run_analyze` 编排留在 main |
 | `app/aiprompt.py` | AI 编排的只读计算层（2026-10-06 拆出，依赖注入式）：看板简报 `projects_brief`（记忆分桶/git 探测经回调注入，main 的 monkeypatch 照常有效）与会话提炼 `summarize_inner`（find_project 注入）。**不落库** —— 写动作仍走 main 的 mutate() 临界区 |
-| `app/service.py` | 端口兜底值 `DEFAULT_PORT` 与「活数据直链」`local_url(port, path)` 的**唯一实现**（2026-10-24 拆出：此前这个数写死三份、直链格式抄两份）。**端口当参数收**，不自读环境变量 —— `test_api.py` 钉着「直链端口必须来自 `SERVICE_PORT`」。钉子 `test_default_port_is_written_in_exactly_one_place`；探针 `live_url_wrong_port` 在这里。为什么这么切见模块 docstring |
+| `app/service.py` | 端口兜底值 `DEFAULT_PORT`、「活数据直链」`local_url(port, path)` 与**挑空闲端口** `free_port()` 的唯一实现（前两者 2026-10-24 拆出：此前这个数写死三份、直链格式抄两份；`free_port()` 2026-10-25 收拢 —— 此前 `ci_local` / `delivery_drill` / `scenario_test` 各写了一遍，而 `release_regression` 写死 `18399`，于是它成了唯一会被残留实例咬的那个）。**端口当参数收**，不自读环境变量 —— `test_api.py` 钉着「直链端口必须来自 `SERVICE_PORT`」。钉子 `test_default_port_is_written_in_exactly_one_place`；探针 `live_url_wrong_port` 在这里。为什么这么切见模块 docstring |
 | `app/fields.py` | 字段白名单、上限与清洗（纯常量 + 纯函数，2026-10-24 拆出）：`DEFAULT_*` 三个白名单、`MAX_MILESTONES` / `MAX_MILESTONE_NAME` / `MAX_BLOCKED_REASON` / `MAX_VIEW_*` / `MAX_SAVED_VIEWS` / `MAX_REPO_ACK_NOTE`、`_clean_milestones`。独立出来是为了**不成环**（`schemas` 要引用它们）。探针 `milestone_dedupe_removed` / `milestone_cap_removed` 在这里 |
 | `app/schemas.py` | 17 个 HTTP 请求模型（Pydantic，2026-10-24 搬出、逐字未改）：入参形状与字段级清洗。只依赖叶子模块（`fields`/`journal`/`taskgraph`），**不 import main**；main 同名转发，`kanban.ProjectIn` 之类照旧。探针 `milestone_task_name_not_trimmed` / `repo_ack_note_uncapped` 在这里 |
 | `app/sampledata.py` | 首次运行的示例数据 `sample_data()`（纯函数，2026-10-24 拆出）。两条纪律跟着搬：时间戳按相对今天生成、**保持脱敏**（随 exe 分发，硬性约定 8）。探针 `sample_dates_hardcoded_again` 在这里 |
@@ -67,10 +67,10 @@
 | `scripts/scenario_test.py` | 真实场景测试 32 例（真服务 + 真 MCP + 真实业务数据，可导出报告） |
 | `scripts/delivery_drill.py` | 交付演练：模拟换智能体接手，端到端 21 项（接手→执行→交接物→脱敏→迁移）。**不传参数时自起隔离实例**；传 base_url 则先读该实例 `/api/health` 的 `data_file` 自证不是真实数据目录，否则拒绝运行（演练会用 `/api/data/import` 整份覆盖） |
 | `scripts/real_ai_test.py` | 真实模型 AI 功能测试：5 大功能 × 6 模型通道（消耗真实配额） |
-| `scripts/release_regression.py` | 发版回归：自起独立实例（不碰真实数据），v1.1 新功能全链路（`--no-ai` 下 16 项真断言 + 2 项标「未验」；不带 `--no-ai` 才会跑 AI 链路）；真实 Key 从 `KANBAN_REAL_DATA_DIR` 指向的配置读取。**起跑就读 `/api/health` 自证「这个端口上是本轮起的实例」**（`_own_instance_guard`，2026-10-25）：`PORT` 写死 18399，只等端口通的话，残留实例占着它时会拿**别人的**回包当本轮结论（实测报出来的是一句「只读模式下写操作被拒」，真原因是端口被占，隔了十万八千里） |
+| `scripts/release_regression.py` | 发版回归：自起独立实例（不碰真实数据），v1.1 新功能全链路（`--no-ai` 下 16 项真断言 + 2 项标「未验」；不带 `--no-ai` 才会跑 AI 链路）；真实 Key 从 `KANBAN_REAL_DATA_DIR` 指向的配置读取。**挑空闲端口 + 起跑自证「这个端口上是本轮实例」**（`free_port()` + `_own_instance_guard`，2026-10-25）：此前 `PORT` 写死 18399，端口上站着残留实例时会拿**别人的**回包当本轮结论（实测报出来的是一句「只读模式下写操作被拒」，真原因是端口被占，隔了十万八千里） |
 | `scripts/test_all_llm.py` | LLM 端点全量实测：端点×Key×模型 健康矩阵 |
 | `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
-| `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复"。**MCP 产物有它自己的一份，见下行**（两者对标准流的处理完全不同）。**2026-10-24 起管进程卫生**：起跑前清场（清不掉就停）、收尾兜底并**验证**端口释放；`--sweep [exe]` 供 ci_local 打包前调（残留进程曾把下一轮打包毒成 WinError 5）。详版见档案 v1.9.4 |
+| `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复"。**MCP 产物有它自己的一份，见下行**（两者对标准流的处理完全不同）。**2026-10-24 起管进程卫生**：起跑前清场（清不掉就停）、收尾兜底并**验证**端口释放；**2026-10-25 起就绪判定也自证是本轮实例**（它固定用 18395：测的是打包产物，别人的回包会让「版本同源 / 内嵌前端一致」报出与真原因无关的失败）；`--sweep [exe]` 供 ci_local 打包前调（残留进程曾把下一轮打包毒成 WinError 5）。详版见档案 v1.9.4 |
 | `scripts/mcp_frozen_smoke.py` | **MCP 冻结版自查**（2026-10-23，与 `frozen_smoke` 并列）：真的启动 `dist\AI交接看板-MCP.exe`，走真实 stdio 打一遍，钉四件事 —— ① `tools/list` 拿得到 23 个工具；② **stdout 每一行都是合法 JSON-RPC**（一行日志就能让客户端解崩、整个服务等于没发布）；③ **中文双向不乱码**（写进去再读回来逐字一致：出方向工具目录被编成 cp936 客户端就崩、入方向中文标题静默变乱码入库）；④ 真写进了隔离临时目录（不信回执的一面之词）。九条断言，退出码 0 才算过。**「打包才会坏、源码态永远看不出来」的那一类**，所以必须跟着 exe 一起跑（`ci_local --with-exe` 里是独立一步）；`--source` 可对着源码跑同一套断言（先自证门禁本身有效） |
 | `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
@@ -476,11 +476,17 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 - **LLM 输出不可信**：一律走 `_extract_json()` 容错提取；AI 结果的落地必须经用户确认（人工闸门）。
 - **LLM 不可用要有降级**：AGENTS.md 生成失败会退回 `_build_agents_md_local()`，不要直接抛错。
 - **窗口渲染**依赖系统 WebView2 运行时（`gui="edgechromium"`）。
-- **`release_regression.py --no-ai` 在 GBK 控制台下会假红一条**：它用 `decode("utf-8", "replace")`
-  读 `mcp_server` 子进程的 stdout，而子进程在管道里按系统代码页（cp936）输出，断言里匹配的
-  「只读」两个字被替换符打断 → 判失败。实测同一份代码：裸跑 17 通过 / 1 失败，
-  加 `PYTHONIOENCODING=utf-8` 后 18 通过 / 0 失败。**看板逻辑没问题**
-  （`_ensure_writable()` 就在 `t_add_task` 第一行），遇到这条红先查编码，别去改只读开关。
+- **`release_regression.py --no-ai` 报「只读模式下写操作被拒」时，先分清两种原因**（2026-10-25 补第二种）：
+  ① **编码**（历史原因）：它用 `decode("utf-8", "replace")` 读 `mcp_server` 子进程的 stdout，
+  子进程按控制台码页（cp936）输出时，断言里匹配的「只读」被替换符打断。**看板逻辑没问题**
+  （`_ensure_writable()` 就在 `t_add_task` 第一行）—— 别去改只读开关。
+  ② **端口上是别人的实例**（2026-10-25 实测，同日撤销了"先查编码"这个默认反应）：`PORT` 当时
+  写死 18399，残留实例占着它 → 所有 HTTP 打到别人身上（它报的 `data_file` 指向上一轮的临时目录），
+  而 MCP 子进程拿的是本轮的**空**目录 → `mcp_readonly` 默认 False → 写没被拒。
+  现在它**挑空闲端口 + 起跑自证**（`app.service.free_port()` / `_own_instance_guard`），这条不再可能：
+  端口上要是别人，它**第 1 秒**就红并点名那个 data_file。
+  **教训**：一条"已知假红"的注释会变成下一次误判的燃料 —— 遇到这条红，先看它**有没有点名**，
+  没点名才有可能是编码。
 
 ## 当前状态与下一步
 
