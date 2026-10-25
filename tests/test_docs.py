@@ -167,3 +167,26 @@ def test_version_in_docs_matches_version_py():
     assert DOCS.count(v) >= 2, (
         f"文档集合里 {v} 只出现一次：状态行之外还应有一轮版本叙事（改了什么、为什么），"
         f"现在它在 docs/进度与版本档案.md 里")
+
+
+def test_agents_directory_table_rows_are_single_lines():
+    """AGENTS.md 的表格行必须是**一整行** —— 中途换行会把表格拆坏（后几行渲染成普通段落）。
+
+    为什么需要它（2026-10-25 实测，我自己犯的）：往 `scripts/mutation_probe.py` 那一行里
+    补一段文字时手滑带了换行，那一行被拆成 **6 行**，表格从那里起散架 ——
+    而**所有文档门禁都还是绿的**：`test_module_counts…` 只数 `app/*.py` 的行数、
+    版本/条数/链接那几条只查关键词在不在。markdown 的规则是「一行就是一行」，
+    这种坏法要翻到那一段才看得出，能机械查就别靠人翻。
+
+    判据：从目录表表头起、到第一个空行为止，每一行都必须以 `|` 开头、以 `|` 结尾。
+    """
+    lines = AGENTS.splitlines()
+    start = next(i for i, l in enumerate(lines) if l.startswith("| 路径 | 职责 |"))
+    rows = []
+    for l in lines[start:]:
+        if not l.strip():
+            break
+        rows.append(l)
+    assert len(rows) > 10, f"目录表只有 {len(rows)} 行 —— 表头锚点找错了？"
+    bad = [l[:80] for l in rows if not (l.startswith("|") and l.rstrip().endswith("|"))]
+    assert not bad, f"目录表里有被换行拆坏的行（表格要求一行就是一行）：{bad}"

@@ -780,6 +780,43 @@ MUTATIONS: list[dict] = [
         "why": '搜索打了个不匹配的词就宣布「还没有项目」—— 手里有 5 个项目的人看着像数据被谁清空了（三种「屏幕上没卡片」必须分开说：真没项目 / 筛选空 / 搜索不匹配）',
         "tests": ['tests/test_frontend_e2e.py::test_search_with_no_match_does_not_claim_the_board_is_empty'],
     },
+    # ---- 前端（web/js-*.js）第二批：2026-10-25，每条都把当年那个真 bug 放回去 ----
+    # 成本说明：其中两条是**行为**判据（分歧文案、五列归位），静态契约碰不到它们 ——
+    # 全仓确认过没有第二处钉子 —— 于是红的时候要等满 E2E 的超时（实测 54s / 39s/条）。
+    # 这个成本是有意接受的：规则本身只有开浏览器才验得了；另两条（PATCH / 截断留痕）
+    # 用静态或快速 E2E，分别 8.9s / 2.5s。
+    {
+        "id": "js_verdict_hidden_without_repo_path",
+        "file": "web/js-reality.js",
+        "old": 'function realityVerdicts(p, g) {\n  const out = [];',
+        "new": 'function realityVerdicts(p, g) {\n  const out = [];\n  if (!p.repo_path) return out;   // 探针：又把与 git 无关的判据挡在门外',
+        "why": '把那个真实事故放回去：`!p.repo_path` 一上来就 return，把**与 git 无关**的两条判据（「进度写 90% 却一条任务没完成」）一起挡在门外 —— 而「没填代码路径」恰恰是多数项目的常态，最需要被指出的项目反而永远听不到这句话',
+        "tests": ['tests/test_frontend_e2e.py::test_progress_vs_tasks_verdict_shows_without_a_repo_path'],
+    },
+    {
+        "id": "js_blocked_task_lands_in_todo_column",
+        "file": "web/js-detail.js",
+        "old": '  const cols = { "待办": "col-todo", "进行中": "col-doing", "待审查": "col-review", "已完成": "col-done", "阻塞": "col-blocked" };',
+        "new": '  const cols = { "待办": "col-todo", "进行中": "col-doing", "待审查": "col-review", "已完成": "col-done", "阻塞": "col-todo" };',
+        "why": '把「阻塞」又兜底塞进待办列：阻塞列永远是空的，卡住的任务看起来只是「还没开始」（2026-10-01 之前就是这个形状，而套件里当时没有任何用例看过 col-blocked）',
+        "tests": ['tests/test_frontend_e2e.py::test_task_statuses_land_in_their_own_column'],
+    },
+    {
+        "id": "js_ai_update_uses_whole_put_again",
+        "file": "web/js-ai.js",
+        "old": '    await api("/api/projects/" + a.project_id, { method: "PATCH",',
+        "new": '    await api("/api/projects/" + a.project_id, { method: "PUT",',
+        "why": '单字段改动退回「读整份 → 改一处 → PUT 整份」：那次读发生在临界区外，期间别人写进同一项目的字段会被带回来的旧值反向抹掉（约定 1 的形状），而界面看起来只是「改了个进度」',
+        "tests": ['tests/test_frontend_e2e.py::test_ai_command_update_sends_a_patch_not_a_read_modify_put'],
+    },
+    {
+        "id": "js_search_truncation_hint_dropped",
+        "file": "web/js-data.js",
+        "old": '        + `只列出前 ${esc(String(r.limit || list.length))} 条，后面还有 —— 换个更具体的关键词</div>`',
+        "new": '        + `只列出前 ${esc(String(r.limit || list.length))} 条 —— 换个更具体的关键词</div>`',
+        "why": '命中到上限却不说「后面还有」：第 31 条在用户眼里就是不存在，而界面看起来一切正常（与 MCP 那条同源：接口回 truncated/limit，人看到的版本也得说）',
+        "tests": ['tests/test_frontend.py::test_global_search_tells_the_user_the_list_was_cut'],
+    },
     {
         "id": "port_default_written_twice",
         "file": "app/handoff_page.py",
@@ -971,15 +1008,40 @@ def preflight(todo: list[dict] | None = None, root: Path | None = None) -> list[
     return problems
 
 
+def _native(text: str, crlf: bool) -> str:
+    """把变异表里**按 LF 写**的文本，适配成这个文件自己的行尾。
+
+    变异表是人写的（一律 LF）；而工作区里的文件行尾可能两样都有（本仓没有 `.gitattributes`，
+    `core.autocrlf` 让同一目录里 CRLF 与 LF 混着）。匹配与替换都在**文件自己的文本**上做，
+    所以表里的串要先换成文件那一套 —— 否则 CRLF 文件里根本匹配不上。
+    """
+    return text.replace("\n", "\r\n") if crlf else text
+
+
 def apply_and_run(m: dict, timeout: int) -> dict:
+    """注入 → 跑 killer → **按原始字节**还原。
+
+    还原为什么用 `write_bytes(raw)` 而不是重写文本（2026-10-25，两条都被实测咬过）：
+      · 第一版用 `Path.write_text`（文本模式）：Windows 上把 `\\n` 翻成 `\\r\\n`，
+        于是 LF 文件被写成 CRLF —— "还原"之后行尾变了；
+      · 改成 `write_text(..., newline="")` 只修了**写**侧：`read_text` 在读的时候
+        （universal newlines）已经把 CRLF 归一成 LF 了，于是反过来把 CRLF 文件写成 LF。
+    两头都治的办法只有一个：**读原始字节、还原时把原始字节原样写回** —— 逐字节相等
+    就不再是"尽量做到"，而是构造上成立。这条缺口它自己的用例一直没抓到，因为
+    `read_text` 两次读回来是一样的（钉子见 `test_apply_and_run_restores_bytes_not_just_text`，
+    里面两种行尾各验一条）。
+    """
     path = ROOT / m["file"]
-    original = path.read_text(encoding="utf-8")
-    if m["old"] not in original:
+    raw = path.read_bytes()                       # ← 还原用的就是它，原样写回
+    crlf = b"\r\n" in raw
+    original = raw.decode("utf-8")
+    old, new = _native(m["old"], crlf), _native(m["new"], crlf)
+    if old not in original:
         return {**m, "status": "inconclusive", "note": "变异文本没匹配上（源码改过？更新变异表）",
                 "dt": 0.0}
     st = path.stat()
     try:
-        path.write_text(original.replace(m["old"], m["new"], 1), encoding="utf-8")
+        path.write_bytes(original.replace(old, new, 1).encode("utf-8"))
         if path.suffix == ".js":                       # 前端探针：先确认语法没被改坏
             ok, why = _js_syntax_ok(path)
             if not ok:
@@ -987,7 +1049,7 @@ def apply_and_run(m: dict, timeout: int) -> dict:
         status, dt = run_tests(m["tests"], timeout)
         return {**m, "status": status, "note": "", "dt": dt}
     finally:
-        path.write_text(original, encoding="utf-8")
+        path.write_bytes(raw)                      # 逐字节还原（构造上就相等）
         _restore_mtime(path, st)
 
 

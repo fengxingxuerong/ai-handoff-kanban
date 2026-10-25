@@ -65,6 +65,43 @@ def test_apply_and_run_restores_content_and_mtime(tmp_path, monkeypatch):
         "「产物不比源码旧」门禁会在每次跑完探针后假红")
 
 
+def test_apply_and_run_restores_bytes_for_both_line_endings(tmp_path, monkeypatch):
+    """还原必须**逐字节**，而且两种行尾都得管 —— 这两个方向都真被咬过。
+
+    为什么需要它（2026-10-25 实测，我自己踩的两遍）：
+      ① 第一版用 `Path.write_text`（文本模式）：Windows 上把 `\\n` 翻成 `\\r\\n`，
+         **LF 文件被写成 CRLF**（`git ls-files --eol` 从 `w/lf` 变 `w/crlf`）；
+      ② 只加 `write_text(..., newline="")` 补的是**写**侧，而 `read_text` 在读的时候
+         （universal newlines）已经把 CRLF 归一成 LF —— 于是反过来把 **CRLF 文件写成 LF**。
+    两头都治只有一条路：**读原始字节、还原时把原始字节原样写回**（构造上就逐字节相等）。
+
+    判据是 `read_bytes` 相等 —— `read_text` 两次读回来是一样的，抓不到这类污染；
+    它唯一的症状是 `git status` 里多出几个"内容没变"的幽灵改动，而幽灵改动会训练人
+    对 status 脱敏。用例特意两种行尾各来一条，并且让 old/new **跨行** ——
+    这样 CRLF 那条必须真的把表里的 LF 适配成文件的行尾才匹配得上（否则 status 是 inconclusive）。
+    """
+    probe = _load_probe()
+    monkeypatch.setattr(probe, "ROOT", tmp_path)
+    monkeypatch.setattr(probe, "run_tests", lambda files, timeout: ("killed", 0.0))
+
+    cases = {
+        "lf": b"const a = 1;\nconst b = 2;\n",
+        "crlf": b"const a = 1;\r\nconst b = 2;\r\n",
+    }
+    for name, raw in cases.items():
+        target = tmp_path / f"fake_{name}.js"
+        target.write_bytes(raw)
+        _pin_mtime(target)
+
+        res = probe.apply_and_run(
+            {"id": "t", "file": target.name, "old": "const a = 1;\nconst b = 2;",
+             "new": "const a = 9;\nconst b = 3;", "why": "测试用", "tests": []}, timeout=1)
+
+        assert res["status"] == "killed", f"{name} 行尾那条没被杀：{res}"
+        assert target.read_bytes() == raw, (
+            f"{name} 行尾的文件没有逐字节还原：现在是 {target.read_bytes()!r}，原本 {raw!r}")
+
+
 def test_apply_and_run_touches_nothing_when_mutation_text_missing(tmp_path, monkeypatch):
     """变异文本没匹配上（源码改过、表没更新）时必须原样留着文件 —— 这是 inconclusive 那一档。"""
     probe = _load_probe()
