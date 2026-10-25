@@ -265,9 +265,27 @@ def test_no_browser_prompt_dialogs_left():
     assert not re.search(r"=\s*prompt\(|await\s*prompt\(", HTML), "又有人用 prompt() 收输入"
 
 
+def _css_rule(selector: str) -> str:
+    """从整个前端里切出**某条 CSS 规则的规则体**（按选择器定位，取到配对的 `}`）。
+
+    为什么需要它（2026-10-25 实测）：`HTML` 是整个前端拼起来的字符串，同一个串往往在
+    **注释里也出现一遍** —— 于是"串在不在"这种判据会变成**在守注释，不在守规则**。
+    实测案例：`web/style.css` 里 `max-width: min(760px` 出现两次，一次是真规则、
+    一次是文件头注释里那句「硬约束（门禁钉死，勿动）…」；把 #toast 的规则改成 9000px，
+    原断言照样通过 —— 是探针 `js_toast_can_overflow_the_screen` 存活才把它揪出来的。
+    """
+    at = re.search(r"(?m)^" + re.escape(selector) + r"\s*\{", HTML)
+    assert at, f"找不到 {selector} 这条规则"
+    end = HTML.index("\n}", at.end())
+    return HTML[at.start():end]
+
+
 def test_toast_gives_long_messages_time_to_be_read():
     assert re.search(r"Math\.min\(7000, 2200 \+", HTML), "toast 还是固定 2.2 秒"
-    assert "max-width: min(760px" in HTML and "word-break" in HTML, "长路径会把 toast 撑出屏幕"
+    # 只看 **#toast 这条规则**：注释里也提过同一串，按整份文本找等于在守注释
+    rule = _css_rule("#toast")
+    assert "max-width: min(760px" in rule, f"toast 的宽度上限没了（长路径会撑出屏幕）：{rule}"
+    assert "word-break" in rule, f"toast 缺 word-break（长路径不换行）：{rule}"
 
 
 def test_detail_view_has_loading_and_error_state():

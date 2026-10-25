@@ -300,6 +300,44 @@ def _gate_steps() -> dict:
     return steps
 
 
+def _frontend_text() -> str:
+    """整个前端的文本（与 `tests/frontend_src.py:frontend_source()` 同一口径的东西）。"""
+    parts = [(ROOT / "web" / "index.html").read_text(encoding="utf-8"),
+             (ROOT / "web" / "style.css").read_text(encoding="utf-8")]
+    for p in sorted((ROOT / "web").glob("js-*.js")):
+        parts.append(p.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
+def test_css_assertions_are_scoped_to_their_rule():
+    """对 CSS 属性的断言必须**限定在那条规则内** —— 直接对整份前端断言会守到注释上。
+
+    为什么需要它（2026-10-25 实测，被探针揪出来的）：`HTML` 是整个前端拼起来的字符串，
+    而 `web/style.css` 的**文件头注释**里也抄了一遍重点规则（「硬约束（门禁钉死，勿动）：…
+    toast 的 `max-width: min(760px)` 与 word-break」）。于是 `assert "max-width: min(760px" in HTML`
+    这种写法，把真正的 `#toast` 规则改成 `9000px` **也照样通过** —— 门禁在守注释，不在守规则。
+    探针 `js_toast_can_overflow_the_screen` 当时「存活」，就是它把这件事报出来的。
+
+    判据（故意窄，免得误报）：测试源码里凡是**直接对 `HTML` 断言一条 CSS 声明**的写法，
+    若那条声明在前端文本里出现不止一次，就红 —— 多出来的那次多半在注释里，
+    也就是说这条断言指不到具体规则。已经切过规则的写法（`in rule` / `in modal` / `in mbody`
+    或断言 `_css_rule(...)` 的返回值）不在判据范围内。
+    """
+    front = _frontend_text()
+    src = (ROOT / "tests" / "test_frontend.py").read_text(encoding="utf-8")
+    # 只认「断言字面量 + 直接 in HTML」这一种写法（正则/变量形式留给人工判断）
+    literal = re.compile(r'assert\s+"([^"]+)"\s+in\s+HTML')
+    decl = re.compile(r"^[a-z-]+:\s*[^;]{2,60};?$")
+    risky = []
+    for m in literal.finditer(src):
+        frag = m.group(1)
+        if decl.match(frag) and front.count(frag) > 1:
+            risky.append((frag, front.count(frag)))
+    assert not risky, (
+        f"这些 CSS 断言对整份前端断言、而该声明在前端文本里出现多次（多半有注释在抄它）："
+        f"{risky} —— 改用 `_css_rule(选择器)` 切出规则体再断言，否则门禁守的是注释")
+
+
 def _ci_run_blocks() -> list[str]:
     """从 `ci.yml` 里取出每个 `run:` 块的内容（**标准库解析**，不引第三方依赖）。
 
