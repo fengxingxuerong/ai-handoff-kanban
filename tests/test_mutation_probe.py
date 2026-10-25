@@ -16,15 +16,82 @@ handoff_meta.py、idem.py、journal.py 一串"刚改过"的文件，而同一次
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import re
 import time
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 # 显式把 mtime 拨到一小时前，判据才与"文件系统时间戳粒度"无关：
 # Windows 上文件时间约 15.6ms 一跳，同一次 tick 里的两次写会拿到同一个值 ——
 # 直接比"改前/改后"会让这条用例在缺陷还在时也变绿（A/B 实测过）。
 OLD = time.time() - 3600
+
+
+@pytest.fixture(autouse=True)
+def _no_other_probe_running():
+    """另一份探针正在跑时，**本文件必须先说出这件事**，而不是报一堆假红。
+
+    为什么需要它（2026-10-25 实测，我自己撞的）：探针在后台跑的时候我顺手跑了
+    `pytest tests/test_mutation_probe.py` —— 那一刻源码正被变异着，三条契约用例报出
+    「表里的 old 不在文件里」这种**与真故障无关**的 ERROR。这正是本项目最忌的形状：
+    噪音会训练人对红脱敏。护栏在探针侧（`_probe_is_running()`），这里把它变成一句人话。
+    """
+    why = _load_probe()._probe_is_running()
+    assert not why, f"此时跑本文件会得到与真故障无关的红：{why}"
+
+
+def test_probe_ids_are_lowercase_snake_case():
+    """探针 id 一律全小写 snake_case —— 违了当场红，别让它去影响别处的数字。
+
+    为什么单列一条（2026-10-25 实测）：我加了一条 `js_esc_close_bypasses_closeOneModal`，
+    而 `test_docs.py` 的条数对账正则是 `[a-z0-9_]+` —— 它**静默**数不进来，于是
+    「表里 102、文档被要求写 101」。一个命名违规把**别处**的数字带错，红还是红在文档上，
+    排查要绕一圈。规矩要么别立，立了就得有钉子。
+    """
+    probe = _load_probe()
+    bad = [m["id"] for m in probe.MUTATIONS if not re.fullmatch(r"[a-z0-9_]+", m["id"])]
+    assert not bad, f"这些探针 id 不是全小写 snake_case：{bad}"
+
+
+def test_stale_probe_lock_is_cleared_when_that_process_is_gone(tmp_path, monkeypatch):
+    """进程已经不在的锁 = **陈锁**，必须顺手清掉，否则下一次探针永远起不来。
+
+    外部信号杀掉探针时走不到 `finally`（本仓实测过三次），锁文件就留下来了 ——
+    所以"认进程在不在"比"有没有锁文件"更重要。判据用 monkeypatch 把「活着吗」定死，
+    免得测试依赖本机恰好有/没有某个 PID。
+    """
+    probe = _load_probe()
+    lock = tmp_path / "fake.lock"
+    lock.write_text(json.dumps({"pid": 424242, "started": "2026-01-01 00:00:00"}), encoding="utf-8")
+    monkeypatch.setattr(probe, "running_lock", lambda: lock)
+    monkeypatch.setattr(probe, "_pid_alive", lambda pid: False)
+
+    assert probe._probe_is_running() == "", "进程已不在的锁不该算「正在跑」"
+    assert not lock.exists(), "陈锁没有被清掉 —— 下一次探针会被它挡住"
+
+
+def test_live_probe_lock_stops_a_second_run_with_a_readable_reason(tmp_path, monkeypatch, capsys):
+    """真有另一份探针在跑时：说人话、并且**不开始跑**（退出码 3，不是 1 —— 那是"探针红了"）。"""
+    probe = _load_probe()
+    lock = tmp_path / "fake.lock"
+    lock.write_text(json.dumps({"pid": 424242, "todo": 7, "started": "2026-01-01 00:00:00"}),
+                    encoding="utf-8")
+    monkeypatch.setattr(probe, "running_lock", lambda: lock)
+    monkeypatch.setattr(probe, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(probe.sys, "argv", ["mutation_probe.py"])
+
+    why = probe._probe_is_running()
+    assert "正在跑" in why and "424242" in why, why
+
+    code = probe.main()
+    out = capsys.readouterr().out
+    assert code == 3, f"同时跑两份探针应当拒绝开跑（拿到 {code}）"
+    assert "不跑" in out and "正在跑" in out, out
+    assert lock.exists(), "拒绝开跑时不该删掉别人的锁"
 
 
 def _pin_mtime(path: Path) -> None:

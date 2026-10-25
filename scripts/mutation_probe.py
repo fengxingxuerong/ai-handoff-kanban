@@ -28,11 +28,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -817,6 +819,47 @@ MUTATIONS: list[dict] = [
         "why": '命中到上限却不说「后面还有」：第 31 条在用户眼里就是不存在，而界面看起来一切正常（与 MCP 那条同源：接口回 truncated/limit，人看到的版本也得说）',
         "tests": ['tests/test_frontend.py::test_global_search_tells_the_user_the_list_was_cut'],
     },
+    # ---- 前端第三批：2026-10-25，全部用**静态**判据做 killer（每条 ~2.5s）----
+    {
+        "id": "js_stats_sum_forgets_review_status",
+        "file": "web/js-render.js",
+        "old": '    const n = ["待办", "进行中", "待审查", "已完成", "阻塞"].reduce((a, k) => a + (bs[k] || 0), 0);',
+        "new": '    const n = ["待办", "进行中", "已完成", "阻塞"].reduce((a, k) => a + (bs[k] || 0), 0);',
+        "why": '统计面板的状态求和漏了「待审查」（2026-10-06 加第五列时漏改前端的那个死角）：项目里只有待审查任务时，面板会说「该项目还没有任务」，与看板第五列直接矛盾',
+        "tests": ['tests/test_frontend.py::test_stats_panel_counts_all_five_statuses'],
+    },
+    {
+        "id": "js_execute_result_skips_toast",
+        "file": "web/js-ai.js",
+        "old": '  toast(fail ? "已执行：成功 " + ok + " 个，失败 " + fail + " 个" : "已执行 " + ok + " 个操作 ✓");',
+        "new": '  void (fail ? "已执行：成功 " + ok + " 个，失败 " + fail + " 个" : "已执行 " + ok + " 个操作 ✓");',
+        "why": '「确认执行」的结果只留在聊天气泡里，不再播报到 toast（全站唯一的 aria-live 区域）：弹窗一关，键盘/读屏用户就无从得知到底成没成（硬性约定 14）',
+        "tests": ['tests/test_frontend.py::test_action_results_are_announced_outside_the_modal'],
+    },
+    {
+        "id": "js_scan_cleanup_leaves_finally",
+        "file": "web/js-boot.js",
+        "old": '  } catch (e) { list.innerHTML = \'<div style="color:var(--red);font-size:12px">扫描失败：\' + esc(e.message) + "</div>"; }\n  finally { btn.classList.remove("ai-loading-btn"); }   // 空结果那条分支以前直接 return，按钮永久转圈',
+        "new": '  } catch (e) { list.innerHTML = \'<div style="color:var(--red);font-size:12px">扫描失败：\' + esc(e.message) + "</div>"; btn.classList.remove("ai-loading-btn"); }',
+        "why": '扫描的收尾从 finally 挪进 catch：空结果那条分支是**直接 return** 的，于是按钮永久停在转圈态（本机有真实会话、走不到空分支，所以只能静态钉）',
+        "tests": ['tests/test_frontend.py::test_scan_button_uses_finally_for_its_loading_state'],
+    },
+    {
+        "id": "js_esc_close_bypasses_close_one_modal",
+        "file": "web/js-edit.js",
+        "old": '  if (e.key === "Escape") { closeTopModal(); return; }',
+        "new": '  if (e.key === "Escape") { const t = topLayer(); if (t) document.getElementById(t.id).classList.remove("show"); return; }',
+        "why": 'Esc 绕过 closeOneModal 直接摘 .show：弹窗少一次动画复位（只有第一次打开有 pop），而且不清 pendingActions —— 重开指令窗口后点「确认执行」会执行上一次的解析结果（硬性约定 3）',
+        "tests": ['tests/test_frontend.py::test_all_modal_close_paths_share_one_implementation'],
+    },
+    {
+        "id": "js_clear_search_skips_button_sync",
+        "file": "web/js-overview.js",
+        "old": 'function clearSearch() {\n  if (!searchInput) return;\n  searchInput.value = "";\n  if (activeViewId) {\n    activeViewId = "";\n    syncViewSelect();\n  }\n  updateSearchClear();\n  renderOverview();\n  searchInput.focus();',
+        "new": 'function clearSearch() {\n  if (!searchInput) return;\n  searchInput.value = "";\n  if (activeViewId) {\n    activeViewId = "";\n    syncViewSelect();\n  }\n  renderOverview();\n  searchInput.focus();',
+        "why": '清空搜索后不再刷新按钮自身的显隐：清空按钮留在原地，与「有输入才出现」这条规则自相矛盾',
+        "tests": ['tests/test_frontend.py::test_search_clear_button_appears_only_with_input'],
+    },
     {
         "id": "port_default_written_twice",
         "file": "app/handoff_page.py",
@@ -1053,6 +1096,49 @@ def apply_and_run(m: dict, timeout: int) -> dict:
         _restore_mtime(path, st)
 
 
+def running_lock() -> Path:
+    """「探针正在跑」的标记文件（放系统 TEMP，**不污染工作区**）。
+
+    为什么需要它（2026-10-25 实测，我自己撞的）：探针在后台跑的时候，我顺手跑了
+    `pytest tests/test_mutation_probe.py` —— 那一刻源码正被变异着，于是三条契约用例
+    报出「表里的 old 不在文件里」这种**与真故障无关**的 ERROR。这正是本项目最忌的形状：
+    噪音会训练人对红脱敏。处置不是"记得别同时跑"，而是让**同时跑这件事自己有名字**。
+
+    路径按仓库路径派生（同一台机器上可能有好几个检出，各有各的锁），
+    放 TEMP 是因为它没有"该不该提交"的歧义。
+    """
+    key = hashlib.sha1(str(ROOT).encode("utf-8")).hexdigest()[:10]
+    return Path(tempfile.gettempdir()) / f"kanban_probe_{key}.lock"
+
+
+def _pid_alive(pid: int) -> bool:
+    """这个 PID 还活着吗（Windows 上 os.kill(pid, 0) 同样可用）。"""
+    try:
+        os.kill(pid, 0)
+        return True
+    except PermissionError:                 # 活着但不属于我们 —— 仍算活着
+        return True
+    except OSError:
+        return False
+
+
+def _probe_is_running() -> str:
+    """有**另一份**探针正在跑时返回一句人话（否则空串）。陈锁顺手清掉。"""
+    p = running_lock()
+    if not p.exists():
+        return ""
+    try:
+        info = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:                                             # noqa: BLE001
+        return f"锁文件读不出内容：{p}（删掉它再跑）"
+    pid = info.get("pid")
+    if isinstance(pid, int) and _pid_alive(pid) and pid != os.getpid():
+        return (f"另一份探针正在跑（PID {pid}，起于 {info.get('started', '?')}）："
+                f"它会边跑边改源码，此时跑别的门禁会得到与真故障无关的红。等它结束（或先停掉它）")
+    p.unlink(missing_ok=True)               # 陈锁：那个进程已经不在了
+    return ""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="变异探针：找测试看不出来的语义盲区")
     ap.add_argument("--only", default="", help="只跑这些 id（逗号分隔）")
@@ -1061,6 +1147,11 @@ def main() -> int:
     ap.add_argument("--preflight", action="store_true",
                     help="只做启动预检（old 能否命中），不跑变异")
     args = ap.parse_args()
+
+    busy = _probe_is_running()
+    if busy:
+        print(f"不跑：{busy}")
+        return 3
 
     want = {s.strip() for s in args.only.split(",") if s.strip()}
     todo = [m for m in MUTATIONS if not want or m["id"] in want]
@@ -1077,13 +1168,22 @@ def main() -> int:
         return 0
 
     print(f"变异探针：{len(todo)}/{len(MUTATIONS)} 条（判据：改了还全绿 = 盲区）\n")
+    # 从这一刻起源码会被反复变异 —— 挂上标记，让「同时跑别的门禁」这件事有名字
+    lock = running_lock()
+    lock.write_text(json.dumps({"pid": os.getpid(), "todo": len(todo),
+                                "started": time.strftime("%Y-%m-%d %H:%M:%S")},
+                               ensure_ascii=False), encoding="utf-8")
     results = []
-    for m in todo:
-        res = apply_and_run(m, args.timeout)
-        results.append(res)
-        mark = {"killed": "被杀 ✓", "survived": "存活 ✗（盲区）",
-                "inconclusive": "未生效 ?", "error": "探针异常 !"}[res["status"]]
-        print(f"  {mark:16s} {res['id']:32s} {res['dt']:6.1f}s  {res['note']}", flush=True)
+    try:
+        for m in todo:
+            res = apply_and_run(m, args.timeout)
+            results.append(res)
+            mark = {"killed": "被杀 ✓", "survived": "存活 ✗（盲区）",
+                    "inconclusive": "未生效 ?", "error": "探针异常 !"}[res["status"]]
+            print(f"  {mark:16s} {res['id']:32s} {res['dt']:6.1f}s  {res['note']}", flush=True)
+    finally:
+        # 外部信号杀掉时走不到这里 —— 所以 _probe_is_running() 还得认"进程已不在"的陈锁
+        lock.unlink(missing_ok=True)
 
     bad = [r for r in results if r["status"] != "killed"]
     print("\n" + "=" * 78)

@@ -42,7 +42,14 @@ def _mcp_tools() -> set[str]:
 
 
 def _probe_ids() -> set[str]:
-    return set(re.findall(r'"id":\s*"([a-z0-9_]+)"', PROBE_SRC))
+    """探针表里的 id 集合。
+
+    字符类**必须含大写**（2026-10-25 实测）：原先是 `[a-z0-9_]`，于是带驼峰的那条
+    （`js_esc_close_bypasses_closeOneModal`）**静默数不进来** —— 而本用例是拿这个数
+    去对账文档的，结果是"表里 102、文档被要求写 101"：一个命名违规把**别处**的数字带错，
+    而红的是文档。命名本身另有钉子（`test_mutation_probe.py` 里那条全小写断言）。
+    """
+    return set(re.findall(r'"id":\s*"([A-Za-z0-9_]+)"', PROBE_SRC))
 
 
 def test_readme_mcp_tool_table_lists_every_tool():
