@@ -2042,6 +2042,26 @@ def test_empty_board_offers_a_three_step_onboarding(ui):
     page.wait_for_selector("#proj-modal.show", timeout=10000)
 
 
+def test_first_real_create_tells_the_user_the_samples_stood_down(ui):
+    """第一笔真实创建时，示例数据会被整体丢弃（后端「首次落盘」分支：内置示例只用于
+    引导、不跟着真实数据落盘）。toast 必须把这件事说透 —— 否则新用户会以为自己的
+    示例数据被误删（2026-10-25 走查实测：toast 只说「项目已创建」，4 个示例无声消失）。"""
+    page, api, _ = ui
+    seeded = api.get("/api/projects")[1]["projects"]
+    assert seeded and all(p["id"].startswith("sample-") for p in seeded),         "前置：ui 夹具初始应为纯示例数据"
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.click("[data-act='openProjectModal']")
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    page.fill("#f-name", "首个真实项目")
+    page.click("#proj-modal [data-act='saveProject']")
+    page.wait_for_selector("#toast.show", timeout=10000)
+    toast = page.locator("#toast").inner_text()
+    assert "示例数据" in toast and "让位" in toast, f"toast 没把示例让位说透：{toast}"
+    page.wait_for_selector(".pcard", timeout=15000)
+    cards = api.get("/api/projects")[1]["projects"]
+    assert [p["name"] for p in cards] == ["首个真实项目"], "示例应退场、只留首笔真实项目"
+
+
 def test_memory_form_button_does_not_overflow_the_sidebar(ui):
     """记忆表单的按钮必须留在侧栏面板里。
 

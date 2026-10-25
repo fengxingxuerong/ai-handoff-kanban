@@ -209,8 +209,15 @@ next_action: document.getElementById("f-next").value.trim(),
       await api("/api/projects/" + editProjectId, { method: "PUT", body: JSON.stringify(body) });
       toast("项目已更新 ✓");
     } else {
+      // 示例数据只用于引导（app/main.py create worker 的「首次落盘」分支）：
+      // 第一笔真实创建时，示例项目会被整体丢弃、不落盘。检测「当前列表全是
+      // sample-*」，把这件事在 toast 里说透 —— 否则新用户会以为示例数据被误删。
+      const hasSample = projects.some(p => String(p.id || "").startsWith("sample-"));
+      const hasReal = projects.some(p => !String(p.id || "").startsWith("sample-"));
       const created = await api("/api/projects", { method: "POST", body: JSON.stringify(body) });
-      toast("项目已创建 ✓");
+      toast(hasSample && !hasReal
+        ? "项目已创建 ✓ 示例数据已完成引导使命，已自动让位"
+        : "项目已创建 ✓");
     }
     closeModal("proj-modal");
     if (document.getElementById("view-detail").classList.contains("active") && editProjectId === currentPid) {
