@@ -28,7 +28,7 @@
 
 | 路径 | 职责 |
 | --- | --- |
-| `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程。**2026-09-26 起分轮拆出（3596 行 → 现 3255 行、下表 28 个模块）；2026-10-24 又拆出 fields / schemas / sampledata / service（3539 → 3255 行）**，本文件只留路由编排、数据层临界区与有全局状态的部分 |
+| `app/main.py` | 全部 HTTP 接口 + 数据层 + 监管/指令/交接/AGENTS.md 生成 + 调度线程。**2026-09-26 起分轮拆出（3596 行 → 现 3255 行、下表 29 个模块）；2026-10-24 又拆出 fields / schemas / sampledata / service（3539 → 3255 行）**，本文件只留路由编排、数据层临界区与有全局状态的部分 |
 | `app/taskgraph.py` | 任务依赖图：`clean_deps` / `task_graph` / `has_cycle` / `topo_order` / `_break_dep_cycles` / `executable_tasks` / `deps_blocking`（与 /api/inbox 共用的"被前置挡住"谓词，2026-10-07 抽出）/ `_dedupe_ids` / `clean_refs`（纯函数，从 main 逐字搬来） |
 | `app/due.py` | 日期类判定（纯函数）：截止日期归一 `_clean_due_date`、状态判定 `_due_state`、记忆过期 `_memory_expired`、记忆召回排序 `recall_memories`（2026-10-11 对标 claude-mem Awareness：决策/坑/约定优先于事实，同类内时间新在前；AGENTS.md 的 12 条窗口与 AI 简报的 10 条窗口共用一套，避免晚写的背景事实把早记的坑挤出窗口） |
 | `app/journal.py` | 过程轨迹与验收标准的清洗与上限（纯函数，2026-10-07 从 main 拆出）：`append_journal`（溢出**折叠成摘要**的写入侧）/ `compress_journal` / `clean_journal` / `clean_acceptance` 与 `MAX_JOURNAL*`、`MAX_ACCEPTANCE*`、`JOURNAL_SNIPPET`。**这些上限常量的 monkeypatch 点在这里**（main 是转发别名，patch 别名改不到函数读的全局）；时钟由 main 的 `_append_journal` 包装注入，本模块不 import main |
@@ -72,7 +72,8 @@
 | `scripts/make_icon.py` | 纯标准库生成应用图标 app.ico |
 | `scripts/frozen_smoke.py` | **冻结版自查**：启动 dist 里的 exe，真打一遍接口，自动关掉（每次打包后必跑）。除了活着，还钉三件事 —— 产物是不是**新的**比产物能不能跑更容易出问题：① exe 自报的 `version`/`build_time` 与仓库里的 `app/version.py`、`_build_stamp.py` 同源；② **首页返回的字节与 `web/index.html` 逐字节一致**（专治「改了前端忘了重打包」）；③ **构建戳之后 `app/*.py` 或 `web/index.html` 有没有再被改过**（后端打进 .pyc，没法比字节，只能按时间拦）。没有它们就是"测试全绿、发出去的 exe 少几个修复"。**MCP 产物有它自己的一份，见下行**（两者对标准流的处理完全不同）。**2026-10-24 起管进程卫生**：起跑前清场（清不掉就停）、收尾兜底并**验证**端口释放；**2026-10-25 起就绪判定也自证是本轮实例**（它固定用 18395：测的是打包产物，别人的回包会让「版本同源 / 内嵌前端一致」报出与真原因无关的失败）；`--sweep [exe]` 供 ci_local 打包前调（残留进程曾把下一轮打包毒成 WinError 5）。详版见档案 v1.9.4 |
 | `scripts/mcp_frozen_smoke.py` | **MCP 冻结版自查**（2026-10-23，与 `frozen_smoke` 并列）：真的启动 `dist\AI交接看板-MCP.exe`，走真实 stdio 打一遍，钉四件事 —— ① `tools/list` 拿得到 23 个工具；② **stdout 每一行都是合法 JSON-RPC**（一行日志就能让客户端解崩、整个服务等于没发布）；③ **中文双向不乱码**（写进去再读回来逐字一致：出方向工具目录被编成 cp936 客户端就崩、入方向中文标题静默变乱码入库）；④ 真写进了隔离临时目录（不信回执的一面之词）。九条断言，退出码 0 才算过。**「打包才会坏、源码态永远看不出来」的那一类**，所以必须跟着 exe 一起跑（`ci_local --with-exe` 里是独立一步）；`--source` 可对着源码跑同一套断言（先自证门禁本身有效） |
-| `scripts/mcp_server.py` | MCP 服务（stdio，23 工具 + 资源 + 提示词）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
+| `app/mcp_server.py` | **MCP 服务**（stdio，23 工具 + 资源 + 提示词；2026-10-25 从 `scripts/` 搬进包里，`pyproject.toml` 才指得到它）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
+| `scripts/mcp_server.py` | **上面那份的兼容壳**（2026-10-25）：十几个调用点写着这条路径，改它们换不来功能。用**透明别名**（`sys.modules[__name__] = 真模块`，不是 `import *` —— 后者会造出第二个模块对象，`monkeypatch` 就改不到真正在跑的那份）。必须薄，两条钉子看着 |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
 | `scripts/mutation_probe.py` | **变异探针**：往源码注入 106 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。 **逐轮史**（哪一轮加了几条、为什么、每条 killer 是谁）已整段搬进 [docs/测试约定.md](docs/测试约定.md) 的「变异探针：逐轮史」一节 —— 内容搬走，不是删掉（**每一批加了哪几条、为什么**也在那一节）。**被外部信号打断时不会走到 `finally`**：2026-10-22 前台跑探针被沙箱 SIGTERM（进程外杀），变异留在 `web/index.html` 里没还原，下一次跑报"变异文本没匹配上"才暴露 —— 中断过的探针一律先 `git status` 自检再继续。**2026-10-24 起有启动预检**（`--preflight`，ci_local 两种模式都先跑）：old 命不中而 new 还在源码里 = **残渣**（报 `git checkout` 处置）；否则 = **表没同步**（哑火）。删除型变异 new 为空判不出残渣（空串 `in` 恒真，必须先排除）。**还原改成「字节进、字节出」**（2026-10-25，两个方向都被实测咬过）：`read_text` 会做 universal newlines（CRLF→LF）、`write_text` 在 Windows 上又把 `\n` 翻成 `\r\n` —— 一头在归一、一头在翻译，「注入 → 还原」两遍下来行尾就变了（LF→CRLF 或 CRLF→LF，看先修了哪边）。内容读起来一样（`git diff` 归一化后是空的），但**不是逐字节还原**，症状是 `git status` 里的幽灵改动。现在 `raw = read_bytes()` 进、`write_bytes(raw)` 出，逐字节相等是**构造上成立**；变异表里的 LF 文本由 `_native()` 适配成文件自己的行尾。钉子 `test_apply_and_run_restores_bytes_for_both_line_endings`（两种行尾各一条，比 `read_bytes`）。**第四批 4 条全静态**（chip 脱离视图 / 键盘空格激活 / toast 时长 / toast 宽度）—— 其中一条**存活过**，它证明了一条判据在守注释而不是守规则（见 docs/测试约定.md）。**跑的时候挂 `running_lock()`**（TEMP 里一份带 PID 的锁）：源码此刻是「活的」，同时跑别的门禁会得到与真故障无关的红 —— 所以第二份探针会**拒绝开跑**（退出码 3 并说人话），陈锁（进程已不在）自动清掉。id 一律全小写 snake_case。 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
@@ -275,6 +276,9 @@ rem 打包后必跑二：MCP 冻结版自查（只装 exe 的用户的命脉；-
       显式传下去；钉子 `test_coverage_floor_is_enforced_by_the_release_gate` 两头都钉
       （门禁必须传 + 不许塞进 `addopts` —— 塞进去会让文档里那些有意只跑一部分的命令集体假红）。
       `pytest.ini` 那段自己就写着「不要指望这里的 `branch = true` 生效」，`fail_under` 是同一个坑。
+    - **进不了分母的模块只能显式排除，且必须有人替它作证**（2026-10-25）：MCP 由真 stdio
+      子进程跑、进程内量不到；搬进 `app/` 后总覆盖率 93.8%→81%，门禁当场红。排除写在
+      **`.coveragerc`**，佐证是「每个工具都真被调过」+ `mcp_frozen_smoke`（详见 docs/测试约定.md）。
     - **`--quick` 少跑的步骤要在结论里点名**：它跳过的恰好是「改了语义会不会红」那一层，
       却照样印「全部通过，可以发版 ✓」—— 两句话在屏幕上长得一样，含义差一整层门禁。
       现在结论文案分档，并把跳过的那四步逐条列出来。
@@ -509,7 +513,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 写的是同一个数。
 
-**验证基线**：`pytest` 851 收集（846 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 94%（93.66%，门槛 90）/ 36 个测试文件、800 个 `def test_` 且无重名；
+**验证基线**：`pytest` 856 收集（851 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 94%（93.82%，门槛 90）/ 36 个测试文件、805 个 `def test_` 且无重名；
 变异探针 106 条全被杀。**逐轮明细、每轮改了什么为什么、性能基线** → [docs/进度与版本档案.md](docs/进度与版本档案.md)。
 
 **下一步（按价值排序，详版在档案里）**：

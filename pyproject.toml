@@ -1,0 +1,62 @@
+# AI 交接看板 —— 可安装的 MCP 服务包（2026-10-25）
+#
+# 为什么要有这个文件：在这之前仓库**没有任何 Python 打包元数据**，MCP 服务只能靠
+# 三条路装上 —— Windows exe、源码 + venv、Docker 镜像；而 MCP 生态的默认分发是
+# `uvx <包>` 一行命令。有了它，客户端配置里可以写：
+#
+#     "ai-kanban": { "command": "uvx",
+#                    "args": ["--from", "ai-handoff-kanban", "ai-handoff-kanban-mcp"] }
+#
+# 另一处细节：`pywebview` **不是** MCP 的依赖（`app/` 里零个 webview import，实测），
+# uvicorn 也只在起 HTTP 服务时才需要 —— 所以它们进了 `desktop` extra，
+# 免得 `uvx` 在 Linux/macOS 上被 GUI 依赖拖住。
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-handoff-kanban"
+# 版本只有一个来源：app/version.py 的 __version__（setuptools 静态读，不 import）
+dynamic = ["version"]
+description = "Local-first kanban + MCP server for handing projects between AI coding agents"
+readme = "README.en.md"
+# 语法下限：有 `tests/test_suite_hygiene.py::test_sources_parse_under_the_declared_python_floor` 实测。
+# 运行时下限**没有**实测（CI 只在 3.13 上跑真门禁）—— 这里不冒充。
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "fengxingxuerong" }]
+keywords = ["mcp", "mcp-server", "kanban", "handoff", "ai-agents", "local-first"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Project Management",
+]
+dependencies = [
+  "fastapi>=0.110",
+  "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+# 桌面壳（Windows）：起 HTTP 服务要 uvicorn，开窗口要 pywebview
+desktop = ["uvicorn>=0.29", "pywebview>=5.0"]
+
+[project.scripts]
+# 入口是 `serve()`（实现里 `if __name__ == "__main__": serve()` 的那个）
+ai-handoff-kanban-mcp = "app.mcp_server:serve"
+
+[project.urls]
+Homepage = "https://github.com/fengxingxuerong/ai-handoff-kanban"
+Repository = "https://github.com/fengxingxuerong/ai-handoff-kanban"
+Changelog = "https://github.com/fengxingxuerong/ai-handoff-kanban/releases"
+Issues = "https://github.com/fengxingxuerong/ai-handoff-kanban/issues"
+
+[tool.setuptools]
+# 只装 app/：MCP 服务与数据层都在里面，前端（web/）不服务它、也没进包
+packages = ["app"]
+
+[tool.setuptools.dynamic]
+version = { attr = "app.version.__version__" }

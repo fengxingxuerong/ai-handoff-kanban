@@ -16,9 +16,8 @@ RUN pip install --no-cache-dir -r requirements.lock.txt
 
 # MCP 服务只需要 app/ 与入口脚本；不服务前端，web/ 不进镜像
 COPY app/ app/
-COPY scripts/mcp_server.py scripts/mcp_server.py
 
 ENV KANBAN_DATA_DIR=/data
 VOLUME /data
 
-CMD ["python", "scripts/mcp_server.py"]
+CMD ["python", "-m", "app.mcp_server"]          # 规范入口（= pyproject 的 console script 跑同一个 serve()）

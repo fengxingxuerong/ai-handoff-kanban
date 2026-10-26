@@ -1,0 +1,14 @@
+# 覆盖率配置（2026-10-25）
+#
+# 为什么这个文件存在：pytest-cov 自己构造 source/开关，**`pytest.ini` 的 `[coverage:run]`
+# 段对运行时不生效** —— 与那里记的 `branch = true` 是同一个坑。实测：不在 `.coveragerc`
+# 里写、只在 pytest.ini 里写 `omit`，正斜杠/反斜杠/通配四种写法**全都无效**。
+# 所以机制放这里，`pytest.ini` 的 addopts 用 `--cov-config=.coveragerc` 指过来。
+#
+# omit 的是 MCP 服务（app/mcp_server.py）：它由**真 stdio 子进程**跑（见测试约定 ①
+# 「拒绝 mock 自证」），进程内行覆盖量不到它（655 条语句里只有 14% 进得来）。
+# 谁替它作证、omit 表不许扩大 —— 钉子见
+# tests/test_suite_hygiene.py::test_coverage_exclusion_is_explicit_and_has_a_verifier
+[run]
+omit =
+    app/mcp_server.py

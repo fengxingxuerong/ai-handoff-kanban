@@ -125,13 +125,33 @@ Windows 桌面应用（PyWebView 原生窗口，单文件 exe），内置深浅�
 
 ### 让 AI 代理直接读写看板（MCP）
 
-`scripts/mcp_server.py` 是一个零依赖的 MCP 服务（stdio 传输、JSON-RPC 2.0），
+`app/mcp_server.py`（`scripts/mcp_server.py` 是它的兼容壳）是一个零依赖的 MCP 服务（stdio 传输、JSON-RPC 2.0），
 Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读交接包、加任务、改进度，
 不用再靠人把交接包粘来粘去。
 
-**两种注册方式，按你手上有什么选一种：**
+**三种注册方式，按你手上有什么选一种：**
 
-**方式 A：用打包好的 `AI交接看板-MCP.exe`（推荐，不需要装 Python）**
+```json
+{
+  "mcpServers": {
+    "ai-kanban": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/fengxingxuerong/ai-handoff-kanban",
+               "ai-handoff-kanban-mcp"]
+    }
+  }
+}
+```
+
+> 需要 `uv`（`winget install astral-sh.uv`、或 `pipx install uv`）。这条**从仓库直接构建安装**，
+> 写在这里因为它**今天就可用**；等包发到 PyPI 之后（见文末「发布」），
+> `"args": ["--from", "ai-handoff-kanban", "ai-handoff-kanban-mcp"]` 这个短形式同样成立。
+>
+> `app/` 里没有 GUI 依赖，所以这一路在 Linux/macOS 上也能装（`pywebview`/`uvicorn`
+> 只在 `desktop` extra 里）。数据仍在 `%USERPROFILE%\.ai-kanban`（或 `KANBAN_DATA_DIR`），
+> 包只带服务本身 —— 换机器/换 agent 客户端都只改这一段配置。
+
+**方式 B：用打包好的 `AI交接看板-MCP.exe`（Windows、不需要装 Python）**
 
 下载/打包出来后，`dist\` 里有**两个** exe：
 
@@ -156,7 +176,7 @@ Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读�
 > 在 Windows 上拿不到标准流。控制台子系统的这一份才是它的正确形态 —— 也因此它没有窗口，
 > 双击它会看起来"什么都没发生"（它在等你从 stdin 发 JSON-RPC）。
 
-**方式 B：从源码跑（开发/调试用，需要 .venv）**
+**方式 C：从源码跑（开发/调试用，需要 .venv）**
 
 ```json
 {
@@ -247,11 +267,28 @@ build.bat
 
 产物在 `dist\AI交接看板.exe`。已配好 `--hidden-import uvicorn / app.main` 与 `--add-data web;web`，可直接用。
 
+**只装 MCP 那一个包**（`pyproject.toml` 在，所以 `pip` / `uv` 都能装；`app/` 里没有 GUI 依赖）：
+
+```bat
+.venv\Scripts\python.exe -m pip install .                      rem 装本仓库，装出 ai-handoff-kanban-mcp 命令
+.venv\Scripts\python.exe -m pip wheel . --no-deps -w .tmp\wheels   rem 只建 wheel 不装（自测打包用）
+```
+
+**发布到 PyPI**（需要你自己的 token；**发布之前**，上面那句 `--from ai-handoff-kanban` 的短形式不成立）：
+
+```bat
+.venv\Scripts\python.exe -m pip install build twine
+.venv\Scripts\python.exe -m build
+.venv\Scripts\python.exe -m twine upload dist\ai_handoff_kanban-*.whl
+```
+
+> 版本号不用手改：`pyproject.toml` 的 `version` 是 `dynamic`，取自 `app/version.py` 的 `__version__`。
+
 ## 目录结构
 
 ```
 项目任务看板/
-├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 28 个模块，见 AGENTS.md）
+├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 29 个模块，见 AGENTS.md）
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
 ├── web/index.html          # 前端页面骨架（零内联脚本；深色主题，含 AI 界面）
 ├── web/js-*.js             # 前端逻辑十个文件：core/overview/detail/render/reality/handoff/edit/ai/data/boot（无构建、无 CDN）

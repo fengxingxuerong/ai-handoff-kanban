@@ -17,7 +17,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-SERVER = ROOT / "scripts" / "mcp_server.py"
+# 跑**实现**那条路（= Docker 与 uvx 走的入口）。scripts/mcp_server.py 是兼容壳，
+# 它自己另有一条用例（下面 test_compat_shim_is_the_same_module_object）
+SERVER = ROOT / "app" / "mcp_server.py"
 
 
 class McpClient:
@@ -791,9 +793,44 @@ def test_due_date_is_advertised_in_tool_schemas(mcp):
 
 def _mcp_server_mod():
     """在进程内 import mcp_server 拿目录元数据（它自带 __main__ 守卫，不会起服务）"""
-    sys.path.insert(0, str(ROOT / "scripts"))
-    import mcp_server
+    from app import mcp_server
     return mcp_server
+
+
+def test_compat_shim_is_the_same_module_object():
+    """`scripts/mcp_server.py` 必须与 `app/mcp_server.py` 是**同一个模块对象**。
+
+    为什么单列一条（2026-10-25 搬包时）：实现搬进 `app/` 之后，`scripts/` 下留了一个兼容壳
+    （`build.bat` / `Dockerfile` / `ci_local` / 冻结冒烟 / 文档都写着那条路径）。
+    壳用的是 `sys.modules[__name__] = 真模块` 的透明别名 —— **不是** `from ... import *`：
+    后者会造出第二个模块对象，于是 `monkeypatch.setattr(mcp_server, ...)` 改的是壳、
+    真正在跑的那份全局一点没变（测试绿了却没测到东西）。
+    这条用例把"两条导入路径同一个对象"钉死。
+    """
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    sys.path.insert(0, str(ROOT))
+    from app import mcp_server as impl
+    import scripts.mcp_server as via_pkg
+    import mcp_server as via_bare
+
+    assert via_pkg is impl and via_bare is impl, (
+        "兼容壳造出了第二个模块对象 —— 换成 `sys.modules[__name__] = _impl` 那种透明别名")
+
+
+def test_compat_shim_stays_thin():
+    """壳里不许出现实现（不许把 23 个工具的代码再抄一遍）。
+
+    判据很窄但够用：壳里不能有 `HANDLERS` / `TOOL_KIND` 这类实现体的标志，
+    也必须真的调用实现的 `serve()`。壳一旦变厚，本文件里"实现只有一份"的前提就破了。
+    """
+    src = (ROOT / "scripts" / "mcp_server.py").read_text(encoding="utf-8")
+    assert len(src.encode("utf-8")) < 4000, f"兼容壳 {len(src.encode('utf-8'))} B —— 太厚了，实现是不是被抄回来了？"
+    for marker in ("HANDLERS = {", "TOOL_KIND = {"):
+        assert marker not in src, f"壳里出现了实现体标志 {marker!r}"
+    assert "_impl.serve()" in src, "壳没有调用实现的 serve()"
+    assert "sys.modules[__name__]" in src, "壳没有做透明别名"
 
 
 def test_every_tool_is_registered_with_a_kind():
@@ -1287,7 +1324,7 @@ def test_next_task_tool_delegates_instead_of_recomputing():
     改了一边，代理看到的"现在能做"就和界面给的不一样，而且没人会红。
     这条是结构性钉子 —— 想在 MCP 里重算就得先改这条测试的理由。
     """
-    src = (ROOT / "scripts" / "mcp_server.py").read_text(encoding="utf-8")
+    src = (ROOT / "app" / "mcp_server.py").read_text(encoding="utf-8")
     start = src.index("def t_next_task")
     body = src[start:src.index("def t_delete_task", start)]
     # 只看代码行：注释里写着"以前这里 _find() 读一份"是解释，不是重新实现

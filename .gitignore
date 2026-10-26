@@ -49,3 +49,9 @@ DELIVERY/**/*.log
 # 会话与文档查看器的临时缓存
 .dumate/
 .tmp/
+
+# Python 打包产物（`pip wheel .` / `pip install .` 会在仓库根留下 egg-info，
+# 2026-10-25 加 pyproject 时实测出现）—— 构建残渣，不入库
+*.egg-info/
+build/
+dist/

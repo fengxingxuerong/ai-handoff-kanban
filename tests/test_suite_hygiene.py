@@ -300,6 +300,150 @@ def _gate_steps() -> dict:
     return steps
 
 
+def _coverage_omit() -> set[str]:
+    """读 `.coveragerc` 的 `[run] omit`（多行值按行拆开）。
+
+    为什么读这里而不是 `pytest.ini`（2026-10-25 实测）：pytest-cov 自己构造 source/开关，
+    `pytest.ini` 的 `[coverage:run]` 段对运行时**不生效** —— omit 的四种写法（正斜杠、
+    反斜杠、两种通配）全部无效，与那里记的 `branch = true` 是同一个坑。
+    真正生效的是 coverage.py 自己读的配置文件（`--cov-config=.coveragerc`）。
+    """
+    import configparser
+
+    cp = configparser.ConfigParser()
+    cp.read_string((ROOT / ".coveragerc").read_text(encoding="utf-8"))
+    raw = cp.get("run", "omit", fallback="")
+    return {ln.strip().replace("\\", "/") for ln in raw.splitlines() if ln.strip()}
+
+
+def test_coverage_exclusion_is_explicit_and_has_a_verifier():
+    """进程内覆盖率量不到的模块只能**显式排除**，而且必须有人替它作证。
+
+    来由（2026-10-25，ci_local 抓到的真红）：MCP 服务从 `scripts/` 搬进 `app/` 之后，
+    第一次落进 `--cov=app` 的**分母**（655 条语句、进程内只覆盖 14%），总覆盖率 93.8% → 81%。
+    而 `pytest.ini` 里其实**早就写着**「它是子进程跑的，行覆盖量不到它」—— 只是那时靠
+    "它在 source 之外"这条**巧合**成立，搬进包里就让巧合失效了。所以现在写成显式 omit。
+
+    三条判据（故意窄）：
+      ① omit 表**只有** `app/mcp_server.py` —— 不许悄悄扩大（那才是"把红变绿"的常见手法）；
+      ② 替它作证的两层必须还在：真 stdio 子进程用例（含"每个注册工具都真被调用过一次"）
+         与 `mcp_frozen_smoke.py`；
+      ③ 后者必须真的挂在发版门禁里（文件存在但没人跑 = 等于没有那一层）。
+    """
+    addopts = re.search(r"(?m)^addopts\s*=\s*(.+)$",
+                        (ROOT / "pytest.ini").read_text(encoding="utf-8")).group(1)
+    assert "--cov-config=.coveragerc" in addopts, (
+        "addopts 没把 `.coveragerc` 指过来 —— 那么 omit 是**惰性配置**："
+        "实测 pytest.ini 里写 omit 四种写法全无效，只有 coverage 自己的配置文件算数")
+
+    omit = _coverage_omit()
+    assert omit == {"app/mcp_server.py"}, (
+        f"覆盖率排除表变了：{sorted(omit)} —— 排除**只能**是那个子进程跑的 MCP 服务；"
+        f"若要排除别的，先补上「谁替它作证」的那一层，再改这条钉子")
+
+    mcp_tests = (ROOT / "tests" / "test_mcp_server.py").read_text(encoding="utf-8")
+    assert "test_every_registered_tool_is_advertised_and_actually_called" in mcp_tests, (
+        "替覆盖率作证的那条「每个注册工具都真被调用过一次」不见了 —— "
+        "MCP 服务的覆盖率就只剩一个被排除的空名字")
+
+    smoke = ROOT / "scripts" / "mcp_frozen_smoke.py"
+    assert smoke.exists(), "MCP 冻结版自查不见了"
+    ci = (ROOT / "scripts" / "ci_local.py").read_text(encoding="utf-8")
+    assert "mcp_frozen_smoke" in ci, (
+        "mcp_frozen_smoke 没挂在发版门禁里 —— 那它就不是「替覆盖率作证的那一层」")
+
+
+def _pyproject() -> dict:
+    """读 pyproject.toml。
+
+    3.11+ 用标准库 `tomllib`；3.10 需要 `tomli`。**两者都没有时不静默跳过** ——
+    "读不到 = 没验"，所以红并给出可行动的处置（对 `importorskip` 的态度与本文件
+    另一处一致：跳过与全绿同形，漏的恰好是门禁自己）。
+    """
+    raw = (ROOT / "pyproject.toml").read_bytes()
+    try:
+        import tomllib                                    # 3.11+
+    except ModuleNotFoundError:                           # 3.10
+        try:
+            import tomli as tomllib                       # type: ignore
+        except ModuleNotFoundError:
+            raise AssertionError(
+                "读 pyproject.toml 需要 tomllib（3.11+）或 tomli（3.10）——"
+                "装一个再跑，别让这条钉子静默跳过") from None
+    return tomllib.loads(raw.decode("utf-8"))
+
+
+def test_sources_parse_under_the_declared_python_floor():
+    """`requires-python` 声明的语法下限必须**真的**成立（`ast.parse(feature_version=…)`）。
+
+    为什么需要它（2026-10-25，加 pyproject 时）：`requires-python` 是一条**对外承诺** ——
+    写 `>=3.10` 就意味着"3.10 能装能跑"。而这个项目最忌"声称没验过的东西"，
+    所以至少把**语法**那一半机械化：用 3.10 的语法规则去 parse 每一个源文件，
+    用了 3.10 之后才有的语法就红。
+
+    **这条测的是什么、不是什么**（写清楚，免得被当成更强的保证）：
+      · 是：语法下限成立、`pyproject` 里那个数不是拍脑袋写的；
+      · 不是：运行时行为。真门禁只跑 3.13（CI 与 lock 文件都在 3.13 上），
+        `requires-python` 里的"运行时可用"没有被实测 —— 注释与本用例的理由里都这么写着。
+    """
+    floor = _pyproject()["project"]["requires-python"]
+    nums = re.findall(r"(\d+)\.(\d+)", floor)
+    assert nums, f"requires-python 解析不出下限：{floor!r}"
+    feature = tuple(int(x) for x in nums[0])              # 只看第一个数（>=3.10）
+    assert feature >= (3, 8), f"下限低得可疑：{floor!r}"
+
+    bad = []
+    for p in sorted((ROOT / "app").glob("*.py")) + [ROOT / "scripts" / "mcp_server.py"]:
+        try:
+            ast.parse(p.read_text(encoding="utf-8"), filename=str(p), feature_version=feature)
+        except SyntaxError as e:
+            bad.append(f"{p.relative_to(ROOT)}:{e.lineno} {e.msg}")
+    assert not bad, (
+        f"这些文件在声明的 Python {feature[0]}.{feature[1]} 语法下 parse 不了，"
+        f"而 pyproject 写着 {floor!r}（要么升下限、要么改代码）：{bad}")
+
+
+def test_pyproject_dependencies_match_the_floor_file():
+    """`pyproject` 的依赖与 `requirements.txt` 必须**同一套下限**（别造出第二份清单）。
+
+    为什么需要它（2026-10-25）：加 pyproject 时最省事的写法是把四个依赖抄一遍，
+    于是同一件事有了两处 —— 改一处忘一处就漂（本项目为此吃过几次代价，
+    所以"清单式的东西要么只有一处、要么有钉子对账"，这里选后者：
+    因为 `requirements.txt` 是**桌面应用**的安装路径，pyproject 是**包**的元数据，
+    两者的读者不同，硬合成一份反而更差）。
+
+    判据：两边每个包名与下限都一致（**不看 extras** —— uvicorn/pywebview 只在
+    pyproject 的 `desktop` extra 里出现是**有意**的，见 pyproject 头部说明）。
+    """
+    req = {}
+    for line in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        m = re.match(r"([A-Za-z0-9_.\-]+)\s*([<>=!~].*)?$", line)
+        assert m, f"requirements.txt 里这行解析不了：{line!r}"
+        req[m.group(1).lower().replace("_", "-")] = (m.group(2) or "").strip()
+
+    proj = _pyproject()["project"]
+    deps = {}
+    # dependencies ∪ 所有 extras：uvicorn/pywebview 有意只在 `desktop` extra 里，
+    # 但它们**仍然必须在两边下限一致**（本题判的是"同一件事别有两套数"，不是"必须都进 core"）
+    specs = list(proj["dependencies"]) + [s
+                                         for group in (proj.get("optional-dependencies") or {}).values()
+                                         for s in group]
+    for spec in specs:
+        m = re.match(r"([A-Za-z0-9_.\-]+)\s*([<>=!~].*)?$", spec.strip())
+        assert m, f"pyproject 里这条依赖解析不了：{spec!r}"
+        deps[m.group(1).lower().replace("_", "-")] = (m.group(2) or "").strip()
+
+    missing = sorted(set(req) - set(deps))
+    assert not missing, (
+        f"requirements.txt 里有、pyproject（含 extras）里没有：{missing} ——"
+        f" 桌面壳的依赖请放进 `[project.optional-dependencies].desktop`，别让它只活在 requirements 里")
+    mismatched = {k: (req[k], deps[k]) for k in req if deps.get(k) != req[k]}
+    assert not mismatched, f"两处下限不一致（前 requirements / 后 pyproject）：{mismatched}"
+
+
 def _frontend_text() -> str:
     """整个前端的文本（与 `tests/frontend_src.py:frontend_source()` 同一口径的东西）。"""
     parts = [(ROOT / "web" / "index.html").read_text(encoding="utf-8"),

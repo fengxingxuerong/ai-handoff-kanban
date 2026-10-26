@@ -672,7 +672,7 @@ MUTATIONS: list[dict] = [
     },
     {
         "id": "mcp_next_unmarked_blocked",
-        "file": "scripts/mcp_server.py",
+        "file": "app/mcp_server.py",
         "old": "    if t.get(\"status\") != \"阻塞\":\n"
                "        return \"\"\n"
                "    reason = t.get(\"blocked_reason\") or \"\"\n"

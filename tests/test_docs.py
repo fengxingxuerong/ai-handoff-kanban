@@ -25,7 +25,8 @@ AGENTS = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 DOCS = AGENTS + "\n".join(
     p.read_text(encoding="utf-8") for p in sorted((ROOT / "docs").glob("*.md")))
 README = (ROOT / "README.md").read_text(encoding="utf-8")
-MCP_SRC = (ROOT / "scripts" / "mcp_server.py").read_text(encoding="utf-8")
+# 读**实现**（app/mcp_server.py）；scripts/mcp_server.py 只是兼容壳（2026-10-25 搬的）
+MCP_SRC = (ROOT / "app" / "mcp_server.py").read_text(encoding="utf-8")
 PROBE_SRC = (ROOT / "scripts" / "mutation_probe.py").read_text(encoding="utf-8")
 VERSION_SRC = (ROOT / "app" / "version.py").read_text(encoding="utf-8")
 
