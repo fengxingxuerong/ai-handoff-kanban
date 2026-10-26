@@ -906,6 +906,26 @@ MUTATIONS: list[dict] = [
                   "tests/test_mcp_server.py::test_english_aliases_work_over_mcp"],
     },
     {
+        "id": "repo_snapshot_skips_redaction",
+        "file": "app/main.py",
+        "old": "        texts = {rel: redact_text(t) for rel, t in texts.items()}",
+        "new": "        pass  # 变异：不脱敏",
+        "why": "跳过脱敏：整块板（每条任务标题/描述 + 每条记忆）原样落进用户的仓库，"
+               "而仓库通常会被 push —— 这是把凭据带出本机最直的一条路。"
+               "回执里照样写着「已按默认脱敏」，两边一起骗人。",
+        "tests": ["tests/test_api.py::test_repo_snapshot_previews_redacts_and_never_clobbers"],
+    },
+    {
+        "id": "repo_snapshot_clobbers_foreign_file",
+        "file": "app/main.py",
+        "old": "                if is_ours(current):\n                    state = \"update\"                       # 我们自己生成的 → 覆盖",
+        "new": "                if True:\n                    state = \"update\"",
+        "why": "不再认标记：仓库里**用户手写**的 `docs/kanban/*.md` 被当成我们生成的一份、直接覆盖 —— "
+               "快照是生成物，但同名文件可能是人写的目录页，冲掉就是丢用户的东西。"
+               "这条与「我们自己的能更新」是一对，两个方向都要钉。",
+        "tests": ["tests/test_api.py::test_repo_snapshot_previews_redacts_and_never_clobbers"],
+    },
+    {
         "id": "port_default_written_twice",
         "file": "app/handoff_page.py",
         "old": '                       port: str = DEFAULT_PORT, generated_at: str = "",',

@@ -60,6 +60,102 @@ def test_english_status_and_priority_aliases_are_normalized(server):
     assert "规划中" in json.dumps(err, ensure_ascii=False), err
 
 
+def test_repo_snapshot_previews_redacts_and_never_clobbers(tmp_path, server):
+    """看板快照进仓库：默认只预览、**默认脱敏**、**不是我们生成的同名文件一动不动**。
+
+    为什么这三条要一起钉（2026-10-25，选项 A）：这条路的去处是**用户的仓库**，
+    而仓库通常会被 push —— 它是把整块板（每条任务标题/描述 + 每条记忆）带出本机的动作。
+    规矩与 `/api/export/agent-files` 同源但两处**有意不同**：
+      ① 默认脱敏（那边默认关）：那份只写一份 AGENTS.md，这份是整块板的批量导出；
+      ② 覆盖认「标记」而不是「存在就跳过」：快照是生成物，重复导出必须能更新自己，
+         而用户手写的同名文件默认一动不动 —— 冲掉它就是丢用户的东西。
+    """
+    repo = tmp_path / "repo"
+    (repo / "docs" / "kanban").mkdir(parents=True)
+    foreign = repo / "docs" / "kanban" / "README.md"
+    foreign.write_text("# 我手写的目录\n", encoding="utf-8")
+
+    st, proj = server.create_project("快照项目", repo_path=str(repo),
+                                     handoff_note="轮换 sk-abcdef123456 这把")
+    assert st == 201, proj
+    url = f"/api/projects/{proj['id']}/repo-snapshot"
+
+    # ① 预览：只报计划，一个字节都不写
+    st, plan = server.post(url, {"dry_run": True})
+    assert st == 200 and plan["preview"] and not plan["written"], plan
+    assert not (repo / "docs" / "kanban" / "board.json").exists(), "预览居然写了盘"
+    states = {f["path"]: f["state"] for f in plan["files"]}
+    assert states["docs/kanban/README.md"] == "skip-foreign", states
+
+    # ② 写盘：我们的文件落地；别人手写的那份一动不动
+    st, res = server.post(url, {"dry_run": False})
+    assert st == 200, res
+    assert "docs/kanban/board.json" in res["written"]
+    assert "docs/kanban/README.md" in res["skipped_foreign"], res
+    assert foreign.read_text(encoding="utf-8") == "# 我手写的目录\n", "手写文件被覆盖了"
+
+    # ③ 默认脱敏，而且**报出命中数**（用户得先知道里面有凭据）
+    board = (repo / "docs" / "kanban" / "board.json").read_text(encoding="utf-8")
+    assert "sk-abcdef123456" not in board and "********" in board, board[:200]
+    assert res["redacted"] and res["credential_warning"]["hits"] >= 1, res["credential_warning"]
+
+    # ④ 我们自己生成的那份**能**被更新（否则重复导出没有意义）
+    st, again = server.post(url, {"dry_run": False})
+    assert "docs/kanban/board.json" in again["written"], again
+
+    # ⑤ 覆盖手写文件必须**显式**要求
+    st, forced = server.post(url, {"dry_run": False, "overwrite_foreign": True})
+    assert "docs/kanban/README.md" in forced["written"], forced
+    assert "我手写的目录" not in foreign.read_text(encoding="utf-8")
+
+    # ⑥ 没有 repo_path 也没给目录 → 400，而且说清该怎么办
+    st, other = server.create_project("没仓库的项目")
+    st_bad, err = server.post(f"/api/projects/{other['id']}/repo-snapshot", {})
+    assert st_bad == 400, (st_bad, err)
+    assert "repo_path" in json.dumps(err, ensure_ascii=False), err
+
+
+def test_repo_snapshot_commit_is_optin_and_touches_only_our_paths(tmp_path, server):
+    """默认不碰 git；要提交就**只提交本次写的路径** —— 不许把仓库里别人的改动一起带走。
+
+    这是这个动作敢存在的前提：我们碰的是**用户的仓库**。用 `git commit -- <paths>`
+    （指定路径的提交），并顺手钉住"别人的暂存改动提交后仍在暂存区"。
+    """
+    import subprocess
+
+    repo = tmp_path / "gitrepo"
+    repo.mkdir()
+
+    def git(*args):
+        # `-c core.quotePath=false`：git 默认把非 ASCII 路径写成 `"\344\272\214..."` 那种
+        # 带引号的转义形式，断言会莫名其妙地失败（第一版就栽在这，行为其实是对的）
+        return subprocess.run(["git", "-c", "core.quotePath=false", "-C", str(repo), *args],
+                              capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=60)
+
+    assert git("init").returncode == 0, git("init").stderr
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    (repo / "别人的文件.txt").write_text("别人的改动\n", encoding="utf-8")
+    assert git("add", "--", "别人的文件.txt").returncode == 0      # 别人的改动**已暂存**
+
+    st, proj = server.create_project("提交项目", repo_path=str(repo))
+    assert st == 201
+    url = f"/api/projects/{proj['id']}/repo-snapshot"
+
+    st, res = server.post(url, {})
+    assert st == 200 and res["commit"] is None, res
+    assert git("rev-parse", "HEAD").returncode != 0, "默认不该产生任何提交"
+
+    st, res2 = server.post(url, {"commit": True})
+    assert st == 200 and res2["commit"] and res2["commit"]["ok"], res2.get("commit")
+    names = git("show", "--name-only", "--format=", "HEAD").stdout
+    assert "docs/kanban/board.json" in names, names
+    assert "别人的文件.txt" not in names, f"提交把仓库里别人的改动一起带走了：{names}"
+    assert "别人的文件.txt" in git("diff", "--cached", "--name-only").stdout, \
+        "别人的暂存改动被这次提交吞掉了"
+
+
 def test_project_crud_roundtrip(server):
     status, project = server.create_project(
         "冒烟测试项目", status="规划中", progress=10, priority="高",

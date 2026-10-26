@@ -341,6 +341,45 @@ def test_alias_table_is_consistent_with_the_canonical_lists():
     assert len(advertised) == len(set(advertised)), f"广告表里有重复：{advertised}"
 
 
+def test_snapshot_dir_is_defined_in_one_place():
+    """快照目录（`docs/kanban`）只能**定义**一处，而且**路径只能由 `SNAPSHOT_DIR` 拼**。
+
+    来由（2026-10-25）：这个路径出现在渲染器（拼文件名）、覆盖策略、以及给用户看的说明里。
+    散开写就是下一个"两处口径漂了"（本项目吃过几次：两份 `_projects_brief`、
+    MCP 重算一遍 `/next`、写死三份的端口号）。
+
+    **判据分三层，故意不把散文判成违规**（第一版一律禁字面量，于是把 MCP 工具描述里
+    "默认写进 `docs/kanban/`" 这句**该有的说明**也判红了）：
+      ① 定义只许一处：`SNAPSHOT_DIR = "docs/kanban"` 这种**赋值**只能出现在 repo_snapshot.py；
+      ② 路径只许拼一处：字面量**不许出现在 f-string 或 `+` 拼接里** ——
+         那才是"又写了一遍路径"的真形态；
+      ③ 散文（文档字符串、工具描述）里提一句不算定义。
+    """
+    import ast
+
+    literal = "docs/kanban"
+    defines, builds = [], []
+    for p in sorted((ROOT / "app").glob("*.py")):
+        tree = ast.parse(p.read_text(encoding="utf-8"), filename=str(p))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.JoinedStr) and any(
+                    isinstance(v, ast.Constant) and isinstance(v.value, str) and literal in v.value
+                    for v in node.values):
+                builds.append(p.name)
+            if (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add)
+                    and any(isinstance(x, ast.Constant) and isinstance(x.value, str)
+                            and literal in x.value for x in (node.left, node.right))):
+                builds.append(p.name)
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant) \
+                    and isinstance(node.value.value, str) and literal in node.value.value:
+                defines.append(p.name)
+    assert sorted(set(builds)) == [], (
+        f"这些文件在 f-string / `+` 里又拼了一遍 `{literal}`：{sorted(set(builds))} —— "
+        f"路径只能由 `repo_snapshot.SNAPSHOT_DIR` 拼出来")
+    assert sorted(set(defines)) == ["repo_snapshot.py"], (
+        f"`{literal}` 的定义出现在这些文件里：{sorted(set(defines))} —— 只能有一处")
+
+
 def _coverage_omit() -> set[str]:
     """读 `.coveragerc` 的 `[run] omit`（多行值按行拆开）。
 

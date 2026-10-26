@@ -174,6 +174,14 @@ class AgentFilesBody(BaseModel):
     overwrite: bool = False             # 默认不覆盖仓库里已有的入口文件（可能是用户手写的）
     check_only: bool = False            # 只体检：逐目标比对本应写的内容与磁盘现状，不写盘
     redact: bool = False                # 写盘前先脱敏（默认关：这是往用户自己的仓库写自己的文档）
+class RepoSnapshotBody(BaseModel):
+    dir: str = ""                       # 目标仓库根；留空 = 用项目自己的 repo_path
+    redact: bool = True                 # **默认脱敏**（与 agent-files 默认关不同，理由见端点注释）
+    overwrite_foreign: bool = False     # 同名但**不是我们生成的**文件：默认一动不动
+    commit: bool = False                # 显式要求才提交，而且只提交本次写的那些路径
+    dry_run: bool = False               # 只报计划不写盘
+
+
 class ImportBody(BaseModel):
     content: str = Field(..., min_length=2, max_length=10_000_000)
 class MemoryIn(BaseModel):

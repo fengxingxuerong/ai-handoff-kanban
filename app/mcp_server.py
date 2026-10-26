@@ -851,6 +851,45 @@ def t_list_backups(args: dict) -> str:
     return "\n".join(lines)
 
 
+def t_export_repo_snapshot(args: dict) -> str:
+    """把一块板渲染成只读快照，写进它自己的仓库（`docs/kanban/`）"""
+    _ensure_writable()          # 往**用户的仓库**写文件算写动作：只读模式下不做
+    pid = args.get("project_id") or ""
+    found = kanban.find_project(pid)
+    if not found:
+        return (f"找不到项目 {pid}；先用 kanban_list_projects 拿 id"
+                "（也可以先 kanban_find_project 按名字找）。")
+    res = kanban.write_repo_snapshot(found[1], target_dir=args.get("dir") or "",
+                                     redact=bool(args.get("redact", True)),
+                                     overwrite_foreign=bool(args.get("overwrite_foreign", False)),
+                                     commit=bool(args.get("commit", False)),
+                                     dry_run=bool(args.get("dry_run", False)))
+    lines = [("预览（没写盘）：" if res["dry_run"] else "已导出到 ") + res["dir"]]
+    lines.append(f"· 写了 {len(res['written'])} 个：{'、'.join(res['written']) or '无'}")
+    if res["skipped_foreign"]:
+        lines.append(f"· **没动** {len(res['skipped_foreign'])} 个同名文件（看着是手写的）："
+                     f"{'、'.join(res['skipped_foreign'])} —— "
+                     "确要覆盖请显式传 overwrite_foreign=true")
+    if res["unreadable"]:
+        lines.append(f"· 读不出来、也没动：{'、'.join(res['unreadable'])}")
+    if res["blocked"]:
+        lines.append(f"· 被系统目录规则拦住：{'、'.join(res['blocked'])}")
+    if res["failed"]:
+        lines.append(f"· 失败：{'、'.join(res['failed'])}")
+    warn = res["credential_warning"]
+    if warn["hits"]:
+        lines.append(f"· ⚠️ 命中 {warn['hits']} 处凭据形态的内容"
+                     f"（{'已按默认脱敏' if res['redacted'] else '**原样写入了**'}）——"
+                     "仓库通常会被 push，请自己看一眼")
+    if res["commit"]:
+        cm = res["commit"]
+        lines.append("· 提交：" + (f"已提交 {cm['sha']}（只含本次写的路径）"
+                                   if cm["ok"] else f"没提交 —— {cm['reason']}"))
+    lines.append("这是**只读快照**：改数据请用应用或 kanban_* 写工具，别去改仓库里这几份；"
+                 "下次导出会覆盖我们自己生成的那些文件。")
+    return "\n".join(lines)
+
+
 def t_export_all(args: dict) -> str:
     """全项目合并交接包（与 GET /api/export-all 同一份渲染）"""
     md = kanban.build_export_all(_redact_arg(args), _omit_arg(args))
@@ -1162,6 +1201,30 @@ TOOLS: list[dict] = [
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
     },
     {
+        "name": "kanban_export_repo_snapshot",
+        "description": "把这块板渲染成**只读快照**写进它自己的仓库（默认 `docs/kanban/`）："
+                       "一份人读的 Markdown（目录页 + 每项目一份）+ 一份机读的 board.json —— "
+                       "于是**不接 MCP 的 agent、以及 clone 了这个仓库的人**也能看见看板状态。"
+                       "默认脱敏（快照是整块板的批量导出，仓库通常会被 push）；"
+                       "已经在仓库里的、**不是**我们生成过的同名文件默认一动不动。"
+                       "dry_run=true 只报计划；commit=true 才提交，而且只提交本次写的那些路径。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "项目 id（kanban_list_projects 里拿）"},
+                "dir": {"type": "string", "description": "目标仓库根；留空用项目自己的 repo_path"},
+                "redact": {"type": "boolean",
+                           "description": "写盘前盖掉凭据（默认 true；false 会把命中的凭据原样写出去）"},
+                "overwrite_foreign": {"type": "boolean",
+                                      "description": "连不是我们生成的同名文件也覆盖（默认 false）"},
+                "commit": {"type": "boolean",
+                           "description": "写完后提交，且只提交本次写的路径（默认 false）"},
+                "dry_run": {"type": "boolean", "description": "只报计划不写盘（默认 false）"},
+            },
+            "required": ["project_id"], "additionalProperties": False,
+        },
+    },
+    {
         "name": "kanban_list_backups",
         "description": "列出已有快照的时间与内容（只保留最近 10 份）。需要回滚时把这些报给用户，"
                        "由用户在「数据」面板里选一份恢复。",
@@ -1193,6 +1256,7 @@ HANDLERS = {
     "kanban_export_all": t_export_all,
     "kanban_backup": t_backup,
     "kanban_list_backups": t_list_backups,
+    "kanban_export_repo_snapshot": t_export_repo_snapshot,
 }
 
 
@@ -1201,31 +1265,33 @@ HANDLERS = {
 # 每个工具是读还是写，客户端要靠它决定要不要二次确认；也用来在只读模式下摘掉写工具。
 # generate 类只生成文本、不动看板数据，但会花真实模型配额。
 TOOL_KIND = {
-    "kanban_list_projects": ("read", "查看数据快照 · List snapshots"),
-    "kanban_get_project": ("read", "查看项目"),
-    "kanban_find_project": ("read", "按名字找项目"),
-    "kanban_stats": ("read", "看板统计"),
-    "kanban_handoff": ("read", "导出交接包"),
-    "kanban_context": ("read", "机器可读接手包"),
-    "kanban_today": ("read", "今日待办"),
-    "kanban_search_tasks": ("read", "搜索任务"),
-    "kanban_next_task": ("read", "现在该做哪个"),
-    "kanban_agents_md": ("generate", "生成 AGENTS.md"),
-    "kanban_create_project": ("write", "新建项目"),
-    "kanban_update_project": ("write", "更新项目"),
-    "kanban_add_task": ("write", "新建任务"),
-    "kanban_update_task": ("write", "更新任务"),
-    "kanban_log_progress": ("write", "追加过程记录"),
-    "kanban_memory_add": ("write", "记录项目记忆"),
-    "kanban_list_memories": ("read", "查项目记忆"),
-    "kanban_delete_memory": ("destructive", "删除项目记忆"),
-    "kanban_delete_task": ("destructive", "删除任务"),
-    "kanban_delete_project": ("destructive", "删除整个项目"),
-    "kanban_export_all": ("read", "导出全项目交接包"),
+    "kanban_list_projects": ("read", "项目总览 · List projects"),
+    "kanban_get_project": ("read", "查看项目 · Get project"),
+    "kanban_find_project": ("read", "按名字找项目 · Find project"),
+    "kanban_stats": ("read", "看板统计 · Board stats"),
+    "kanban_handoff": ("read", "导出交接包 · Export handoff pack"),
+    "kanban_context": ("read", "机器可读接手包 · Machine-readable context"),
+    "kanban_today": ("read", "今日待办 · Today"),
+    "kanban_search_tasks": ("read", "搜索任务 · Search tasks"),
+    "kanban_next_task": ("read", "现在该做哪个 · What to do next"),
+    "kanban_agents_md": ("generate", "生成 AGENTS.md · Generate AGENTS.md"),
+    "kanban_create_project": ("write", "新建项目 · Create project"),
+    "kanban_update_project": ("write", "更新项目 · Update project"),
+    "kanban_add_task": ("write", "新建任务 · Add task"),
+    "kanban_update_task": ("write", "更新任务 · Update task"),
+    "kanban_log_progress": ("write", "追加过程记录 · Log progress"),
+    "kanban_memory_add": ("write", "记录项目记忆 · Add memory"),
+    "kanban_list_memories": ("read", "查项目记忆 · List memories"),
+    "kanban_delete_memory": ("destructive", "删除项目记忆 · Delete memory"),
+    "kanban_delete_task": ("destructive", "删除任务 · Delete task"),
+    "kanban_delete_project": ("destructive", "删除整个项目 · Delete project"),
+    "kanban_export_all": ("read", "导出全项目交接包 · Export all"),
     # snapshot：不改看板内容，但也不是"读"—— 每次调用都会新建一份文件，所以
     # 不能挂着 idempotentHint=True 骗客户端；同时它在只读模式下应当保留（见 READONLY_KINDS）。
-    "kanban_backup": ("snapshot", "创建数据快照"),
-    "kanban_list_backups": ("read", "查看数据快照"),
+    "kanban_backup": ("snapshot", "创建数据快照 · Create snapshot"),
+    "kanban_list_backups": ("read", "查看数据快照 · List snapshots"),
+    # write：它不改看板内容，但往**用户的仓库**写文件 —— 只读模式下必须挡住
+    "kanban_export_repo_snapshot": ("write", "导出快照到仓库 · Export snapshot to repo"),
 }
 
 ANNOTATIONS = {

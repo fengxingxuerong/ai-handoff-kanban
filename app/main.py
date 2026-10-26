@@ -183,6 +183,9 @@ from .fields import (  # noqa: F401,E402
     with_aliases,
 )
 from .sampledata import sample_data as _sample_data  # noqa: F401,E402
+from .repo_snapshot import SNAPSHOT_DIR, is_ours  # noqa: F401,E402
+from .repo_snapshot import render as _render_repo_snapshot  # noqa: E402
+from .schemas import RepoSnapshotBody  # noqa: E402
 from .schemas import (  # noqa: F401,E402
     AIConfigIn,
     AgentFilesBody,
@@ -2049,6 +2052,142 @@ def export_agent_files(pid: str, body: AgentFilesBody):
     if not result["written"] and result["failed"]:
         raise HTTPException(500, "没有任何文件写入成功，请检查目录是否存在且可写")
     return result
+
+
+# ---- 看板快照 → 仓库（选项 A，2026-10-25）----
+
+def _git_in(repo: Path, *args: str) -> subprocess.CompletedProcess:
+    """在目标仓库里跑一条 git。列表传参、绝不拼 shell（同 gitinfo 的纪律）。"""
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=30)
+
+
+def _snapshot_commit(repo: Path, paths: list[str], message: str) -> dict:
+    """只提交**本次写的那几个路径**。
+
+    `git commit -- <paths>` 是"指定路径的提交"：工作区里别人的改动不会被带走 ——
+    这是这个动作敢存在的前提（我们碰的是**用户的仓库**，不是自己的数据目录）。
+    仓库正处在 merge / rebase / cherry-pick / revert 中途时**拒绝提交**：
+    那种状态下提交会把半成品定下来，而对方可能正要接着处理冲突。
+    """
+    gitdir = repo / ".git"
+    for marker in ("MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"):
+        if (gitdir / marker).exists():
+            return {"ok": False, "reason": f"仓库正处于 {marker[:-5].lower()} 中途，拒绝提交",
+                    "note": "文件已经写好，等你处理完当前操作再自己提交。"}
+    added = _git_in(repo, "add", "--", *paths)
+    if added.returncode != 0:
+        return {"ok": False, "reason": (added.stderr or added.stdout or "").strip()[:400]}
+    done = _git_in(repo, "commit", "-m", message, "--", *paths)
+    if done.returncode != 0:
+        return {"ok": False, "reason": (done.stderr or done.stdout or "").strip()[:400],
+                "note": "文件已经写好，只是没有提交成功。"}
+    sha = _git_in(repo, "rev-parse", "--short", "HEAD").stdout.strip()
+    return {"ok": True, "sha": sha, "message": message, "paths": list(paths)}
+
+
+def write_repo_snapshot(project: dict, *, target_dir: str = "", redact: bool = True,
+                        overwrite_foreign: bool = False, commit: bool = False,
+                        dry_run: bool = False) -> dict:
+    """把一块板渲染成只读快照，写进**它自己的仓库**（`docs/kanban/`）。
+
+    与 `/api/export/agent-files` 的三处**有意不同**（每处都写理由）：
+      ① **默认脱敏**（那边默认关）：那份写的是一份 AGENTS.md，这份是**整块板的批量导出**
+         （每条任务标题/描述 + 每条记忆）。落进仓库、随 `git push` 出去，暴露面大一个量级。
+         无论开不开都报凭据命中数 —— 用户得先知道里面有凭据，才谈得上按开关（同那边的理由）。
+      ② **覆盖策略认「标记」，不认「存在就跳过」**：快照是生成物，重复导出必须能更新自己，
+         否则功能自相矛盾；而**不是我们生成的同名文件默认一动不动** ——
+         仓库里可能有用户手写的 `docs/kanban/*.md`，冲掉它就是丢用户的东西。
+      ③ **提交是显式参数**，且只提交本次写的路径（见 `_snapshot_commit`）。
+
+    判据只算一次：先为每个文件定下 `state`（new / update / update-foreign / skip-foreign /
+    forbidden / unreadable），写盘与回执都照着那份计划走 —— 不许"一处判断、另一处又判断一遍"。
+    """
+    base_raw = (target_dir or project.get("repo_path") or "").strip()
+    if not base_raw:
+        raise HTTPException(400, "这个项目没有 repo_path，也没给目标目录 —— "
+                                 "指定一个仓库目录再导（看板数据不会因此改动）")
+    base = Path(base_raw).expanduser()
+    if _is_forbidden_target(base):
+        raise HTTPException(400, "不允许写入系统目录，请换一个项目目录")
+    if not base.is_dir():
+        raise HTTPException(400, f"仓库目录不存在：{base}（repo_path 可能过时了）")
+
+    texts = _render_repo_snapshot([project], _load_memories(), version=APP_VERSION,
+                                  generated_at=now_str())
+    hits = sum(count_sensitive(t) for t in texts.values())
+    if redact:
+        # 脱敏必须盖在**实际要写出去的那份文本**上（同 agent-files 与约定 29）：
+        # "预览显示原文、写盘写掩码"是最容易发生的分叉
+        texts = {rel: redact_text(t) for rel, t in texts.items()}
+
+    items: list[dict] = []
+    for rel, text in sorted(texts.items()):
+        target = base / rel
+        state = "new"
+        if _is_forbidden_target(target):
+            state = "forbidden"
+        elif target.exists():
+            try:
+                current = target.read_text(encoding="utf-8")
+            except Exception:                              # noqa: BLE001
+                state = "unreadable"                       # 读不了就别动它
+            else:
+                if is_ours(current):
+                    state = "update"                       # 我们自己生成的 → 覆盖
+                elif overwrite_foreign:
+                    state = "update-foreign"
+                else:
+                    state = "skip-foreign"                 # 用户手写的 → 默认一动不动
+        items.append({"path": rel, "text": text, "state": state,
+                      "bytes": len(text.encode("utf-8"))})
+
+    written = [it["path"] for it in items if it["state"] in ("new", "update", "update-foreign")]
+    skipped = [it["path"] for it in items if it["state"] == "skip-foreign"]
+    blocked = [it["path"] for it in items if it["state"] == "forbidden"]
+    unreadable = [it["path"] for it in items if it["state"] == "unreadable"]
+    failed: list[str] = []
+    result = {"dir": str(base), "preview": bool(dry_run), "dry_run": bool(dry_run),
+              "files": [{"path": it["path"], "state": it["state"], "bytes": it["bytes"]}
+                        for it in items],
+              "written": [] if dry_run else written,
+              "skipped_foreign": skipped, "blocked": blocked,
+              "unreadable": unreadable, "failed": failed,
+              "redacted": bool(redact),
+              "credential_warning": {"hits": hits, "redacted": bool(redact),
+                                     "note": _agent_files_credential_note(hits, bool(redact))},
+              "commit": None}
+    if dry_run:
+        return result
+
+    for it in items:
+        if it["state"] not in ("new", "update", "update-foreign"):
+            continue
+        try:
+            target = base / it["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(it["text"], encoding="utf-8")
+        except Exception:                                  # noqa: BLE001
+            failed.append(it["path"])
+    result["written"] = [p for p in written if p not in failed]
+    if not result["written"] and (failed or blocked):
+        raise HTTPException(500, "没有任何文件写入成功，请检查目录是否存在且可写")
+
+    if commit and result["written"]:
+        result["commit"] = _snapshot_commit(
+            base, result["written"], f"chore(kanban): 看板快照 {now_str()}")
+    return result
+
+
+@app.post("/api/projects/{pid}/repo-snapshot")
+def export_repo_snapshot(pid: str, body: RepoSnapshotBody):
+    """把项目快照写进它自己的仓库（默认只预览；写盘要 `dir`/`repo_path` + `dry_run=false`）"""
+    found = find_project(pid)
+    if not found:
+        raise HTTPException(404, "项目不存在")
+    return write_repo_snapshot(found[1], target_dir=body.dir, redact=body.redact,
+                               overwrite_foreign=body.overwrite_foreign,
+                               commit=body.commit, dry_run=body.dry_run)
 
 
 # ---- 数据一键备份 ----

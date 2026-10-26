@@ -9,7 +9,7 @@ Language: [中文](README.md) | **English**
 A local-first, multi-project task board for people who **switch AI coding agents all day**
 (Claude Code, Codex, Cursor, Gemini CLI, …). Every project carries its handoff notes, next
 actions, acceptance criteria and memories; one click produces the handoff pack and the
-`AGENTS.md` entry files, and a bundled **23-tool MCP server** lets any agent read and write
+`AGENTS.md` entry files, and a bundled **24-tool MCP server** lets any agent read and write
 the board directly — so the next agent starts with zero context cost.
 
 This is **not** an agent-orchestration platform. It is the handoff desk between you and the

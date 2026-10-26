@@ -161,7 +161,7 @@ def _registered_tools(server_src: str) -> set[str]:
     return set(re.findall(r'^\s*"(kanban_[a-z_]+)":', block, re.M))
 
 
-def test_no_agent_reply_can_carry_a_key_stored_in_the_board(mcp):
+def test_no_agent_reply_can_carry_a_key_stored_in_the_board(mcp, tmp_path):
     """把密钥写进板子的**存量字段**，然后逐个工具考一遍默认回执。
 
     AGENTS 约定 9 说"代理侧默认就是脱敏的"，而这条历史上一直接不住：读路径补完，
@@ -210,6 +210,9 @@ def test_no_agent_reply_can_carry_a_key_stored_in_the_board(mcp):
         "kanban_memory_add": {"project_id": pid, "text": "一条新的决策"},
         "kanban_backup": {},
         "kanban_delete_memory": {"memory_id": mid}, "kanban_delete_task": {"task_id": tid},
+        # 快照工具：`dry_run` 让它真渲染一遍（回执会报文件清单）但**不写盘** ——
+        # 这样考的是它的回执有没有漏密钥，而不是"它在参数不足时会不会报错"
+        "kanban_export_repo_snapshot": {"project_id": pid, "dir": str(tmp_path), "dry_run": True},
         "kanban_delete_project": {"project_id": named, "confirm": True},
     }
     registered = _registered_tools(SERVER.read_text(encoding="utf-8"))
@@ -875,6 +878,23 @@ def test_compat_shim_stays_thin():
     assert "sys.modules[__name__]" in src, "壳没有做透明别名"
 
 
+def test_tool_titles_are_unique():
+    """工具标题必须互不重名 —— 重名意味着某一条被覆盖成了别人的标题。
+
+    来由（2026-10-25，我自己踩的）：改标题的脚本按"第一个匹配"定位，结果把 23 条里
+    的 22 条漏掉、剩下那条还顶着别人的名字；而当时的判据只有"标题非空"，
+    于是**功能没交付却全绿**。唯一性是最便宜的形状检查：错位/复制粘贴都会撞上它。
+    """
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from app import mcp_server as m
+
+    titles = [v[1] for v in m.TOOL_KIND.values()]
+    dupes = sorted({t for t in titles if titles.count(t) > 1})
+    assert not dupes, f"有工具共用一个标题：{dupes}"
+    assert len(titles) == len(m.TOOL_KIND), "有工具没登记标题"
+
+
 def test_every_tool_is_registered_with_a_kind():
     """TOOL_KIND 漏登记时注解会退化成"写"（保守但不诚实），所以直接要求全部登记。"""
     m = _mcp_server_mod()
@@ -890,7 +910,13 @@ def test_annotations_match_the_declared_kind(mcp):
     for name, tool in tools.items():
         kind = m.TOOL_KIND[name][0]
         assert tool["annotations"] == m.ANNOTATIONS[kind], name
+        # 标题要"人类可读"**且双语**：MCP 客户端权限弹窗里给人看的就是这一行，
+        # 而非中文用户靠它判断自己在授权什么（2026-10-25 加的契约）。
+        # 唯一性也要钉：上一轮我改标题时靶子选错（在 HANDLERS 行上匹配、吃到 TOOL_KIND
+        # 第一条），结果 23 条只改了 1 条、还改错了名字 —— 而当时只有"非空"看着它，
+        # 全绿。**两条同名**正是那种错的形状，所以这里顺手钉住唯一。
         assert tool["title"], f"{name} 没有人类可读标题"
+        assert " · " in tool["title"], f"{name} 的标题不是双语的：{tool['title']!r}"
     assert tools["kanban_list_projects"]["annotations"]["readOnlyHint"] is True
     assert tools["kanban_delete_task"]["annotations"]["destructiveHint"] is True, \
         "删除必须标成破坏性，客户端才会弹二次确认"
@@ -910,6 +936,8 @@ def test_readonly_mode_hides_write_tools_from_the_catalog(tmp_path):
         assert "kanban_list_projects" in names and "kanban_stats" in names
         assert "kanban_add_task" not in names, "写工具还挂在只读目录里"
         assert "kanban_delete_task" not in names
+        # 快照工具不改看板，但往**用户的仓库**写文件 —— 只读模式下同样不该给
+        assert "kanban_export_repo_snapshot" not in names, "写仓库的工具漏在只读目录里"
         assert "kanban_agents_md" not in names, "生成类会花真实配额，只读模式一并摘掉"
         text, is_err = c.tool("kanban_add_task", {"project_id": "x", "title": "偷偷写"})
         assert is_err and "只读" in text, text

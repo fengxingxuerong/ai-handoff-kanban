@@ -6,7 +6,7 @@
 .env，MCP 因此不可用"正是 2026-10-23 评测里最要命的产品缺口。所以这个产物必须有自己的门禁，
 不能靠"源码跑得过"外推。它钉四件事（都是打包才会坏、源码态永远看不出来的）：
 
-1. **协议真的能用**：stdin 逐行 JSON-RPC → stdout 逐行 JSON-RPC，`tools/list` 拿到 23 个工具。
+1. **协议真的能用**：stdin 逐行 JSON-RPC → stdout 逐行 JSON-RPC，`tools/list` 拿到 24 个工具。
 2. **stdout 只有协议**：任何一行不是合法 JSON 就算失败 —— 一行日志就能把整个服务变成"没发布"
    （客户端解析失败 → 工具目录为空）。
 3. **中文双向不乱码**：写进去一个中文名、再读回来逐字一致。中文 Windows 上子进程默认跟随
@@ -107,7 +107,7 @@ def main() -> int:
 
     if len(parsed) >= 1 and parsed[0]:
         tools = (parsed[0].get("result") or {}).get("tools") or []
-        check("tools/list 拿到 23 个工具", len(tools) == 23, f"实测 {len(tools)}")
+        check("tools/list 拿到 24 个工具", len(tools) == 24, f"实测 {len(tools)}")
         names = {t.get("name") for t in tools}
         check("工具目录里有 kanban_context", "kanban_context" in names)
 

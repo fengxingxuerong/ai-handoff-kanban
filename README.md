@@ -191,7 +191,7 @@ Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读�
 }
 ```
 
-提供的工具（23 个）：
+提供的工具（24 个）：
 
 | 工具 | 用途 |
 | --- | --- |
@@ -214,6 +214,7 @@ Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读�
 | `kanban_export_all` | 导出全项目交接包（跨机迁移或整板存档） |
 | `kanban_backup` | 拍一份数据快照（改动前的退路） |
 | `kanban_list_backups` | 看有哪些快照可用 |
+| `kanban_export_repo_snapshot` | 把看板快照写进它自己的仓库（`docs/kanban/`，人读 Markdown + 机读 board.json），默认脱敏、默认不覆盖手写文件 |
 | `kanban_delete_project` | 删整个项目（**唯一**要 `confirm=true` 的工具：没有软删除，误删只能整份回滚） |
 
 每个工具都带 `annotations`（`readOnlyHint` / `destructiveHint` / `idempotentHint`），客户端据此
@@ -290,7 +291,7 @@ build.bat
 
 ```
 项目任务看板/
-├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 29 个模块，见 AGENTS.md）
+├── app/main.py             # FastAPI 后端：路由编排 + 数据层临界区（核心逻辑拆在 app/ 下 30 个模块，见 AGENTS.md）
 ├── app/llm.py              # LLM 网关：多端点 + 多 Key 轮询 + 失败切换
 ├── web/index.html          # 前端页面骨架（零内联脚本；深色主题，含 AI 界面）
 ├── web/js-*.js             # 前端逻辑十个文件：core/overview/detail/render/reality/handoff/edit/ai/data/boot（无构建、无 CDN）
@@ -337,7 +338,7 @@ rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 32 条用�
 rem （CI 里也有这一步：.github/workflows/ci.yml 跑的 ci_local 全门禁，改坏了会红）
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 
-rem 变异探针：往源码注入 107 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
+rem 变异探针：往源码注入 109 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
 rem （覆盖率只证明"这行跑过"，不证明"这行错了会被发现"——这一步量的是后者）
 .venv\Scripts\python.exe scripts/mutation_probe.py
 .venv\Scripts\python.exe scripts/mutation_probe.py --only due_soon_window   rem 只跑一条
