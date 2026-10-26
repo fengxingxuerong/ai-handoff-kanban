@@ -260,6 +260,27 @@ def test_toast_is_announced_to_screen_readers():
     assert 'id="toast" role="status" aria-live="polite"' in HTML
 
 
+def test_repo_snapshot_button_is_two_step_and_registered():
+    """「导出快照到仓库」的**形状**要钉住（真行为由 E2E 验，这里守住四条便宜但必要的）：
+
+    ① 走 `data-act` 且真的注册进 ACTIONS（不注册 = 点了没反应，而 pytest 全绿）；
+    ② **两步式**：带 `dry_run` 的第一下必须是预览 —— 这一步会写进用户的仓库，
+       不该是"点错就落了"的动作；
+    ③ 默认 `redact: true`（整块板的批量导出，仓库会被 push）；
+    ④ 结论要**如实**：命中凭据且未脱敏时不许打 ✓（照 `writeAgentFiles` 的同一条判据）。
+    """
+    src = frontend_source()
+    assert 'data-act="exportRepoSnapshot"' in src, "按钮没走 data-act"
+    assert "exportRepoSnapshot: (arg, ev, el) => exportRepoSnapshot(" in src, "没注册进 ACTIONS"
+    body = src[src.index("async function exportRepoSnapshot("):]
+    body = body[:body.index("\n}\n") + 3]
+    assert "dry_run: !armed" in body, "第一下必须是预览（dry_run）"
+    assert "redact: true" in body, "默认必须脱敏"
+    # 未脱敏 + 有命中 → 不许打 ✓
+    assert "const bad = cw.hits && !cw.redacted;" in body, "结论没区分「脱敏了」与「原样写出去」"
+    assert 'bad ? "" : " ✓"' in body, "未脱敏时仍然打了 ✓"
+
+
 def test_no_browser_prompt_dialogs_left():
     """prompt() 是不能编辑、不校验、也套不上主题的录入方式，全站已经清零"""
     assert not re.search(r"=\s*prompt\(|await\s*prompt\(", HTML), "又有人用 prompt() 收输入"

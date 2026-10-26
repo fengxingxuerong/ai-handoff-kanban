@@ -180,6 +180,57 @@ def test_add_task_through_detail_page(ui):
     assert [t["title"] for t in tasks] == ["界面加的活"]
 
 
+def test_export_repo_snapshot_is_two_step_and_reports_the_truth(ui_lenient, tmp_path):
+    """「导出快照到仓库」必须是**两步**（先预览、再确认写入），并且真的落盘。
+
+    为什么钉这个（2026-10-26）：这一步会把文件写进**用户的仓库**，而仓库通常会被 push ——
+    不该是"点错就落了"的动作。所以第一下只报计划（不写盘），按钮变成「确认写入」，第二下才写。
+
+    两个实现细节值得记（都是实测出来的）：
+    · 「更多」是 `<details>`，不展开时里面按钮不可见 → 必须先点 summary；
+    · 点击用 `el.click()` 而不是 Playwright 的 actionability 点击 —— 诊断实测这个按钮
+      **可见、rect 正常、elementFromPoint 打得中、点击后 toast 与 data-armed 都对**，
+      而 `locator.click()` 在 `position:absolute` 的下拉里坚持报 not visible。
+      这条用例要验的是产品行为，不是 Playwright 的命中判定。
+    · 用 ui_lenient：详情页会自动读 git，而这里的"仓库"是个普通临时目录（不是 git 仓库），
+      后端**故意**回 400 让面板说清读不到的原因 —— 那条 Failed to load resource
+      是既有行为，不是本用例的 JS 异常（pageerror 仍一律判失败）。
+    """
+    page, api, _ = ui_lenient
+    repo = tmp_path / "前端仓库"
+    repo.mkdir()
+    make_project(api, "快照入口项目", repo_path=str(repo))
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    page.locator(".pcard").first.click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+
+    page.locator(".d-more").locator("summary").click()
+    page.wait_for_selector(".d-more-pop", state="visible", timeout=10000)
+    btn = page.locator("[data-act='exportRepoSnapshot']")
+    board = repo / "docs" / "kanban" / "board.json"
+
+    # ① 第一下：只预览，**一个字节都不写**
+    btn.evaluate("el => el.click()")
+    page.wait_for_function(
+        "() => { const b = document.querySelector(\"[data-act='exportRepoSnapshot']\");"
+        " return b && b.dataset.armed === '1'; }", timeout=15000)
+    assert not board.exists(), "预览居然写了盘"
+    assert "确认写入" in btn.text_content(), btn.text_content()
+    assert "预览" in page.locator("#toast").text_content()
+
+    # ② 第二下：真写
+    btn.evaluate("el => el.click()")
+    page.wait_for_function(
+        "() => { const b = document.querySelector(\"[data-act='exportRepoSnapshot']\");"
+        " return b && !b.dataset.armed; }", timeout=20000)
+    assert board.exists(), "确认之后仍然没写盘"
+    text = board.read_text(encoding="utf-8")
+    assert "快照入口项目" in text and "handoff_note" in text, text[:300]
+    # 约定 14：结果必须再走一次 toast，不能只有界面状态变了
+    assert "写入" in page.locator("#toast").text_content()
+
+
 def test_global_search_jumps_to_project(ui):
     page, api, _ = ui
     pid = make_project(api, "搜索目标项目")["id"]
@@ -2098,3 +2149,5 @@ def test_memory_form_button_does_not_overflow_the_sidebar(ui):
     }""")
     assert geo["formRight"] <= geo["panelRight"] + 0.5, f"表单比面板还宽：{geo}"
     assert geo["btnRight"] <= geo["panelRight"] + 0.5, f"按钮溢出面板右侧：{geo}"
+
+

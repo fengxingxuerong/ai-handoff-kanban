@@ -217,6 +217,11 @@ Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读�
 | `kanban_export_repo_snapshot` | 把看板快照写进它自己的仓库（`docs/kanban/`，人读 Markdown + 机读 board.json），默认脱敏、默认不覆盖手写文件 |
 | `kanban_delete_project` | 删整个项目（**唯一**要 `confirm=true` 的工具：没有软删除，误删只能整份回滚） |
 
+> **看板也能进仓库**：项目里填了 `repo_path` 之后，详情页「更多 → 📥 导出快照到仓库」（或
+> `POST /api/projects/{pid}/repo-snapshot`）会把这块板导出成 `docs/kanban/` 下的只读快照 ——
+> 人读 Markdown + 机读 `board.json`，于是 clone 这个仓库的人、以及没接 MCP 的 agent 也看得见看板。
+> **两步式**（先预览再确认）、**默认脱敏**、仓库里手写的同名文件默认不动。
+
 每个工具都带 `annotations`（`readOnlyHint` / `destructiveHint` / `idempotentHint`），客户端据此
 对读操作免确认、对删除弹警告。打开 **MCP 只读模式**后，写工具与生成类工具会直接从
 `tools/list` 里消失（调用侧的拒绝闸门同时保留，两道闸都在）。

@@ -259,6 +259,7 @@ const ACTIONS = {
   copyAgentsMD: () => copyAgentsMD(),
   previewAgentFiles: () => previewAgentFiles(),
   checkAgentFiles: () => checkAgentFiles(),
+  exportRepoSnapshot: (arg, ev, el) => exportRepoSnapshot({ currentTarget: el }),
   writeAgentFiles: (arg, ev, el) => writeAgentFiles({ currentTarget: el }),
   copyPackage: () => copyPackage(),
   runSummarize: () => runSummarize(),
@@ -336,7 +337,10 @@ document.addEventListener("click", e => {
   if (el.closest(".pcard")) return;
   runAction(el.dataset.act, e, el);
   if (e.target.closest(".hmenu-item")) closeHeaderMenus();   // 菜单项在 wrap 内，选完要显式收
-  if (e.target.closest(".d-more-pop")) closeDetailMenu();    // 同上：详情「更多」选完也要收
+  // 同上：详情「更多」选完也要收 —— **但多步动作除外**：
+  // 按钮可以在 runAction 里给自己打 `data-keep-menu="1"`（比如"先预览、再确认"那种），
+  // 否则第一下之后菜单就收了，第二步的按钮在 DOM 里可见、实际点不到（2026-10-26 实测）。
+  if (e.target.closest(".d-more-pop") && !el.dataset.keepMenu) closeDetailMenu();
 });
 
 document.addEventListener("keydown", e => {

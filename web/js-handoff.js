@@ -234,6 +234,77 @@ async function writeAgentFiles(ev) {
   btn.classList.remove("ai-loading-btn");
 }
 
+// ============ 看板快照 → 仓库（选项 A，2026-10-26） ============
+// 为什么要有这个入口：数据在 ~/.ai-kanban，**clone 一个仓库带不来看板** ——
+// 交接物（AGENTS.md 那几个入口文件）早就写进仓库了，"这块板现在什么状态"却只有本机能看见。
+// 这一项把它导成只读快照（docs/kanban/：人读 Markdown + 机读 board.json），
+// clone 的人和不接 MCP 的 agent 都读得到。
+//
+// 三条与后端一致的纪律（前端只负责如实转述，不自己发明结论）：
+//   ① 后端**默认脱敏**；命中凭据时回执里带 hits，而"已脱敏"和"原样写出去"是两种结论 ——
+//      后者不许打 ✓（仓库通常会被 push），照 writeAgentFiles 同一条判据；
+//   ② **不是我们生成的同名文件会被跳过**：必须说清"哪些没动、怎么才覆盖"，
+//      否则用户会以为导出了、其实那份还是旧的；
+//   ③ 先预览（dry_run）再写：默认点一下只报计划 —— 这一步会把文件写进**用户的仓库**，
+//      不该是"点错就落了"的动作。
+async function exportRepoSnapshot(ev) {
+  if (!currentPid || !current) return;
+  const btn = (ev && ev.currentTarget) || null;
+  const repo = (current.repo_path || "").trim();
+  if (!repo) {
+    toast("这个项目还没填 repo_path —— 先「✎ 编辑项目」写上仓库目录，"
+        + "快照才有地方落（看板数据不会因此改动）");
+    return;
+  }
+  // 两步式：第一次只预览，用户看到计划后在同一个按钮上确认。
+  // 用 data-confirm 记状态而不是弹 confirm()（全站零 prompt/confirm，见 test_no_browser_prompt_dialogs_left）
+  const armed = btn && btn.dataset.armed === "1";
+  // 这是**两步**动作：第一下只预览。必须让菜单留着，否则第二下没地方点
+  // （js-core 默认"选完就收起"，靠这个标记放行；收尾时再清掉）。
+  if (btn) btn.dataset.keepMenu = "1";
+  if (btn) btn.classList.add("ai-loading-btn");
+  try {
+    const r = await api("/api/projects/" + currentPid + "/repo-snapshot", {
+      method: "POST",
+      body: JSON.stringify({ dry_run: !armed, redact: true }),
+    });
+    const willWrite = (r.files || []).filter(f => ["new", "update", "update-foreign"].includes(f.state));
+    const skipped = r.skipped_foreign || [];
+    const cw = r.credential_warning || {};
+
+    if (!armed) {
+      // 预览：说清"会写几个、会跳几个"，并把下一个动作写在按钮上
+      const head = willWrite.length
+        ? `预览：会写 ${willWrite.length} 个文件到 ${r.dir}`
+        : `预览：没有要写的文件（${r.dir}）`;
+      const skipNote = skipped.length
+        ? `\n其中 ${skipped.length} 个同名文件是你手写的，会被**跳过**：${skipped.join("、")}`
+        : "";
+      toast(head + skipNote + (willWrite.length ? "\n再点一次就真的写进去" : ""), 6000);
+      if (btn) { btn.dataset.armed = "1"; btn.textContent = "📥 确认写入仓库"; }
+      return;
+    }
+
+    // 真写：结论必须与后端一致 —— 有凭据且未脱敏时不许打 ✓
+    const bad = cw.hits && !cw.redacted;
+    const written = (r.written || []).length;
+    const parts = [
+      written ? `已写入 ${written} 个文件到 ${r.dir}` : `没有写入（${r.dir}）`,
+    ];
+    if (skipped.length) parts.push(`跳过 ${skipped.length} 个手写文件（要覆盖请在命令行用 overwrite_foreign）`);
+    if (r.unreadable && r.unreadable.length) parts.push(`${r.unreadable.length} 个读不出来，也没动`);
+    if (r.blocked && r.blocked.length) parts.push(`${r.blocked.length} 个被系统目录规则拦住`);
+    if (bad) parts.push(`⚠ 里面有 ${cw.hits} 处凭据原文`);
+    else if (cw.hits) parts.push(`已按默认脱敏（命中 ${cw.hits} 处）`);
+    toast(parts.join("\n") + (bad ? "" : " ✓"), bad ? 9000 : 5000);
+    if (btn) { delete btn.dataset.armed; delete btn.dataset.keepMenu; btn.textContent = "📥 导出快照到仓库"; }
+  } catch (e) {
+    toast("导出快照失败：" + e.message, 8000);
+    if (btn) { delete btn.dataset.armed; delete btn.dataset.keepMenu; btn.textContent = "📥 导出快照到仓库"; }
+  }
+  if (btn) btn.classList.remove("ai-loading-btn");
+}
+
 // ============ 入口投影体检（对标 std-agent 的 `status`） ============
 // 写盘对"已存在的入口文件"是默认跳过的（怕冲掉用户手写的内容），于是
 // "仓库里那份入口早就跟看板漂移了"这件事从来没人体检过 —— 而漂移的入口
