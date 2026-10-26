@@ -300,6 +300,47 @@ def _gate_steps() -> dict:
     return steps
 
 
+def test_alias_table_is_consistent_with_the_canonical_lists():
+    """英文别名表必须与规范值白名单**同进同退**，且不许有歧义。
+
+    来由（2026-10-25）：契约以前只收中文（`enum: ["待办", …]`），英文 agent 直接撞 422 ——
+    而"任何 agent 都能接手"是这个工具的卖点。加别名之后，两类隐患变成可机械检查的：
+      ① **添了规范值却忘了给它英文名**：英文用户恰好在那一个状态上照样撞墙，
+         而漏一种是**静默**的（别处都好，没人会注意到这一个）；
+      ② **同一个别名指到两个规范值**：归一结果取决于字典遍历顺序 —— 那是本项目最忌的
+         "两条路给不同答案"的雏形。
+    再加两条形状判据：`with_aliases` 必须**规范值在前**（客户端与模型照抄第一项）且去重。
+    """
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from app import fields as F
+
+    canonical = (list(F.DEFAULT_STATUS) + list(F.DEFAULT_TASK_STATUS)
+                 + list(F.DEFAULT_PRIORITY) + ["决策", "坑", "约定", "事实"])
+
+    missing = [c for c in canonical if not F.FIELD_ALIASES.get(c)]
+    assert not missing, (
+        f"这些规范值没有英文别名：{missing} —— 英文 agent 会恰好卡在这几个值上，"
+        f"而别处都能用，属于静默的漏")
+
+    reverse: dict[str, set[str]] = {}
+    for value in canonical:
+        for alias in F.FIELD_ALIASES.get(value, []):
+            reverse.setdefault(alias, set()).add(value)
+    ambiguous = {a: sorted(v) for a, v in reverse.items() if len(v) > 1}
+    assert not ambiguous, (
+        f"同一个别名指到多个规范值：{ambiguous} —— 归一会随字典顺序漂，先消歧再合并")
+
+    for value in canonical:                     # 归一必须幂等（规范值进去还是它自己）
+        assert F.canonical_status(value) == value, (
+            f"{value!r} 经过归一变了样 —— 规范值必须是`不动点`")
+
+    advertised = F.with_aliases(F.DEFAULT_TASK_STATUS)
+    assert advertised[:len(F.DEFAULT_TASK_STATUS)] == F.DEFAULT_TASK_STATUS, (
+        f"with_aliases 没把规范值排在最前：{advertised[:6]}")
+    assert len(advertised) == len(set(advertised)), f"广告表里有重复：{advertised}"
+
+
 def _coverage_omit() -> set[str]:
     """读 `.coveragerc` 的 `[run] omit`（多行值按行拆开）。
 

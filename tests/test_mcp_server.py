@@ -123,6 +123,39 @@ def test_server_discover(mcp):
     assert res["serverInfo"]["name"] == "ai-kanban" and len(res["tools"]) >= 23
 
 
+def test_english_aliases_work_over_mcp(mcp):
+    """MCP 这条路上别名同样要收：`status="in_progress"`、`priority="high"`、`type="pitfall"`。
+
+    与 HTTP 那条是**两层各自的门**：HTTP 走 Pydantic 的 before 校验，MCP 走自己的
+    `_canonicalize_args`（在 `_validate_args` **之前**）—— 少任何一层，另一条路就会让
+    英文 agent 撞墙，而「任何 agent 都能接手」这句话就只是一半。
+    另外钉住：schema 里 `enum` 要把别名一并**广告**出去（客户端照着广告传），
+    且规范值排在最前（模型多半照抄第一项）。
+    """
+    proj_text, err = mcp.tool("kanban_create_project", {"name": "MCP 别名", "status": "planning"})
+    assert not err, proj_text
+    project_id = last_id(proj_text)
+    text, err = mcp.tool("kanban_add_task", {
+        "project_id": project_id, "title": "英文状态的任务",
+        "status": "In Progress", "priority": "HIGH"})
+    assert not err, text
+
+    shown, _ = mcp.tool("kanban_get_project", {"project_id": project_id})
+    assert "进行中" in shown and "In Progress" not in shown, shown
+
+    # 记忆类型的别名（`type` 那一路）
+    text, err = mcp.tool("kanban_memory_add", {
+        "project_id": project_id, "type": "pitfall", "text": "英文别名写进来的坑"})
+    assert not err, text
+    listed, _ = mcp.tool("kanban_list_memories", {"project_id": project_id})
+    assert "坑" in listed and "pitfall" not in listed, listed
+
+    # 广告出去：schema 的 enum 里既有规范值也有别名，且规范值在前
+    schema = _mcp_server_mod().TOOL_BY_NAME["kanban_add_task"]["inputSchema"]
+    status_enum = schema["properties"]["status"]["enum"]
+    assert status_enum[0] == "待办" and "todo" in status_enum, status_enum
+
+
 def _registered_tools(server_src: str) -> set[str]:
     block = server_src.split("HANDLERS = {", 1)[1].split("\n}", 1)[0]
     return set(re.findall(r'^\s*"(kanban_[a-z_]+)":', block, re.M))
@@ -313,13 +346,22 @@ def test_tool_schemas_are_wellformed(mcp):
 
 
 def test_write_tools_use_enums_for_status(mcp):
-    """状态/优先级必须给 enum，避免模型自己编值"""
+    """状态/优先级必须给 enum，避免模型自己编值。
+
+    2026-10-25 契约变了：enum 里现在既有**规范值**也有**英文别名**，所以判据改成
+    「恰好等于 `with_aliases(规范值表)`」而不是「等于规范值表」—— 对照的是**唯一来源**
+    `app/fields.py`（谁把 enum 硬编码成另一串，这里就红），
+    顺带把**顺序**也钉住：规范值必须排在最前（客户端 UI 与模型多半照抄第一项）。
+    """
+    from app import fields as F
+
     tools = {t["name"]: t for t in mcp.call("tools/list")["result"]["tools"]}
     add_task = tools["kanban_add_task"]["inputSchema"]["properties"]
-    assert set(add_task["status"]["enum"]) == {"待办", "进行中", "待审查", "已完成", "阻塞"}
-    assert set(add_task["priority"]["enum"]) == {"高", "中", "低"}
+    assert add_task["status"]["enum"] == F.with_aliases(F.DEFAULT_TASK_STATUS)
+    assert add_task["priority"]["enum"] == F.with_aliases(F.DEFAULT_PRIORITY)
     upd = tools["kanban_update_project"]["inputSchema"]["properties"]
-    assert set(upd["status"]["enum"]) == {"规划中", "进行中", "已暂停", "已完成"}
+    assert upd["status"]["enum"] == F.with_aliases(F.DEFAULT_STATUS)
+    assert upd["priority"]["enum"] == F.with_aliases(F.DEFAULT_PRIORITY)
 
 
 # ---------------- 工具调用 ----------------

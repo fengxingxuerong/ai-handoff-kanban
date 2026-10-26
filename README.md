@@ -129,6 +129,8 @@ Windows 桌面应用（PyWebView 原生窗口，单文件 exe），内置深浅�
 Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读交接包、加任务、改进度，
 不用再靠人把交接包粘来粘去。
 
+**对非中文调用方友好**：状态 / 优先级 / 记忆类型都接受英文别名（`todo`、`in_progress`、`done`、`high`、`pitfall` …），归一到规范值后落盘；工具标题是「中文 · English」，权限弹窗里读得懂。
+
 **三种注册方式，按你手上有什么选一种：**
 
 ```json
@@ -335,7 +337,7 @@ rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 32 条用�
 rem （CI 里也有这一步：.github/workflows/ci.yml 跑的 ci_local 全门禁，改坏了会红）
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 
-rem 变异探针：往源码注入 106 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
+rem 变异探针：往源码注入 107 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
 rem （覆盖率只证明"这行跑过"，不证明"这行错了会被发现"——这一步量的是后者）
 .venv\Scripts\python.exe scripts/mutation_probe.py
 .venv\Scripts\python.exe scripts/mutation_probe.py --only due_soon_window   rem 只跑一条

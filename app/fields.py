@@ -14,6 +14,83 @@ from __future__ import annotations
 DEFAULT_STATUS = ["规划中", "进行中", "已暂停", "已完成"]
 DEFAULT_TASK_STATUS = ["待办", "进行中", "待审查", "已完成", "阻塞"]
 DEFAULT_PRIORITY = ["高", "中", "低"]
+# ---- 英文别名（2026-10-25）：契约要对**调用方**中立 ----
+# 为什么加：MCP 的 inputSchema 与 HTTP 的 Literal 之前只收中文（`enum: ["待办", …]`），
+# 而这工具的卖点是「**任何** agent 都能接手」—— 英文 agent 传 `status: "in_progress"`、
+# `priority: "high"` 会直接 422 / failed，等于要求调用方懂中文。那是那句承诺里唯一货不对板的地方。
+#
+# 三条纪律：
+#   ① 别名只出现在**入参**：归一到规范值以后才落盘，读出去的口径永远只有一套
+#      （否则库里会同时出现「待办」与「todo」，召回、统计、界面全是坑）；
+#   ② 别名表与规范值**同文件**（白名单与别名分家迟早漂），`with_aliases()` 是唯一把别名
+#      广告给客户端的实现 —— 声明与执行都从这里取；
+#   ③ **一张扁平表**：三组（项目状态/任务状态/优先级/记忆类型）放一起，靠"规范值本身不冲突"
+#      成立（`规划中` 只在项目侧、`待办` 只在任务侧，`进行中`/`已完成` 两侧同名同义）。
+#      于是**归一与语境无关、校验仍与语境有关**：给项目传 `todo` 会被归一成 `待办`，
+#      随后被 ProjectIn 的 Literal 拒掉并报出它认识的四个值 —— 错误信息依然具体。
+#
+# 归一算法故意简单：trim + 小写 + 把 `-`/空格折成 `_`（`In Progress`、`in-progress`、
+# `in_progress` 都命中）。**不认识的值原样返回** —— 让上层去拒，别在这一层把话说过头。
+FIELD_ALIASES = {
+    "规划中": ["planning", "plan", "planned"],
+    "进行中": ["in_progress", "inprogress", "doing", "wip"],
+    "已暂停": ["paused", "pause", "on_hold", "hold", "suspended"],
+    "已完成": ["done", "complete", "completed", "closed", "finished"],
+    "待办": ["todo", "to_do", "open"],
+    "待审查": ["review", "in_review", "reviewing"],
+    "阻塞": ["blocked", "stuck"],
+    "高": ["high", "important"],
+    "中": ["medium", "med", "mid", "normal"],
+    "低": ["low", "minor", "later"],
+    "决策": ["decision"],
+    "坑": ["pitfall", "gotcha", "trap"],
+    "约定": ["convention", "agreement", "rule"],
+    "事实": ["fact", "info", "note"],
+}
+
+
+def _norm_key(value: str) -> str:
+    """查表用的键：`In Progress` / `in-progress` / `in_progress` 折成同一个。"""
+    return value.strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _canonical(value, table: dict):
+    """规范值放行；别名换成规范值；都不认识就原样返回（交给上层去拒）。"""
+    if not isinstance(value, str):
+        return value
+    key = _norm_key(value)
+    for canonical, aliases in table.items():
+        if key == _norm_key(canonical) or key in aliases:
+            return canonical
+    return value
+
+
+def canonical_status(value):
+    """项目/任务状态：英文别名 → 规范值。"""
+    return _canonical(value, FIELD_ALIASES)
+
+
+def canonical_priority(value):
+    """优先级：英文别名 → 规范值。"""
+    return _canonical(value, FIELD_ALIASES)
+
+
+def canonical_memory_type(value):
+    """记忆类型：英文别名 → 规范值。"""
+    return _canonical(value, FIELD_ALIASES)
+
+
+def with_aliases(canonical: list[str]) -> list[str]:
+    """规范值在前、别名在后 —— 给 MCP 的 `enum` 用（客户端照着广告的写法传即可）。
+
+    规范值必须排在**最前**：客户端 UI 与模型多半照着第一项抄，而我们要它们抄规范值。
+    """
+    out = list(canonical)
+    for value in canonical:
+        out.extend(a for a in FIELD_ALIASES.get(value, []) if a not in out)
+    return out
+
+
 # 里程碑（P2 轻量版）上限：方案明确「追加型字段设上限，里程碑≦20 个」。
 MAX_MILESTONES = 20
 MAX_MILESTONE_NAME = 40   # 也用于任务的 milestone 归属字段（与名称同一截断口径）

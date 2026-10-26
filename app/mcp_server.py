@@ -889,8 +889,8 @@ TOOLS: list[dict] = [
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "项目名"},
-                "status": {"type": "string", "enum": ["规划中", "进行中", "已暂停", "已完成"]},
-                "priority": {"type": "string", "enum": ["高", "中", "低"]},
+                "status": {"type": "string", "enum": kanban.with_aliases(kanban.DEFAULT_STATUS)},
+                "priority": {"type": "string", "enum": kanban.with_aliases(kanban.DEFAULT_PRIORITY)},
                 "progress": {"type": "integer", "minimum": 0, "maximum": 100},
                 "repo_path": {"type": "string", "description": "代码路径"},
                 "background": {"type": "string", "description": "项目背景"},
@@ -910,8 +910,8 @@ TOOLS: list[dict] = [
             "properties": {
                 "project_id": {"type": "string"},
                 "name": {"type": "string"},
-                "status": {"type": "string", "enum": ["规划中", "进行中", "已暂停", "已完成"]},
-                "priority": {"type": "string", "enum": ["高", "中", "低"]},
+                "status": {"type": "string", "enum": kanban.with_aliases(kanban.DEFAULT_STATUS)},
+                "priority": {"type": "string", "enum": kanban.with_aliases(kanban.DEFAULT_PRIORITY)},
                 "progress": {"type": "integer", "minimum": 0, "maximum": 100},
                 "repo_path": {"type": "string"},
                 "background": {"type": "string"},
@@ -933,8 +933,8 @@ TOOLS: list[dict] = [
                 "project_id": {"type": "string"},
                 "title": {"type": "string"},
                 "desc": {"type": "string", "description": "补充说明（与验收标准分开，验收标准用 acceptance）"},
-                "status": {"type": "string", "enum": ["待办", "进行中", "待审查", "已完成", "阻塞"]},
-                "priority": {"type": "string", "enum": ["高", "中", "低"]},
+                "status": {"type": "string", "enum": kanban.with_aliases(kanban.DEFAULT_TASK_STATUS)},
+                "priority": {"type": "string", "enum": kanban.with_aliases(kanban.DEFAULT_PRIORITY)},
                 "agent": {"type": "string", "description": "负责的 AI 或人"},
                 "refs": {"type": "array", "items": {"type": "string"},
                          "description": "相关代码位置，如 [\"app/main.py:120\", \"tests/test_api.py\"]"},
@@ -961,8 +961,8 @@ TOOLS: list[dict] = [
                 "task_id": {"type": "string"},
                 "title": {"type": "string"},
                 "desc": {"type": "string"},
-                "status": {"type": "string", "enum": ["待办", "进行中", "待审查", "已完成", "阻塞"]},
-                "priority": {"type": "string", "enum": ["高", "中", "低"]},
+                "status": {"type": "string", "enum": kanban.with_aliases(kanban.DEFAULT_TASK_STATUS)},
+                "priority": {"type": "string", "enum": kanban.with_aliases(kanban.DEFAULT_PRIORITY)},
                 "agent": {"type": "string"},
                 "refs": {"type": "array", "items": {"type": "string"},
                          "description": "相关代码位置；不改就省略"},
@@ -1093,7 +1093,7 @@ TOOLS: list[dict] = [
             "type": "object",
             "properties": {
                 "project_id": {"type": "string", "description": "留空表示跨项目的通用记忆"},
-                "type": {"type": "string", "enum": ["决策", "坑", "约定", "事实"]},
+                "type": {"type": "string", "enum": kanban.with_aliases(["决策", "坑", "约定", "事实"])},
                 "text": {"type": "string", "maxLength": 2000},
                 "expires": {"type": "string",
                             "description": "有效期到 YYYY-MM-DD（当天仍有效）；留空表示长期有效。"
@@ -1110,7 +1110,7 @@ TOOLS: list[dict] = [
             "type": "object",
             "properties": {
                 "project_id": {"type": "string", "description": "留空表示看全部（含跨项目的通用记忆）"},
-                "type": {"type": "string", "enum": ["决策", "坑", "约定", "事实"]},
+                "type": {"type": "string", "enum": kanban.with_aliases(["决策", "坑", "约定", "事实"])},
                 "query": {"type": "string", "description": "按正文关键词过滤"},
                 "redact": REDACT_SCHEMA,
             },
@@ -1201,7 +1201,7 @@ HANDLERS = {
 # 每个工具是读还是写，客户端要靠它决定要不要二次确认；也用来在只读模式下摘掉写工具。
 # generate 类只生成文本、不动看板数据，但会花真实模型配额。
 TOOL_KIND = {
-    "kanban_list_projects": ("read", "项目总览"),
+    "kanban_list_projects": ("read", "查看数据快照 · List snapshots"),
     "kanban_get_project": ("read", "查看项目"),
     "kanban_find_project": ("read", "按名字找项目"),
     "kanban_stats": ("read", "看板统计"),
@@ -1402,6 +1402,33 @@ def get_prompt(name: str, args: dict) -> dict:
             "messages": [{"role": "user", "content": {"type": "text", "text": text}}]}
 
 
+_ALIAS_FIELDS = {
+    "status": kanban.canonical_status,
+    "priority": kanban.canonical_priority,
+    "type": kanban.canonical_memory_type,       # kanban_memory_add / list_memories 的类型
+}
+
+
+def _canonicalize_args(args: dict) -> dict:
+    """把英文别名归一成规范值（`todo`→`待办`、`high`→`高`、`pitfall`→`坑`）。
+
+    位置很关键：**在 `_validate_args` 之前**跑 —— 校验器比的是 enum 表，而归一后的值
+    才该进 enum 那一关；反过来的话别名先被 enum 拒掉，这一层就白写了。
+    归一函数本身对"不认识的值"原样放行，所以真正的拒绝仍由 enum/Literal 给出具体报错
+    （它认识哪些值），不会在这一层变成含糊的"参数不对"。
+    """
+    if not isinstance(args, dict):
+        return args
+    out = dict(args)
+    for key, fn in _ALIAS_FIELDS.items():
+        val = out.get(key)
+        if isinstance(val, str):
+            out[key] = fn(val)
+        elif isinstance(val, list):
+            out[key] = [fn(x) if isinstance(x, str) else x for x in val]
+    return out
+
+
 def _validate_args(schema: dict, args: dict) -> None:
     """按工具自己声明的 inputSchema 校验入参。
 
@@ -1542,6 +1569,7 @@ def handle(msg: dict) -> dict | None:
         if not isinstance(args, dict):
             return _err(mid, -32602, "params.arguments 必须是对象")
         try:
+            args = _canonicalize_args(args)   # 英文别名 → 规范值（在校验之前）
             _validate_args(TOOL_BY_NAME[name].get("inputSchema") or {}, args)
             return _ok(mid, _tool_content(handler(args), args))
         except Exception as e:

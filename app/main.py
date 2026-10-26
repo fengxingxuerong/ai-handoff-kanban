@@ -176,6 +176,11 @@ from .fields import (  # noqa: F401,E402
     MAX_VIEW_NAME,
     MAX_VIEW_QUERY,
     _clean_milestones,
+    # 英文别名归一（2026-10-25）：mcp_server 走 `kanban.` 前缀取它们
+    canonical_memory_type,
+    canonical_priority,
+    canonical_status,
+    with_aliases,
 )
 from .sampledata import sample_data as _sample_data  # noqa: F401,E402
 from .schemas import (  # noqa: F401,E402

@@ -30,6 +30,36 @@ def test_project_list_shape(server):
     assert status == 200 and isinstance(data["projects"], list)
 
 
+def test_english_status_and_priority_aliases_are_normalized(server):
+    """英文别名（`in_progress` / `high` / `todo` …）在**入参**上要收，落盘必须是规范值。
+
+    为什么（2026-10-25）：这个工具的卖点是「**任何** agent 都能接手」，而契约以前只收中文
+    （`Literal["规划中", …]`）—— 英文 agent 传 `status: "in_progress"` 直接 422，
+    等于要求调用方懂中文。那是承诺里唯一货不对板的地方。
+    两条判据：① 别名（含大小写/连字符变体）能被收下并归一；② **库里只有规范值一种写法**
+    （否则同一状态会有「待办」与「todo」两行，召回、统计、界面全乱）。
+    """
+    status, proj = server.create_project("别名项目", status="in_progress", priority="High")
+    assert status == 201, proj
+    assert proj["status"] == "进行中" and proj["priority"] == "高", proj
+
+    status, task = server.post(f"/api/projects/{proj['id']}/tasks", {
+        "title": "用英文别名建的任务", "status": "to-do", "priority": "medium"})
+    assert status == 201, task
+    assert task["status"] == "待办" and task["priority"] == "中", task
+
+    # 读回来还是规范值（不是只在回执里翻译了一下）
+    _, detail = server.get(f"/api/projects/{proj['id']}")
+    got = [x for x in detail["tasks"] if x["id"] == task["id"]][0]
+    assert got["status"] == "待办", got
+
+    # 不认识的值仍要被拒，而且报出它认识的那些（归一那层不许把话说过头）
+    status, err = server.create_project("乱填的", status="wtf")
+    assert status == 422, (status, err)
+    # err 是 JSON 错误体（dict），不是字符串 —— 断言要看序列化后的内容
+    assert "规划中" in json.dumps(err, ensure_ascii=False), err
+
+
 def test_project_crud_roundtrip(server):
     status, project = server.create_project(
         "冒烟测试项目", status="规划中", progress=10, priority="高",

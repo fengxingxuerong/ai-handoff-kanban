@@ -96,3 +96,36 @@ rem 只装 exe 的用户走这条（同一份代码，控制台产物）：
 echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | dist\AI交接看板-MCP.exe
 .venv\Scripts\python.exe -m pytest tests\test_mcp_server.py -q --no-cov
 ```
+
+## 对非中文调用方友好（2026-10-25）
+
+**问题**：这个工具的卖点是「**任何** agent 都能接手」，而契约以前只收中文 ——
+`status` 的 `enum` 是 `["待办","进行中",…]`，HTTP 侧是同样的 `Literal`。英文 agent 传
+`status: "in_progress"` / `priority: "high"` 会**直接 422 / failed**，等于要求调用方懂中文。
+这是那句承诺里唯一货不对板的地方。
+
+**做法：两层各自归一，定义只有一处。**
+
+| 层 | 归一在哪 | 为什么在那里 |
+| --- | --- | --- |
+| HTTP | `app/schemas.py` 的 `field_validator(mode="before")` | Pydantic 的 `Literal` 在 before **之后**才判 —— 别名只能在这个位置生效 |
+| MCP | `_canonicalize_args()`，**在 `_validate_args` 之前** | 校验器比的是 `enum`；别名要先变规范值再进那一关，否则先被 enum 拒掉 |
+
+- 别名表 `FIELD_ALIASES` 与规范值白名单**同文件**（`app/fields.py`）—— 分家迟早漂；
+  `with_aliases()` 是唯一把别名广告给客户端的实现（`enum` 里**规范值在前**、别名在后，
+  因为客户端 UI 与模型多半照抄第一项）。
+- **一张扁平表**装四组（项目状态/任务状态/优先级/记忆类型），靠"规范值本身不冲突"成立
+  （`规划中` 只在项目侧、`待办` 只在任务侧）。于是**归一与语境无关、校验仍与语境有关**：
+  给项目传 `todo` 会被归一成 `待办`，随后被 `ProjectIn` 的 `Literal` 拒掉并报出它认识的四个值。
+- **不认识的值原样放行**：拒绝仍由 `Literal`/`enum` 给出，错误信息才具体。
+- 归一算法故意简单：trim + 小写 + `-`/空格折成 `_`（`In Progress`、`in-progress` 都命中）。
+- 纪律：**别名只出现在入参**，落盘永远是规范值 —— 否则库里会同时有「待办」与 `todo`，
+  召回、统计、界面全是坑（钉子在 `test_suite_hygiene` 里把这条与"别名无歧义/归一幂等"一起钉住）。
+
+**标题双语**：`TOOL_KIND` 的标题写成「中文 · English」（23 个）—— 它是 MCP 客户端权限弹窗里
+**给人看**的那一行，非中文用户靠它判断自己在授权什么。
+
+**门禁**：`tests/test_api.py::test_english_status_and_priority_aliases_are_normalized`（HTTP）、
+`tests/test_mcp_server.py::test_english_aliases_work_over_mcp`（MCP + schema 广告顺序）、
+`test_suite_hygiene.py::test_alias_table_is_consistent_with_the_canonical_lists`（表的一致性与无歧义）。
+探针 `status_alias_ignored`：把归一打回"只认规范值" → 前两条用例同时红。

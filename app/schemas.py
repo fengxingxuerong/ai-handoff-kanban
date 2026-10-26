@@ -19,7 +19,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from .fields import (  # 字段白名单与上限：**唯一一处**，前端另有对账钉子
+from .fields import (
+    canonical_priority,
+    canonical_status,  # 字段白名单与上限：**唯一一处**，前端另有对账钉子
     DEFAULT_STATUS,
     MAX_BLOCKED_REASON,
     MAX_MILESTONE_NAME,
@@ -34,8 +36,12 @@ from .taskgraph import clean_refs
 class ProjectIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     status: Literal["规划中", "进行中", "已暂停", "已完成"] = "规划中"
+    # 英文别名（todo / in_progress …）先归一，Literal 再判规范值 ——
+    # mode="before" 跑在 Literal 校验**之前**，否则别名到不了 Literal
+    _canon_status = field_validator("status", mode="before")(canonical_status)
     progress: int = Field(0, ge=0, le=100)
     priority: Literal["高", "中", "低"] = "中"
+    _canon_priority = field_validator("priority", mode="before")(canonical_priority)
     tags: list[str] = []
     repo_path: str = ""
     background: str = ""
@@ -65,7 +71,11 @@ class TaskIn(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     desc: str = ""
     status: Literal["待办", "进行中", "待审查", "已完成", "阻塞"] = "待办"
+    # 英文别名（todo / in_progress …）先归一，Literal 再判规范值 ——
+    # mode="before" 跑在 Literal 校验**之前**，否则别名到不了 Literal
+    _canon_status = field_validator("status", mode="before")(canonical_status)
     priority: Literal["高", "中", "低"] = "中"
+    _canon_priority = field_validator("priority", mode="before")(canonical_priority)
     agent: str = ""
     due_date: str = ""            # 截止日期 YYYY-MM-DD，空=未设置
     refs: list[str] = []          # 相关代码位置，如 app/main.py:120；交接时用来说明"改哪里"

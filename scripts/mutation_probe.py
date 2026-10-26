@@ -894,6 +894,18 @@ MUTATIONS: list[dict] = [
         "tests": ['tests/test_frontend.py::test_toast_gives_long_messages_time_to_be_read'],
     },
     {
+        "id": "status_alias_ignored",
+        "file": "app/fields.py",
+        "old": "        if key == _norm_key(canonical) or key in aliases:",
+        "new": "        if key == _norm_key(canonical):",
+        "why": "别名只认规范值本身、不再认英文名：于是 `status=\"in_progress\"` / "
+               "`priority=\"high\"` / `type=\"pitfall\"` 全都被当「不认识的值」往下传，"
+               "HTTP 侧撞 Literal 的 422、MCP 侧撞 enum —— 也就是英文 agent 又只能靠中文。"
+               "这条钉的是「任何 agent 都能接手」那句承诺里唯一货不对板的地方。",
+        "tests": ["tests/test_api.py::test_english_status_and_priority_aliases_are_normalized",
+                  "tests/test_mcp_server.py::test_english_aliases_work_over_mcp"],
+    },
+    {
         "id": "port_default_written_twice",
         "file": "app/handoff_page.py",
         "old": '                       port: str = DEFAULT_PORT, generated_at: str = "",',

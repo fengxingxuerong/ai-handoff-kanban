@@ -46,6 +46,10 @@ measured artifact:
   takeover context (with `sections` / `since` incremental slices), read/write tasks and
   memories, and generate handoff artifacts. Read-only mode; the one destructive tool
   (`kanban_delete_project`) requires `confirm=true`; restore is deliberately not a tool.
+  **Non-Chinese callers are first-class**: `status`, `priority` and memory `type` accept English
+  aliases (`todo`, `in_progress`, `done`, `high`, `pitfall`, …) and are normalized to the canonical
+  values before anything is stored; tool titles are bilingual (`中文 · English`) so the permission
+  dialog reads sensibly to a human.
 - **LLM self-supervision**: multi-endpoint gateway with key rotation and failover; scheduled
   analyses produce health reports, trends and suggested task actions — always behind a
   human confirmation gate.
