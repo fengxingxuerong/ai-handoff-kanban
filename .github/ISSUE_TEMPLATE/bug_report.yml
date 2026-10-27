@@ -1,0 +1,64 @@
+name: Bug 报告
+description: 有东西不对／崩溃／界面空着
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先确认是**最新版本**上复现的（设置面板底部或 `/api/health` 的 `version`）。
+        不要贴真实项目名、本机完整路径、密钥片段。
+  - type: dropdown
+    id: how
+    attributes:
+      label: 怎么跑的
+      options:
+        - 打包的 exe（AI交接看板.exe）
+        - 源码（scripts\start_desktop.bat）
+        - 只起了后端（uvicorn）
+        - MCP 控制台服务（AI交接看板-MCP.exe 或 uvx）
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 设置面板底部，或 /api/health 里的 version（源码态是提交号/时间）
+      placeholder: "1.9.6"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 你做了什么 → 期望什么 → 实际什么。界面问题最好附截图。
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开 …
+        2. 点 …
+        3. 看到 …
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志（可选，但很有用）
+      description: |
+        窗口白屏/双击没反应：把 `<数据目录>\startup.log` 贴上来（默认为 %USERPROFILE%\.ai-kanban\startup.log）。
+        MCP 的问题：客户端那边的 stderr。**贴之前先删掉路径与密钥**。
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 自查
+      options:
+        - label: 我已经在最新版本上复现过
+          required: true
+        - label: 我删掉了真实项目名、本机完整路径与密钥
+          required: true

@@ -80,7 +80,10 @@ def test_every_relative_doc_link_points_at_a_real_file():
     只查**相对路径**：http(s)/mailto/纯锚点跳过（那些是外部世界的事）。
     """
     missing = []
-    files = [ROOT / "AGENTS.md", ROOT / "README.md"] + sorted((ROOT / "docs").glob("*.md"))
+    # 社区文件同样会被人点（issue 模板会直接把人导到这些文件），所以一起查
+    files = ([ROOT / "AGENTS.md", ROOT / "README.md", ROOT / "CONTRIBUTING.md",
+              ROOT / "SECURITY.md", ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"]
+             + sorted((ROOT / "docs").glob("*.md")))
     for f in files:
         for target in re.findall(r"\]\(([^)\s]+)\)", f.read_text(encoding="utf-8")):
             if target.startswith(("http://", "https://", "mailto:", "#")):
@@ -91,6 +94,45 @@ def test_every_relative_doc_link_points_at_a_real_file():
             if not (f.parent / rel).exists():
                 missing.append(f"{f.relative_to(ROOT)} → {target}")
     assert not missing, "这些文档链接指向不存在的文件（点空 = 接手方以为没写）：\n  " + "\n  ".join(missing)
+
+
+def test_community_files_point_at_things_that_exist():
+    """社区文件的**形状**与**指向**（2026-10-27 第 10 件）。
+
+    为什么需要机械检查：这类文件最容易"写完就烂" —— issue 模板的 `config.yml` 把人导到
+    `CONTRIBUTING.md`，那个文件被改名/搬家之后**没有任何东西会红**，访客只是点一个 404。
+    这里钉三件事：
+      ① 三个 issue 模板文件在（bug / feature / 入口配置）；
+      ② `config.yml` 里 `github.com/<repo>/blob/main/<path>` 这类链接，`<path>` 必须真实存在；
+      ③ `CONTRIBUTING.md` 报的发版判据必须是**仓库里真有的那个脚本** —— 文档里写一条
+         不存在的命令，比不写更糟（人会照着敲）。
+    """
+    # 文件本身必须在（缺了 PR 模板只会让它的内容不被任何人看见，没有任何东西会红）
+    for rel in ("CONTRIBUTING.md", "SECURITY.md",
+                ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE"):
+        assert (ROOT / rel).exists(), f"缺社区文件：{rel}"
+
+    tmpl = ROOT / ".github" / "ISSUE_TEMPLATE"
+    for name in ("bug_report.yml", "feature_request.yml", "config.yml"):
+        assert (tmpl / name).is_file(), f"缺 issue 模板：{name}"
+    for name in ("bug_report.yml", "feature_request.yml"):
+        body = (tmpl / name).read_text(encoding="utf-8")
+        # 不解析 YAML（PyYAML 不在 requirements-dev 里，用它就得 importorskip ——
+        # 那等于让钉子在干净环境里静默跳过），只要求这几个顶层键都在。
+        for key in ("name:", "description:", "body:"):
+            assert key in body, f"{name} 缺 {key}"
+
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    # 路径两种写法都合法（Windows 文档里是 scripts\\ci_local.py），别把断言写成只认正斜杠
+    assert re.search(r"scripts[\\/]ci_local\.py", contributing), "CONTRIBUTING 没写发版判据"
+    assert (ROOT / "scripts" / "ci_local.py").is_file(), "CONTRIBUTING 报的判据脚本不存在"
+    # 唯一判据 vs 少跑一层：两个模式都要提到，否则读者会以为 --quick 等同全量
+    assert "--quick" in contributing and "--with-exe" in contributing
+
+    # config.yml 里的站内链接必须落到真实文件
+    cfg = (tmpl / "config.yml").read_text(encoding="utf-8")
+    for url in re.findall(r"https://github\.com/[^/]+/[^/]+/blob/main/([^\s]+)", cfg):
+        assert (ROOT / url).is_file(), f"issue 模板把人导到一个不存在的文件：{url}"
 
 
 def test_module_counts_in_both_docs_match_the_app_package():

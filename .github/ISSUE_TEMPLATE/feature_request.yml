@@ -1,0 +1,29 @@
+name: 功能建议
+description: 你希望它还能做什么
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这个项目有一条**不做**的清单：把看板数据推出本机（公网分享链接、云同步、遥测）。
+        如果你的建议在这一类里，说明理由，但要有心理准备。
+  - type: textarea
+    id: scene
+    attributes:
+      label: 你现在的场景
+      description: 越具体越好 —— 「我在 A 和 B 两个仓库之间来回切，每次都要…」
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你希望它怎么变
+    validations:
+      required: true
+  - type: textarea
+    id: alternative
+    attributes:
+      label: 你现在怎么绕过（可选）
+      description: 这条最有价值 —— 变通办法往往直接指出真正的缺口在哪。
+    validations:
+      required: false

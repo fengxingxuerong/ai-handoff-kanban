@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全漏洞（走私密通道）
+    url: https://github.com/fengxingxuerong/ai-handoff-kanban/security/advisories/new
+    about: 不要开公开 issue 贴细节 —— 用 GitHub 的私密漏洞报告
+  - name: 本地怎么跑 / 改动的门槛
+    url: https://github.com/fengxingxuerong/ai-handoff-kanban/blob/main/CONTRIBUTING.md
+    about: 环境、命令、判据（先读 AGENTS.md，它是唯一约定来源）
