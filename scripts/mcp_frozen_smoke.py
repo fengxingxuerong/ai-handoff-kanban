@@ -13,6 +13,9 @@
    控制台码页（cp936），打包态更容易踩 —— 这是它必须自己 `reconfigure("utf-8")` 的原因。
 4. **真写进了数据**（而不是只回了一句"已创建"）：落盘在本脚本指定的隔离目录里，
    **绝不碰 `%USERPROFILE%\\.ai-kanban`**。
+5. **按目录找项目真的能调**（2026-10-27 补）：`kanban_project_for_path` 在**冻结产物**里
+   走一次真 `tools/call`，回执要能认出手上这个项目 —— 「工具登记上了」与「应用里
+   真能跑」是两件事，只数工具数看不出后者。
 
 用法：
     python scripts/mcp_frozen_smoke.py                 # 默认 dist\\AI交接看板-MCP.exe
@@ -87,14 +90,18 @@ def main() -> int:
         {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
          "params": {"name": "kanban_create_project",
-                    "arguments": {"name": cname, "status": "进行中", "client_ref": "smoke-1"}}},
+                    "arguments": {"name": cname, "status": "进行中", "client_ref": "smoke-1",
+                                  # 登记 repo_path：下一步要用「按目录找项目」把它认回来
+                                  "repo_path": str(data_dir)}}},
         {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
          "params": {"name": "kanban_list_projects", "arguments": {}}},
+        {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+         "params": {"name": "kanban_project_for_path", "arguments": {"path": str(data_dir)}}},
     ]
     out, err, code = talk(cmd, env, messages)
 
     lines = [ln for ln in out.splitlines() if ln.strip()]
-    check("stdout 有三条响应", len(lines) == 3, f"实测 {len(lines)} 行：{lines[:3]}")
+    check("stdout 有四条响应", len(lines) == 4, f"实测 {len(lines)} 行：{lines[:4]}")
 
     parsed = []
     for ln in lines:
@@ -115,6 +122,11 @@ def main() -> int:
         # 回执里的中文要能原样读回来（读不回来 = 出方向被编成了别的码页）
         raw2 = json.dumps(parsed[1], ensure_ascii=False)
         check("创建回执里的中文没乱码", "\ufffd" not in raw2 and cname in raw2, raw2[:200])
+
+    if len(parsed) >= 4 and parsed[3]:
+        # 新工具在**冻结产物**里真能跑：回执要认出手上这个项目（不是只「注册成功」）
+        raw4 = json.dumps(parsed[3], ensure_ascii=False)
+        check("按目录找项目能认出这个项目", cname in raw4 and "\ufffd" not in raw4, raw4[:220])
 
     # 真落盘：读隔离目录里的 projects.json 自己数，不信回执的一面之词
     pj = data_dir / "projects.json"

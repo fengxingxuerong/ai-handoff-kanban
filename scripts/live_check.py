@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -114,6 +116,25 @@ def main() -> int:
     st, rec = get("/api/recoverable")
     check("可恢复来源可读", st == 200 and "recoverable" in rec, f"{st}")
 
+    # 按目录找项目（只读）：先验**形状** —— 一个不存在的目录必须回一条能读的否定答案，
+    # 而不是 404/500（「没登记」与「接口坏了」必须让人分得清）。
+    probe = tempfile.gettempdir() + "/kanban_no_such_repo_for_live_check"
+    st, loc = get("/api/repo-locate?path=" + urllib.parse.quote(probe))
+    check("按目录找项目可读（未知目录 = 一条可读的否定答案）",
+          st == 200 and isinstance(loc, dict) and {"ok", "match", "reason"} <= set(loc),
+          f"{st} {str(loc)[:140]}")
+    # 再验**真命中**：实例里有项目登记了 repo_path 的话，那条路径必须认得回来
+    with_repo = [p for p in projects if p.get("repo_path")]
+    if with_repo:
+        one = with_repo[0]
+        st2, hit = get("/api/repo-locate?path=" + urllib.parse.quote(one["repo_path"]))
+        check(f"按目录找项目命中（{one['name']}）",
+              st2 == 200 and isinstance(hit, dict) and hit.get("ok") is True
+              and (hit.get("project") or {}).get("id") == one["id"],
+              f"{st2} {str(hit)[:140]}")
+    else:
+        check("按目录找项目命中", "实例里没有项目登记 repo_path，这条没有内容可验", "")
+
     st, _ = get("/api/health", headers={"Origin": "http://evil.example.com"})
     check("跨站 Origin 被拒（403）", st == 403, f"返回 {st}")
 
@@ -130,7 +151,8 @@ def main() -> int:
         # `or ""` 不是摆设：读线程一旦解码失败，CompletedProcess.stdout/stderr 就是 None，
         # 于是"失败原因"本身先把体检脚本崩掉，反而看不到真问题（2026-09-19 撞到过）
         check(f"MCP 工具目录可读（{len(tools)} 个工具）", len(tools) >= 23,
-              f"实际 {len(tools)}（2026-09-23 实测 23；门槛钉在实测值上，砍一半必须显式改这里）"
+              f"实际 {len(tools)}（2026-10-27 实测 25；这条只要求目录可读，所以门槛保持 ≥23，"
+              f"精确数由 mcp_frozen_smoke 钉）"
               f" / stderr={(proc.stderr or '')[:120]} / rc={proc.returncode}")
 
     failed = [r for r in rows if r[1] == "F"]
