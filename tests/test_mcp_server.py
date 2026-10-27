@@ -161,6 +161,58 @@ def _registered_tools(server_src: str) -> set[str]:
     return set(re.findall(r'^\s*"(kanban_[a-z_]+)":', block, re.M))
 
 
+def test_project_for_path_tool_answers_with_and_without_path(mcp, tmp_path):
+    """`kanban_project_for_path`（真 stdio）：给路径就答，认不出时说人话而不是报错。"""
+    repo = tmp_path / "mcp-loc"
+    repo.mkdir()
+    pid = last_id(mcp.tool("kanban_create_project",
+                           {"name": "MCP 定位项目", "repo_path": str(repo),
+                            "next_action": "写测试"})[0])
+
+    text, err = mcp.tool("kanban_project_for_path", {"path": str(repo)})
+    assert not err, text
+    assert "MCP 定位项目" in text and pid in text and "完全一致" in text
+    assert "kanban_context" in text, "要顺手告诉调用方下一步拿什么"
+
+    # 子目录也认得出，并说清是"在里面"那种匹配（智能体的 cwd 往往是仓库里的子目录）
+    sub, _ = mcp.tool("kanban_project_for_path", {"path": str(repo / "app")})
+    assert pid in sub and "里面" in sub
+
+    # 认不出来 = 一条可读的否定答案，不是错误（调用方要能分辨"没登记"与"工具坏了"）
+    miss, miss_err = mcp.tool("kanban_project_for_path", {"path": str(tmp_path / "nope")})
+    assert not miss_err and "没有项目登记" in miss
+
+
+def test_project_for_path_defaults_to_process_cwd(tmp_path, monkeypatch):
+    """不给 `path` 时用**本进程 cwd** —— 那个工具最好用的一下，单独钉。
+
+    为什么在进程内测而不是跟着上面那条走真 stdio：MCP 服务是**真子进程**，它的 cwd 由
+    客户端启动时决定，测试进程 monkeypatch 够不到它 —— 在那里假装"改了子进程的 cwd"
+    只会得到一条假绿（cwd 仍是 pytest 的目录）。这里直接调处理器，改的是**它正在读的**那个
+    `os.getcwd`，顺带把"给了 path 就不许再看 cwd"也钉住（指定了却被忽略最容易被漏掉）。
+    """
+    m = _mcp_server_mod()
+    seen: dict[str, str] = {}
+
+    def fake_locate(path: str) -> dict:
+        seen["path"] = path
+        return {"ok": True, "path": path, "match": "exact", "reason": "", "candidates": [],
+                "projects_without_repo_path": 0,
+                "project": {"id": "p-cwd", "name": "就在 cwd 的项目", "status": "进行中",
+                            "progress": 5, "priority": "高", "next_action": "接着做",
+                            "repo_path": path}}
+
+    monkeypatch.setattr(m.kanban, "repo_locate", fake_locate)
+    monkeypatch.setattr(m.os, "getcwd", lambda: str(tmp_path))
+
+    text = m.t_project_for_path({})
+    assert seen["path"] == str(tmp_path), "没给 path 时必须用 cwd"
+    assert "就在 cwd 的项目" in text and "cwd" in text
+
+    m.t_project_for_path({"path": str(tmp_path / "elsewhere")})
+    assert seen["path"] == str(tmp_path / "elsewhere"), "给了 path 就不该再碰 cwd"
+
+
 def test_no_agent_reply_can_carry_a_key_stored_in_the_board(mcp, tmp_path):
     """把密钥写进板子的**存量字段**，然后逐个工具考一遍默认回执。
 
@@ -183,7 +235,9 @@ def test_no_agent_reply_can_carry_a_key_stored_in_the_board(mcp, tmp_path):
         "name": f"轮换 {secret} 的那件事"})[0])
     pid = last_id(mcp.tool("kanban_create_project", {
         "name": "审计用项目", "background": f"背景里写一把 {secret}",
-        "handoff_note": f"交接说明里也写 {secret}"})[0])
+        "handoff_note": f"交接说明里也写 {secret}",
+        # 登记在 tmp_path 上：`kanban_project_for_path` 要真匹配上才有回执可考
+        "repo_path": str(tmp_path)})[0])
     mcp.tool("kanban_update_project", {"project_id": pid, "next_action": f"下一步 {secret}"})
     tid = last_id(mcp.tool("kanban_add_task", {
         "project_id": pid, "title": f"收尾 {secret}", "desc": f"描述 {secret}"})[0])
@@ -213,6 +267,9 @@ def test_no_agent_reply_can_carry_a_key_stored_in_the_board(mcp, tmp_path):
         # 快照工具：`dry_run` 让它真渲染一遍（回执会报文件清单）但**不写盘** ——
         # 这样考的是它的回执有没有漏密钥，而不是"它在参数不足时会不会报错"
         "kanban_export_repo_snapshot": {"project_id": pid, "dir": str(tmp_path), "dry_run": True},
+        # 这个工具的回执会把**项目名与下一步**抄出来 —— 让它真的匹配上 pid 那个项目
+        # （它的 next_action 里就带着密钥），才考得到"回执有没有漏原文"
+        "kanban_project_for_path": {"path": str(tmp_path)},
         "kanban_delete_project": {"project_id": named, "confirm": True},
     }
     registered = _registered_tools(SERVER.read_text(encoding="utf-8"))

@@ -325,3 +325,104 @@ def test_baseline_write_is_cross_process_locked(tmp_path, monkeypatch):
     state = json.loads((data / "repo_watch.json").read_text(encoding="utf-8"))
     assert state.get("proj-a", {}).get("last_seen_signature") == "sig-1", \
         "子进程确认过的基线没落盘"
+
+# ---------------- 按目录找项目（纯匹配器，2026-10-26）----------------
+# 这一节不碰 git、不碰数据目录：`match_project` 是纯函数，全部判据都是字符串比较。
+
+def _p(pid: str, repo_path: str, name: str = "") -> dict:
+    return {"id": pid, "name": name or pid, "status": "进行中", "progress": 40,
+            "priority": "高", "next_action": "继续做", "repo_path": repo_path}
+
+
+def test_match_project_exact_and_inside(tmp_path):
+    """完全相同 = `exact`；落在仓库里面（含深层子目录）= `inside`。"""
+    from app import repo_watch as rw
+
+    repo = str(tmp_path / "proj")
+    projs = [_p("a", repo)]
+    hit = rw.match_project(projs, repo)
+    assert hit["ok"] and hit["match"] == "exact" and hit["project"]["id"] == "a"
+    deep = rw.match_project(projs, str(Path(repo) / "app" / "sub"))
+    assert deep["ok"] and deep["match"] == "inside" and deep["project"]["id"] == "a"
+
+
+def test_match_project_picks_the_longest_repo_path(tmp_path):
+    """仓库套仓库时取**最长**的那条 —— 最短的会把用户所在的项目吃掉。
+
+    这也是探针 `repo_match_drops_longest_specificity` 盯的规则（改成"第一条命中"即红）。
+    """
+    from app import repo_watch as rw
+
+    outer = str(tmp_path / "outer")
+    inner = str(Path(outer) / "vendor" / "inner")
+    projs = [_p("outer", outer), _p("inner", inner)]
+    hit = rw.match_project(projs, str(Path(inner) / "src"))
+    assert hit["ok"] and hit["project"]["id"] == "inner", hit
+    # 反过来：外层的其它目录仍然归外层
+    back = rw.match_project(projs, str(Path(outer) / "docs"))
+    assert back["ok"] and back["project"]["id"] == "outer", back
+
+
+def test_match_project_case_and_separator_insensitive(tmp_path):
+    """大小写与分隔符写法不该影响判定（靠 normcase/normpath；两份实现不许各写一套）。"""
+    from app import repo_watch as rw
+
+    repo = str(tmp_path / "CaseSensitive")
+    projs = [_p("a", repo)]
+    # 多加一层 ./ 与尾部斜杠：归一之后必须还是同一个目录
+    messy = repo + "\\" + "." + "\\" + ".." + "\\" + Path(repo).name
+    assert rw.match_project(projs, messy)["project"]["id"] == "a"
+    assert rw.match_project(projs, str(tmp_path) + "/CaseSensitive/")["ok"]
+
+
+def test_match_project_reports_ambiguity_instead_of_guessing(tmp_path):
+    """同一个目录登记给两个项目 = **并列候选**，不挑一个（与 find_project 重名同口径）。"""
+    from app import repo_watch as rw
+
+    repo = str(tmp_path / "shared")
+    hit = rw.match_project([_p("a", repo), _p("b", repo)], repo)
+    assert hit["ok"] is False and hit["match"] == "ambiguous"
+    assert sorted(c["id"] for c in hit["candidates"]) == ["a", "b"]
+    assert "不替你猜" in hit["reason"]
+
+
+def test_match_project_none_says_which_kind_of_miss(tmp_path):
+    """没匹配上要分清两种真因：这个目录不属于任何项目 / 项目压根没填 repo_path。
+
+    少了后半句，"看板不认识这个仓库"会被读成"看板里没有这个项目" —— 而其实补一个路径就认出来了。
+    """
+    from app import repo_watch as rw
+
+    projs = [_p("a", str(tmp_path / "somewhere")), _p("b", ""), _p("c", "")]
+    miss = rw.match_project(projs, str(tmp_path / "elsewhere"))
+    assert miss["ok"] is False and miss["match"] == "none"
+    assert miss["projects_without_repo_path"] == 2
+    assert "没填 repo_path" in miss["reason"], miss["reason"]
+    # 没给目录 / 给了空串：另一句话，不能混成"不属于任何项目"
+    for bad in ("", "   ", None):
+        blank = rw.match_project(projs, bad)
+        assert blank["ok"] is False and "没给目录" in blank["reason"], blank
+        assert blank["projects_without_repo_path"] == 2
+
+
+def test_match_project_ignores_blank_repo_path_but_never_matches_it(tmp_path):
+    """空 repo_path 的项目**不能**匹配上任何东西（空串是前缀，一不小心就会匹配所有人）。"""
+    from app import repo_watch as rw
+
+    hit = rw.match_project([_p("empty", "")], str(tmp_path))
+    assert hit["ok"] is False and hit["match"] == "none"
+
+
+def test_match_project_finds_drive_root_projects(tmp_path):
+    r"""盘根（`D:\`）下的项目也要能匹配 —— `root + os.sep` 会拼出双分隔符。
+
+    Windows 才有的形状（POSIX 的根是 `/`，normpath 之后没有尾分隔符）。这里构造一个
+    与当前盘同根的路径：只要接口没把"盘根"判死，它落在根下就该判 inside。
+    """
+    from app import repo_watch as rw
+
+    if os.name != "nt":                       # pragma: no cover - 非 Windows 不做这条
+        return
+    root = os.path.splitdrive(str(tmp_path))[0] + os.sep      # 例如 "D:\"
+    hit = rw.match_project([_p("root", root)], str(tmp_path))
+    assert hit["ok"] and hit["match"] == "inside", hit

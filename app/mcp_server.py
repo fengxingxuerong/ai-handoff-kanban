@@ -550,6 +550,39 @@ def t_stats(_args: dict) -> str:
     return "\n".join(lines)
 
 
+def t_project_for_path(args: dict) -> str:
+    """「我在某个目录里工作 —— 这是哪个项目？」（读，不改任何东西）。
+
+    `path` 可省，省了就用**本进程的 cwd**。这不是偷懒：MCP 服务是客户端在项目目录里拉起来的，
+    所以 cwd 往往正是智能体所在的那个仓库 —— 零参数问一句"我在哪块板上"是这个工具最有用的一下。
+
+    回执与 HTTP 的 `/api/repo-locate` **同一份实现**（`kanban.repo_locate`），不重算一遍。
+    """
+    raw = str(args.get("path") or "").strip()
+    path = raw or os.getcwd()
+    res = kanban.repo_locate(path)          # 与 HTTP 同一份判据（一条路一个答案）
+    head = f"目录：{res['path'] or path}" + ("" if raw else "（本进程 cwd，可用 path 指定别的）")
+    if res.get("ok"):
+        p = res["project"]
+        how = "目录与 repo_path 完全一致" if res["match"] == "exact" else "在这个仓库目录里面"
+        lines = [head, f"项目：{p['name']}（id={p['id']}）",
+                 f"状态 {p['status']} · 进度 {p['progress']}% · 优先级 {p['priority'] or '未定'}",
+                 f"匹配方式：{how}"]
+        if p["next_action"]:
+            lines.append(f"下一步：{p['next_action']}")
+        lines.append(f"接着调 kanban_context(project_id=\"{p['id']}\") 拿接手包")
+    elif res["match"] == "ambiguous":
+        lines = [head, res["reason"]]
+        lines += [f"  - {c['name']}（id={c['id']}，repo_path={c['repo_path']}）"
+                  for c in res["candidates"]]
+    else:
+        lines = [head, res["reason"]]
+        if not raw:
+            lines.append("（cwd 是 MCP 服务进程的目录，不一定是你的仓库 —— 可显式传 path）")
+    text = "\n".join(lines)
+    return kanban.redact_text(text) if _redact_arg(args) else text
+
+
 def _redact_arg(args: dict, default: bool = True) -> bool:
     """`redact` 参数：智能体拿到的东西默认**脱敏**。
 
@@ -1046,6 +1079,18 @@ TOOLS: list[dict] = [
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
     },
     {
+        "name": "kanban_project_for_path",
+        "description": "按目录找项目：给一个仓库/子目录路径，回答它是看板上的哪个项目"
+                       "（等价于「我现在在哪块板上」）。path 可省 —— 省了用 MCP 服务进程的 cwd，"
+                       "而那通常正是客户端拉我起来的项目目录。多个项目登记了同一目录时不猜，列候选。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "仓库根或子目录；省略则用进程 cwd"},
+                           "redact": REDACT_SCHEMA},
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "kanban_handoff",
         "description": "导出项目的完整交接包（Markdown）：背景、交接说明、下一步、任务清单。适合在换会话/换工具时一次性读完上下文。默认脱敏。",
         "inputSchema": {
@@ -1243,6 +1288,7 @@ HANDLERS = {
     "kanban_next_task": t_next_task,
     "kanban_delete_task": t_delete_task,
     "kanban_stats": t_stats,
+    "kanban_project_for_path": t_project_for_path,
     "kanban_handoff": t_handoff,
     "kanban_agents_md": t_agents_md,
     "kanban_context": t_context,
@@ -1269,6 +1315,7 @@ TOOL_KIND = {
     "kanban_get_project": ("read", "查看项目 · Get project"),
     "kanban_find_project": ("read", "按名字找项目 · Find project"),
     "kanban_stats": ("read", "看板统计 · Board stats"),
+    "kanban_project_for_path": ("read", "按目录找项目 · Project for a path"),
     "kanban_handoff": ("read", "导出交接包 · Export handoff pack"),
     "kanban_context": ("read", "机器可读接手包 · Machine-readable context"),
     "kanban_today": ("read", "今日待办 · Today"),

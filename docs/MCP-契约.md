@@ -1,6 +1,6 @@
 # MCP 服务契约
 
-> 当前共 **MCP 24 个工具**（读写属性见下「只读模式」一节）；工具数变化时改这一处。
+> 当前共 **MCP 25 个工具**（读写属性见下「只读模式」一节）；工具数变化时改这一处。
 > 本文件是 `AGENTS.md` 的延伸（2026-10-24 按「是否每次都要读」切出）。
 > **编号保持原样**：这里说的「数据层约定 11」与代码注释里引用的仍是同一条。
 > 规则主文件是 [AGENTS.md](../AGENTS.md)，命令、硬性约定与高频坑都在那里。
@@ -47,7 +47,7 @@
     补标题、补 next_action 时谁也没想到它）。报错正文同样过出口。
     handler 里原有的 `_agent_text` 保留：掩码对同一串重复施加是幂等的。
     钉子：`test_no_agent_reply_can_carry_a_key_stored_in_the_board` 把密钥写进**存量**位置
-    （调用方这次没提供的那些字段），24 个工具逐个走真 `tools/call`；
+    （调用方这次没提供的那些字段），25 个工具逐个走真 `tools/call`；
     表里漏考任何一个工具也直接红（这条当场抓出我少考了 `kanban_agents_md`）。
     判据必须是"回执里没有原文"，不是"有掩码" —— 后者会因为内容本不该出现掩码而假绿。
   - **"现在能做什么"只有一份判定**：`kanban_next_task` 直接调 `next_tasks()`（也就是
@@ -130,3 +130,23 @@ echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | dist\AI交接看板-MCP.ex
 `tests/test_mcp_server.py::test_english_aliases_work_over_mcp`（MCP + schema 广告顺序）、
 `test_suite_hygiene.py::test_alias_table_is_consistent_with_the_canonical_lists`（表的一致性与无歧义）。
 探针 `status_alias_ignored`：把归一打回"只认规范值" → 前两条用例同时红。
+
+
+## 按目录找项目（`kanban_project_for_path`，2026-10-27）
+
+编码代理最常见的开场问题是「**我现在在哪块板上**」。项目里本来就存着 `repo_path`
+（雷达按它扫 git、按它算完成度），但一直没有反向查询 —— 于是它只能先 `kanban_list_projects`、
+再靠人眼比对路径。这个工具把那个反查补上。
+
+- `path` 可省：省了用 **MCP 服务进程的 cwd**。MCP 服务由客户端在项目目录里拉起，
+  所以 cwd 往往正是调用方所在的那个仓库 —— 零参数问一句就能答上。
+- 匹配口径（`repo_watch.match_project` **一份实现**，HTTP 的 `/api/repo-locate` 与它同一份，
+  不各写一套）：完全相同 → `exact`；落在仓库里面（含任意层子目录）→ `inside`；
+  **取最长的那条**（仓库套仓库时短路径不能把长的吃掉）；**同样长 = 并列候选、不猜**
+  （与 `kanban_find_project` 重名时的口径一致）。
+- 两个刻意的细节：① 目录归一化**只做字符串运算**（不 resolve 符号链接、不测存在性）——
+  还没 clone 的目录也要能认出来；② 没匹配上时说清是**哪一种**「没有」
+  （这个目录不属于任何项目 / 另有 N 个项目压根没填 `repo_path`），
+  否则「补一个路径就能认出来」会被读成「看板里没有这个项目」。
+- 与 HTTP 的唯一差异在默认值：`/api/repo-locate` **必须给 `path`** —— 桌面应用的 cwd
+  是它自己启动的地方（多半与应用同目录），拿它当「你所在的项目」会给出一个看着像答案的错答案。

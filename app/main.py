@@ -2965,6 +2965,25 @@ def repo_watch_events(pid: str = ""):
             "changes": events, "audit": repo_metrics.recent_audit(10) if not pid else []}
 
 
+@app.get("/api/repo-locate")
+def repo_locate(path: str = ""):
+    """「我在这个目录里工作，这是哪个项目？」（只读，给编码代理用）。
+
+    为什么需要它：项目里已经存着 `repo_path`（雷达按它扫 git），但**没有反向查询** ——
+    一个在仓库里干活的智能体没有工具能回答"我该在哪块板上记这件事"，只能先列全部项目、
+    再靠人眼比对路径。这里把那个反查补上：给一个目录，回一个项目（或说清为什么没有）。
+
+    HTTP 这份**必须给 path**：桌面应用的 cwd 是它自己启动的地方（多半与应用同目录），
+    拿它当"你所在的项目"会给出一个看着像答案的错答案。MCP 那边的默认值不同，
+    理由是它的 cwd 真的落在被服务的仓库里（见 `mcp_server.t_project_for_path`）。
+    """
+    if not (path or "").strip():
+        raise HTTPException(400, "没给目录 —— 传一个仓库根或子目录，例如 "
+                                 "/api/repo-locate?path=D:\\lo\\my-proj")
+    data = get_projects_data()
+    return repo_metrics.match_project(data.get("projects") or [], path)
+
+
 @app.post("/api/projects/{pid}/repo-ack")
 def repo_ack(pid: str, body: RepoAckIn):
     """确认代码变化已读；只有这里（用户显式动作）才允许顺便写 progress。"""

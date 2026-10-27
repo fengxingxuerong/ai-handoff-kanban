@@ -286,6 +286,46 @@ MUTATIONS: list[dict] = [
         "tests": ["tests/test_scale.py", "tests/test_v110_features.py", "tests/test_api.py", "tests/test_mcp_server.py"],
     },
     {
+        "id": "repo_match_drops_longest_specificity",
+        "file": "app/repo_watch.py",
+        "old": "    longest = max(n for n, _ in hits)",
+        "new": "    longest = hits[0][0]",
+        "why": "不再取最长、改成取第一条命中：仓库套仓库时（主仓库 + 里面的子模块/另一个项目）"
+               "外层的短路径会把用户所在的项目吃掉 —— 回执给的是错项目的 id，"
+               "调用方照着它去记进度，就记到别人头上了。",
+        "tests": ["tests/test_repo_watch.py::test_match_project_picks_the_longest_repo_path"],
+    },
+    {
+        "id": "repo_match_ignores_subdir",
+        "file": "app/repo_watch.py",
+        "old": "        if want == root or want.startswith(_with_sep(root)):",
+        "new": "        if want == root:",
+        "why": "只认「目录完全相同」：而智能体的 cwd 往往是仓库里的**子目录**（src/、app/），"
+               "于是这个工具在真实场景里几乎每次都答「没有项目登记这个目录」—— "
+               "功能看着在，用起来永远不中。",
+        "tests": ["tests/test_repo_watch.py::test_match_project_exact_and_inside",
+                  "tests/test_api.py::test_repo_locate_answers_which_project_owns_a_directory"],
+    },
+    {
+        "id": "repo_match_guesses_on_tie",
+        "file": "app/repo_watch.py",
+        "old": "    if len(winners) > 1:",
+        "new": "    if False:",
+        "why": "同一个目录登记给两个项目时**猜第一个**：调用方拿到一个看着很像答案的 id，"
+               "从此把进度记进错的那块板 —— 与 find_project 重名时「列候选不猜」是同一条纪律。",
+        "tests": ["tests/test_repo_watch.py::test_match_project_reports_ambiguity_instead_of_guessing"],
+    },
+    {
+        "id": "repo_match_silent_miss",
+        "file": "app/repo_watch.py",
+        "old": "        reason = f\"看板上没有项目登记这个目录：{want}\"",
+        "new": "        reason = f\"看板上没有项目登记这个目录：{want}\"\n        blank = []",
+        "why": "没匹配上时不再提「另有 N 个项目压根没填 repo_path」：两种真因被合并成一句"
+               "「看板不认识这个目录」，于是「项目就在那儿、只是没填路径」被读成「看板里没有这个项目」，"
+               "用户永远想不到去补一个 repo_path。",
+        "tests": ["tests/test_repo_watch.py::test_match_project_none_says_which_kind_of_miss"],
+    },
+    {
         "id": "live_url_wrong_port",
         "file": "app/service.py",
         "old": '    return f"http://127.0.0.1:{port}{path}"',

@@ -60,6 +60,35 @@ def test_english_status_and_priority_aliases_are_normalized(server):
     assert "规划中" in json.dumps(err, ensure_ascii=False), err
 
 
+def test_repo_locate_answers_which_project_owns_a_directory(tmp_path, server):
+    """`GET /api/repo-locate`：给目录 → 回项目（或说清为什么没有）。
+
+    补的是一个真空：`repo_path` 早就存着（雷达按它扫 git），但**没有反查** ——
+    在仓库里干活的智能体没有工具能回答"我该在哪块板上记这件事"。
+    HTTP 这份要求显式给 `path`（桌面应用的 cwd 不是用户的仓库，见端点 docstring）。
+    """
+    repo = tmp_path / "loc-proj"
+    repo.mkdir()
+    st, proj = server.create_project("定位项目", repo_path=str(repo), next_action="先做甲")
+    assert st == 201, proj
+
+    st, hit = server.get(f"/api/repo-locate?path={repo}")
+    assert st == 200 and hit["ok"] and hit["match"] == "exact", hit
+    assert hit["project"]["id"] == proj["id"] and hit["project"]["next_action"] == "先做甲"
+
+    # 子目录也算（智能体的 cwd 往往是仓库里的子目录）
+    st, sub = server.get(f"/api/repo-locate?path={repo / 'src'}")
+    assert sub["ok"] and sub["match"] == "inside" and sub["project"]["id"] == proj["id"]
+
+    # 别的目录：不是 404 —— 回一个能读的否定答案（调用方要能分辨"没登记"与"接口坏了"）
+    st, miss = server.get(f"/api/repo-locate?path={tmp_path / 'elsewhere'}")
+    assert st == 200 and miss["ok"] is False and "没有项目登记" in miss["reason"]
+
+    # 没给 path：400 且说清怎么给（不许拿自己的 cwd 冒充"你所在的项目"）
+    st, err = server.get("/api/repo-locate")
+    assert st == 400 and "没给目录" in json.dumps(err, ensure_ascii=False)
+
+
 def test_repo_snapshot_previews_redacts_and_never_clobbers(tmp_path, server):
     """看板快照进仓库：默认只预览、**默认脱敏**、**不是我们生成的同名文件一动不动**。
 

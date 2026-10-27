@@ -321,3 +321,87 @@ def recent_audit(limit: int = 20) -> list[dict]:
     except Exception:
         return []
     return rows
+
+# ---------------- 按目录找项目（「我在这个仓库里，这是哪个项目？」2026-10-26）----------------
+# 为什么放这里：这一层本来就是 `repo_path` 的域（本模块按它扫 git、按它算完成度），
+# **按同一个字段反查项目**是同一个口径的另一面 —— 放到别处迟早出现"两边归一化不一样"
+# （本项目反复出问题的形状：两条路给不同答案）。
+# 纯函数：不读盘、不跑 git、不查存在性；目录归一化一律字符串运算。
+
+
+def norm_repo_path(path: str) -> str:
+    """把目录归一成可比较的形式：去引号 → 绝对化 → normpath → normcase。
+
+    四个动作都是**字符串/环境运算，不碰文件系统**（不 resolve 符号链接、不测存在性）——
+    路径不存在时也必须能匹配上项目：用户可能还没 clone，而"这个目录属于哪块板"
+    不是"这个目录在不在"能回答的问题。
+
+    `abspath` 会把相对路径按**当前进程的 cwd** 展开。这是有意的：MCP 服务通常是客户端
+    在项目目录里拉起来的，所以 cwd 往往正是智能体所在的那个仓库（见 `t_project_for_path`）。
+    """
+    raw = str(path or "").strip().strip('"').strip("'")
+    if not raw:
+        return ""
+    return os.path.normcase(os.path.normpath(os.path.abspath(raw)))
+
+
+def _with_sep(root: str) -> str:
+    r"""给根加一个分隔符（已有就不双写）。盘根（如 `D:\`）的 normpath 自带分隔符 ——
+    直接拼 `root + os.sep` 会拼出 `D:\\`，于是盘根下的项目永远匹配不上。"""
+    return root if root.endswith(os.sep) else root + os.sep
+
+
+def _brief(project: dict) -> dict:
+    """回执里只带"接手要用到的那几个字段" —— 与 list_projects 的口径一致，别塞整份。"""
+    return {"id": project.get("id", ""), "name": project.get("name", ""),
+            "status": project.get("status", ""),
+            "progress": int(project.get("progress") or 0),
+            "priority": project.get("priority", ""),
+            "next_action": project.get("next_action", ""),
+            "repo_path": project.get("repo_path", "")}
+
+
+def match_project(projects: list[dict], path: str) -> dict:
+    """`path` 是哪个项目？返回 dict（ok/path/match/project/candidates/reason）。
+
+    匹配规则（**取最长的那条**，不是第一条）：
+      ① 与项目的 `repo_path` 完全相同 → `exact`
+      ② 落在项目的 `repo_path` **里面**（含任意层子目录）→ `inside`
+      ③ 都不匹配 → `none`，并在 reason 里说清是哪种"没匹配上"
+
+    为什么要"最长"：仓库套仓库是常态（主仓库里还挂着子模块/另一个项目），
+    最短的那条会把用户所在的那个项目吃掉。**同样长（即同一个目录登记给了两个项目）
+    则判 `ambiguous` 并列候选**，不猜 —— 与 `kanban_find_project` 重名时的口径一致。
+    """
+    projects = projects or []
+    blank = [p for p in projects if not str(p.get("repo_path") or "").strip()]
+    want = norm_repo_path(path)
+    if not want:
+        return {"ok": False, "path": "", "match": "none", "candidates": [],
+                "reason": "没给目录 —— 传一个仓库/子目录的路径",
+                "projects_without_repo_path": len(blank)}
+    hits: list[tuple[int, dict]] = []
+    for p in projects:
+        root = norm_repo_path(p.get("repo_path") or "")
+        if not root:
+            continue                      # 没填 repo_path 的项目不参与匹配（但计入上面的计数）
+        if want == root or want.startswith(_with_sep(root)):
+            hits.append((len(root), p))
+    if not hits:
+        reason = f"看板上没有项目登记这个目录：{want}"
+        if blank:
+            reason += f"（另有 {len(blank)} 个项目压根没填 repo_path —— 若它就在其中，补上即可认出来）"
+        return {"ok": False, "path": want, "match": "none", "candidates": [],
+                "reason": reason, "projects_without_repo_path": len(blank)}
+    longest = max(n for n, _ in hits)
+    winners = [p for n, p in hits if n == longest]
+    if len(winners) > 1:
+        return {"ok": False, "path": want, "match": "ambiguous",
+                "candidates": [_brief(p) for p in winners],
+                "reason": f"有 {len(winners)} 个项目登记了这个目录，不替你猜 —— 用 id 明确指定",
+                "projects_without_repo_path": len(blank)}
+    hit = winners[0]
+    root = norm_repo_path(hit.get("repo_path") or "")
+    return {"ok": True, "path": want, "match": "exact" if want == root else "inside",
+            "project": _brief(hit), "candidates": [], "reason": "",
+            "projects_without_repo_path": len(blank)}

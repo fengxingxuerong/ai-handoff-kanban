@@ -191,13 +191,14 @@ Claude Code / Cursor / Cline / Windsurf / Codex 等可以直接列项目、读�
 }
 ```
 
-提供的工具（24 个）：
+提供的工具（25 个）：
 
 | 工具 | 用途 |
 | --- | --- |
 | `kanban_list_projects` | 所有项目概览（状态/进度/优先级/任务统计/交接就绪度/下一步） |
 | `kanban_get_project` | 单个项目的完整上下文（背景、交接说明、下一步、全部任务） |
 | `kanban_find_project` | 按名称模糊找项目 id |
+| `kanban_project_for_path` | **按目录找项目**：给仓库/子目录路径，回答它是哪个项目（等价于「我现在在哪块板上」）；`path` 可省 —— 省了用 MCP 服务进程的 cwd |
 | `kanban_create_project` / `kanban_update_project` | 建项目 / 改进度·下一步·交接说明 |
 | `kanban_add_task` / `kanban_update_task` / `kanban_delete_task` | 任务增改删 |
 | `kanban_next_task` | 下一个该做的任务（依赖已满足里挑优先级最高的） |
@@ -343,7 +344,7 @@ rem 真实场景测试：真服务 + 真 MCP + 真实业务数据跑 32 条用�
 rem （CI 里也有这一步：.github/workflows/ci.yml 跑的 ci_local 全门禁，改坏了会红）
 .venv\Scripts\python.exe scripts\scenario_test.py --report 场景测试报告.md
 
-rem 变异探针：往源码注入 109 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
+rem 变异探针：往源码注入 113 处"真实可能发生的改动"，改了还全绿 = 盲区，判失败
 rem （覆盖率只证明"这行跑过"，不证明"这行错了会被发现"——这一步量的是后者）
 .venv\Scripts\python.exe scripts/mutation_probe.py
 .venv\Scripts\python.exe scripts/mutation_probe.py --only due_soon_window   rem 只跑一条
