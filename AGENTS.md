@@ -517,7 +517,7 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 写的是同一个数。
 
-**验证基线**：`pytest` 876 收集（871 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（92.56%，门槛 90）/ 36 个测试文件、825 个 `def test_` 且无重名；
+**验证基线**：`pytest` 877 收集（872 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 93%（92.56%，门槛 90）/ 36 个测试文件、826 个 `def test_` 且无重名；
 变异探针 113 条全被杀。**逐轮明细、每轮改了什么为什么、性能基线** → [docs/进度与版本档案.md](docs/进度与版本档案.md)。
 
 **下一步（按价值排序，详版在档案里）**：

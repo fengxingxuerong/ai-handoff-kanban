@@ -50,6 +50,11 @@ DELIVERY/**/*.log
 .dumate/
 .tmp/
 
+# 别的 AI 工具在本仓留下的记忆/会话状态（WorkBuddy 之类）：不是本项目的产物，
+# 也不该跟着本项目的提交一起走。真要留档就挪进 DELIVERY/ 或 docs/。
+# 2026-10-27 实测：它让 `git status` 一直挂着一个 `??`，而内容与本项目无关。
+.workbuddy/
+
 # Python 打包产物（`pip wheel .` / `pip install .` 会在仓库根留下 egg-info，
 # 2026-10-25 加 pyproject 时实测出现）—— 构建残渣，不入库
 *.egg-info/

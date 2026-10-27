@@ -184,6 +184,46 @@ def test_agents_md_stays_inside_the_loading_budget():
         f"docs/进度与版本档案.md）—— 内容搬走不是删掉，别砍规则与命令")
 
 
+def test_gitignore_keeps_the_local_only_things_out():
+    """`.gitignore` 是**纯文本约定**：删掉一行不会红、也没人会发现 —— 所以给它一条钉子。
+
+    这个仓库是**公开的**，而它挡着的正是最不能外传的几类东西（2026-10-27 复核）：
+      ① 密钥与运行期数据（`*.local.json` / `config.json` / `keys.local.json`）；
+      ② 交付目录里的**二进制与日志**：`DELIVERY/` 下实测有 38MB（两枚 19MB 的 exe + 构建日志），
+         一次 `git add -A` 就会进库；
+      ③ 别的工具在本仓留下的目录（`.dumate/`、`.workbuddy/`）与临时目录（`.tmp/`）；
+      ④ 构建产物（`.venv/`、`dist/`、`build/`、`*.egg-info/`）。
+    同时钉**另一个方向**：`DELIVERY/` 本身**不许被整体忽略** —— 那里的文档是要入库的
+    （历史 4 份 .md/.html 就在版本库里）。写成 `DELIVERY/` 一行会让"该入库的文档"静默消失，
+    那是比漏挡更难发现的一类错。
+
+    实测支撑（2026-10-27）：`git status -uall` 的 91 个未跟踪文件里**没有一个** .exe/.log ——
+    说明这几条规则真在起作用；这条用例把它从"碰巧"变成"改坏了会红"。
+    """
+    ig = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    lines = {ln.strip() for ln in ig.splitlines() if ln.strip() and not ln.strip().startswith("#")}
+    required = {
+        "*.local.json": "密钥/运行期数据",
+        "config.json": "密钥配置",
+        "keys.local.json": "按端点分文件存放的 Key",
+        "DELIVERY/**/*.exe": "交付目录里的 exe（两枚 19MB）",
+        "DELIVERY/**/*.log": "交付目录里的构建日志",
+        ".venv/": "虚拟环境",
+        "dist/": "打包产物",
+        "*.egg-info/": "打包残渣",
+        ".dumate/": "文档查看器缓存",
+        ".workbuddy/": "别的 AI 工具的记忆/会话状态",
+        ".tmp/": "本会话的临时脚本",
+    }
+    missing = [f"{pat}（{why}）" for pat, why in required.items() if pat not in lines]
+    assert not missing, "`.gitignore` 少了这些规则（一次 git add -A 就可能进公开仓库）：\n  " + \
+        "\n  ".join(missing)
+    wholesale = [ln for ln in lines if ln.rstrip("/") == "DELIVERY"]
+    assert not wholesale, (
+        "`DELIVERY/` 被**整体**忽略了 —— 但那里的文档是要入库的（历史 4 份就在版本库里）；"
+        "要挡具体类型就写 `DELIVERY/**/*.xxx`")
+
+
 def test_agents_md_keeps_headroom_under_the_budget():
     """AGENTS.md 不只要「没超」，还得**留出余量** —— 只剩几百字节时，下一句话就会撞墙。
 
