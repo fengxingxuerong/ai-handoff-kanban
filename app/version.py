@@ -177,7 +177,27 @@ from pathlib import Path
 # else 分支把 null/缺失/非 list 归一成 []（与 tags 同款，约定 30「字段形状自己闭合」）；
 # ProjectIn 的 milestones 放宽为 list | None、validator 把 None 视为 []（宽容旧客户端
 # 缓存的 null）。探针 86→87（milestones_null_passes_through）。
-__version__ = "1.9.6"
+# 1.10.0（2026-10-31）：v1.9.6 标签之后累计 24 个提交（10-25~10-31，逐条叙事在
+# docs/进度与版本档案.md「v1.9.6 附 1…24」），按次版本号发布。四个面向用户的新能力 +
+# 一轮门禁健壮性：
+# ① 输入契约语言中立（附 18）：HTTP `Literal` 与 MCP `enum` 只收中文，英文 agent 传
+#    `in_progress` / `high` 直接 422 —— 「任何 agent 都能接手」里唯一货不对板的地方。
+#    别名表与规范值同文件（app/fields.py），HTTP 在 Pydantic 的 before 层、MCP 在校验前
+#    归一，别名只出现在入参、落盘永远规范值；23 个 MCP 工具标题改「中文 · English」。
+# ② 看板快照进仓库（附 19/20）：`app/repo_snapshot.py` 把一块板渲染成 docs/kanban/ 下
+#    人读 Markdown（目录页 + 每项目一份）+ 机读 board.json —— clone 了仓库、或没接 MCP 的
+#    agent 也能看见看板（数据仍以 ~/.ai-kanban 为唯一真相源）；详情页「更多」给了人的入口。
+# ③ 按目录反查项目（附 21）：MCP 第 25 个工具 `kanban_project_for_path` 回答「我在哪块板上」，
+#    与 HTTP 共用 `repo_watch.match_project` 一份实现。
+# ④ 可分发的 MCP 包（附 16）：`pyproject.toml` + `app/mcp_server.py` 搬进包里，
+#    `uvx --from ai-handoff-kanban ai-handoff-kanban-mcp` 一行可装（此前只有 exe / venv / Docker）。
+# 门禁健壮性（附 1~15、22~24）：E2E 浏览器降级补齐第三级（CI 上 75+ 条真浏览器用例
+# 此前整份静默跳过）、跳过数按文件对账、发版门禁的步骤清单补钉子、变异探针加运行护栏与
+# 启动预检（113 条）、还原改成「字节进字节出」、前端 JS 变异探针四批（81→113，其中
+# 前端 20 条是新的覆盖层）、雷达基线读-改-写补跨进程锁、社区入口文件 + 让它们失效会红、
+# `.gitignore` 双向钉子；**2026-10-31 打包健壮性**：产物被外部进程占用时改名让位 +
+# 一次重试（scripts/exe_build.py，事故根因是 MCP 产物被 AI 代理宿主当服务跑着）。
+__version__ = "1.10.0"
 
 ROOT = Path(__file__).resolve().parent.parent
 
