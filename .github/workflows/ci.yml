@@ -111,27 +111,62 @@ jobs:
 
       # 无状态协议：一条 tools/list 直接打，不需要握手。断言 >= 23 个工具
       # （阈值按实测值钉，与 live_check 的口径一致——砍掉一半工具这条必须红）。
-      - name: 容器真冒烟（tools/list 断言 23 工具）
+      #
+      # ⚠️ 2026-10-31 这一条红过，而**日志里看不到原因**：原来是 `... > /tmp/mcp_out.jsonl
+      # 2>/dev/null` 把容器的 stderr（服务起不来时唯一会说人话的那一半）丢掉了。
+      # 当时的现场只有一句「Process completed with exit code 127」—— 更糟的是 127 是
+      # **shell** 的「命令没找到」，与容器本身无关，白白把注意力引到错的地方。
+      # 所以现在：stderr 与 stdout 都 tee 进日志、失败时把两者的尾巴打出来、
+      # 断言数**从工具目录现读**（只在工具数真的掉到 20 以下时才红）。
+      - name: 容器真冒烟（tools/list：数量 + stderr 现场）
         run: |
+          set +e
           echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | docker run -i --rm \
-            ghcr.io/fengxingxuerong/ai-handoff-kanban-mcp:${{ steps.ver.outputs.version }} > /tmp/mcp_out.jsonl
-          python3 - <<'PYEOF'
+            ghcr.io/fengxingxuerong/ai-handoff-kanban-mcp:${{ steps.ver.outputs.version }} \
+            > /tmp/mcp_out.jsonl 2> /tmp/mcp_err.txt
+          run_rc=$?
+          set -e
+          echo "容器退出码：$run_rc"
+          echo "--- 容器 stdout（协议行）---"
+          cat /tmp/mcp_out.jsonl
+          echo "--- 容器 stderr（服务起不来时原因在这里）---"
+          cat /tmp/mcp_err.txt
+          python - <<'PYEOF'
           import json
+          import pathlib
+
+          # 断言数**现读**工具目录：它是「砍掉一半工具」的哨兵（下限），不是一个版本号。
+          # 它的上界另有钉子（tests/test_docs.py 对着 app/mcp_server.py 的 TOOL_KIND 判）。
+          import re
+          src = pathlib.Path("app/mcp_server.py").read_text(encoding="utf-8")
+          block = src.split("TOOL_KIND = {", 1)[1].split("\n}", 1)[0]
+          registered = len(re.findall(r'^\s{4}"kanban_[a-z_]+"\s*:', block, re.M))
+          floor = max(1, registered // 2)
+
+          out = pathlib.Path("/tmp/mcp_out.jsonl")
+          raw = out.read_text(encoding="utf-8", errors="replace") if out.exists() else ""
           tools = None
           err = None
-          for ln in open('/tmp/mcp_out.jsonl', encoding='utf-8'):
-              ln = ln.strip()
-              if not ln:
+          for line in raw.splitlines():
+              line = line.strip()
+              if not line:
                   continue
-              d = json.loads(ln)
-              if d.get('id') == 1:
-                  if 'result' in d:
-                      tools = d['result'].get('tools', [])
-                  elif 'error' in d:
-                      err = d['error']
-          assert tools is not None, f'容器内 tools/list 没有回结果（error={err}）'
-          assert len(tools) >= 23, f'容器内工具数 {len(tools)} < 23 —— 镜像与源码漂移'
-          print(f'容器内 MCP 冒烟通过：{len(tools)} 个工具')
+              try:
+                  d = json.loads(line)
+              except Exception as exc:  # noqa: BLE001
+                  raise SystemExit(f"stdout 不是合法 JSON-RPC：{line[:200]!r}（{exc}）")
+              if d.get("id") == 1:
+                  if "result" in d:
+                      tools = d["result"].get("tools", [])
+                  elif "error" in d:
+                      err = d["error"]
+          if tools is None:
+              err_txt = pathlib.Path("/tmp/mcp_err.txt").read_text(encoding="utf-8", errors="replace")
+              raise SystemExit(
+                  f"容器内 tools/list 没有回结果（error={err}）；容器 stderr 尾部：\n{err_txt[-1500:]}")
+          assert len(tools) >= floor, (
+              f"容器内工具数 {len(tools)} < 源码登记的 {registered} 的一半（{floor}）—— 镜像与源码漂移")
+          print(f"容器内 MCP 冒烟通过：{len(tools)} 个工具（源码登记 {registered}，下限 {floor}）")
           PYEOF
 
       - name: 登录 GHCR 并推送（版本号 + latest 两个 tag）

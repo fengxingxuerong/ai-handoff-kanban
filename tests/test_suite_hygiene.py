@@ -646,6 +646,39 @@ def _ci_run_blocks() -> list[str]:
     return blocks
 
 
+def test_ci_container_smoke_carries_its_own_diagnostics():
+    """容器冒烟那一步必须**自带现场**：容器的 stderr 不许被丢掉，断言数现读源码。
+
+    为什么需要它（2026-10-31 实测）：这一条在 v1.10.0 的发版提交上红了，而**日志里看不到原因** ——
+    原来是 `docker run ... > /tmp/mcp_out.jsonl 2>/dev/null` 把容器的 stderr（服务起不来时
+    唯一会说人话的那一半）丢掉了。当时的现场只剩一句「Process completed with exit code 127」，
+    而 127 是 **shell** 的「命令没找到」、与容器无关 —— 一行误导性的现场比没有现场更贵：
+    它把排查引到了错的方向（我因此先去翻了 docker build 的日志）。
+    判据（**行为面**，不钉字面量写法）：
+      ① 容器 stderr 必须被落盘（`2> /tmp/mcp_err.txt`）并打进日志；
+      ② 失败时把这两份的尾巴打出来（有 `cat /tmp/mcp_out.jsonl` 与 `cat /tmp/mcp_err.txt`）；
+      ③ 断言数**从 app/mcp_server.py 现读**，不是手抄的常数；
+      ④ 这个 run 块里不许出现 `2>/dev/null` 这类丢弃 stderr 的写法。
+    上界另有钉子：`test_docs.test_readme_mcp_tool_table_lists_every_tool` 对着 TOOL_KIND 判，
+    所以"工具数漂了"在那一侧就会被抓住 —— 这条只管"红了要看得出为什么"。
+    """
+    blocks = _ci_run_blocks()
+    smoke = [b for b in blocks if "docker run" in b and "tools/list" in b]
+    assert len(smoke) == 1, (
+        f"应当恰好一个 run 块做容器 tools/list 冒烟，实测 {len(smoke)} 个：{smoke}")
+    s = smoke[0]
+
+    assert "2> /tmp/mcp_err.txt" in s, (
+        "容器 stderr 被丢掉了 —— 服务起不来时唯一说人话的那一半就在那里，"
+        "而 2026-10-31 的现场只剩一句与容器无关的 exit 127")
+    assert "cat /tmp/mcp_err.txt" in s, "stderr 只落盘没打出来，CI 日志里照样看不到现场"
+    assert "cat /tmp/mcp_out.jsonl" in s, "stdout 也要打出来：它可能为空，也可能不是协议行"
+    assert "registered" in s and "TOOL_KIND" in s, (
+        "断言数必须是**从源码现读**的（TOOL_KIND 登记数），手抄常数会随版本漂")
+    assert "/dev/null" not in s, (
+        "这一步里不许把任何一路丢进 /dev/null —— 丢弃现场正是本轮那次红的根因")
+
+
 def test_ci_runs_the_same_release_gate_with_the_exe():
     """CI 必须跑**同一条** `ci_local.py --with-exe`，而**不能**退化成 `--quick` 或手敲清单。
 
