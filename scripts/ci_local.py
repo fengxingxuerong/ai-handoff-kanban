@@ -35,7 +35,9 @@ ROOT = Path(__file__).resolve().parent.parent
 # 选空闲端口收成一份实现（`app/service.py`）：此前这里与 delivery_drill / scenario_test
 # 各写了一遍，而 release_regression 干脆写死端口 —— 后果见 `app.service.free_port` 的说明。
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))                       # 打包那两步要用 exe_build
 from app.service import free_port                               # noqa: E402
+from exe_build import build_exe_step                            # noqa: E402
 # 门禁输出里有中文与 ✓：重定向到文件时 Python 会按系统码页（本机 cp936）编码，
 # 打第一个特殊字符就崩 —— 门禁必须能被管道与重定向。
 try:
@@ -316,34 +318,44 @@ def main() -> int:
                  live=True)
 
         if MODE == "exe":
-            # 打包前按可执行路径清一次残留实例：打包要求没有任何进程握着 exe 文件，
-            # 而上一轮 frozen_smoke 的树杀可能漏（2026-10-24 实测：残留进程把这一步
-            # 毒成 WinError 5 拒绝访问）。清不掉它自己会 exit 1 并印出来 —— 打包那步
-            # 反正也会红，早说早处理。清场是家务活，不算门禁步骤。
-            _sweep_dist("AI交接看板.exe")
             step("生成构建戳", [PY, "scripts/make_stamp.py"], 120)
             step("生成 exe 版本资源", [PY, "scripts/make_versionfile.py"], 120)
-            step("打包 PyInstaller", [PY, "-m", "PyInstaller", "-F", "-w", "-n", "AI交接看板",
-                                      "scripts/desktop.py", "--hidden-import", "app.main",
-                                      "--hidden-import", "uvicorn",
-                                      "--add-data", str(ROOT / "web") + os.pathsep + "web",
-                                      "--paths", str(ROOT), "--icon", str(ROOT / "app.ico"),
-                                      "--version-file", str(ROOT / "build" / "version_info.txt"),
-                                      "--distpath", str(ROOT / "dist"),
-                                      "--workpath", str(ROOT / "build"),
-                                      "--specpath", str(ROOT / "build"), "--noconfirm"], 1500, True)
+            # 两个产物的打包都走 exe_build.build_exe_step：它有「清场 → 被占就让位 → 打 →
+            # 失败再清一遍让一遍再打」的一套。**2026-10-31 实测的真事故**：`dist\AI交接看板-MCP.exe`
+            # 被用户自己的 AI 代理宿主当成 MCP 服务在跑，清场杀掉它 → 宿主一秒内又拉起 →
+            # 文件仍被握着 → PyInstaller 写它报 WinError 5。杀不掉的不是残留，是有人在正常用它；
+            # 详见 scripts/exe_build.py 的模块说明（为什么不改用户配置、为什么改名能行）。
+            def _run_here(argv, **kw):
+                return subprocess.run(argv, cwd=str(ROOT), env=env, **kw)
+
+            ok, dt, note = build_exe_step(
+                [PY, "-m", "PyInstaller", "-F", "-w", "-n", "AI交接看板",
+                 "scripts/desktop.py", "--hidden-import", "app.main",
+                 "--hidden-import", "uvicorn",
+                 "--add-data", str(ROOT / "web") + os.pathsep + "web",
+                 "--paths", str(ROOT), "--icon", str(ROOT / "app.ico"),
+                 "--version-file", str(ROOT / "build" / "version_info.txt"),
+                 "--distpath", str(ROOT / "dist"),
+                 "--workpath", str(ROOT / "build"),
+                 "--specpath", str(ROOT / "build"), "--noconfirm"],
+                ROOT / "dist" / "AI交接看板.exe", runner=_run_here)
+            results.append(("打包 PyInstaller", ok, dt, note))
+            print(f"  [{'OK' if ok else 'FAIL'}] {'打包 PyInstaller':34s} {dt:6.1f}s  {note}", flush=True)
             step("冻结版冒烟 frozen_smoke", [PY, "scripts/frozen_smoke.py"], 900, True)
             # 第二个产物：MCP 服务，**故意不加 -w** —— 它走 stdio，而 GUI 子系统程序拿不到标准流。
             # 只装 exe 的用户没有 .venv，"让代理直接读写看板"这个卖点此前对他不可用（2026-10-23 评测）。
-            _sweep_dist("AI交接看板-MCP.exe")
-            step("打包 PyInstaller（MCP 控制台产物）",
-                 [PY, "-m", "PyInstaller", "-F", "-n", "AI交接看板-MCP",
-                  "scripts/mcp_server.py", "--hidden-import", "app.main",
-                  "--paths", str(ROOT),
-                  "--version-file", str(ROOT / "build" / "version_info.txt"),
-                  "--distpath", str(ROOT / "dist"),
-                  "--workpath", str(ROOT / "build"),
-                  "--specpath", str(ROOT / "build"), "--noconfirm"], 1500, True)
+            ok, dt, note = build_exe_step(
+                [PY, "-m", "PyInstaller", "-F", "-n", "AI交接看板-MCP",
+                 "scripts/mcp_server.py", "--hidden-import", "app.main",
+                 "--paths", str(ROOT),
+                 "--version-file", str(ROOT / "build" / "version_info.txt"),
+                 "--distpath", str(ROOT / "dist"),
+                 "--workpath", str(ROOT / "build"),
+                 "--specpath", str(ROOT / "build"), "--noconfirm"],
+                ROOT / "dist" / "AI交接看板-MCP.exe", runner=_run_here)
+            results.append(("打包 PyInstaller（MCP 控制台产物）", ok, dt, note))
+            print(f"  [{'OK' if ok else 'FAIL'}] {'打包 PyInstaller（MCP 控制台产物）':34s} "
+                  f"{dt:6.1f}s  {note}", flush=True)
             step("MCP 冻结版自查", [PY, "scripts/mcp_frozen_smoke.py"], 600, True)
     finally:
         if server is not None and server.poll() is None:
@@ -385,22 +397,6 @@ def _health_data_file(base: str) -> str:
             return str(json.loads(r.read().decode("utf-8", "replace")).get("data_file", ""))
     except Exception:                                          # noqa: BLE001
         return ""
-
-
-def _sweep_dist(exe_name: str) -> None:
-    """打包前调 frozen_smoke --sweep 清同路径残留。家务活：有动静才印一行，不算门禁步骤。"""
-    try:
-        r = subprocess.run([PY, str(ROOT / "scripts" / "frozen_smoke.py"), "--sweep",
-                            str(ROOT / "dist" / exe_name)],
-                           capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=120)
-    except (OSError, subprocess.TimeoutExpired) as e:           # noqa: BLE001
-        print(f"  [i] 打包前清场没跑成（{e}）；若打包报拒绝访问，先手动 taskkill", flush=True)
-        return
-    out = ((r.stdout or "") + (r.stderr or "")).strip()
-    if r.returncode != 0 or out:
-        print(f"  [i] 打包前清场：{out.splitlines()[-1] if out else f'exit={r.returncode}'}",
-              flush=True)
 
 
 def _port_listening(port: int) -> bool:

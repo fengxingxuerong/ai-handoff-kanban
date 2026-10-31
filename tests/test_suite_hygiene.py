@@ -145,14 +145,19 @@ def test_release_gate_preflights_probes_and_sweeps_before_packaging():
     ② 上轮 frozen_smoke 没清干净的 exe 进程握着产物文件，下一轮打包直接
        WinError 5 拒绝访问 —— 清场必须挂在打包**前**，而不是打包失败后靠人排查。
     另钉清扫的过滤口径：按**可执行路径**不按映像名 —— 用户可能正开着装在别处的副本。
+    **2026-10-31 起**：清场与让位收进了 `scripts/exe_build.py`（产物可能正被用户的 AI 代理宿主
+    当 MCP 服务跑着，杀不掉、只能改名让位），所以清场指针改为钉在那个模块 + 两次打包都走它
+    （而不是钉门禁里那两行 `_sweep_dist(...)` 字面量）。
     """
     gate = (ROOT / "scripts" / "ci_local.py").read_text(encoding="utf-8")
     assert '"--preflight"' in gate, (
         "门禁没有先跑探针预检 —— 残渣要烧掉 pytest+探针共 9 分钟才以一行计数现形")
     assert gate.index('"--preflight"') < gate.index("pytest 全量"), "预检应排在 pytest 之前"
-    assert '"--sweep"' in gate, "打包前不清场：残留实例握着 exe 文件，PyInstaller 直接 WinError 5"
-    assert '_sweep_dist("AI交接看板.exe")' in gate and '_sweep_dist("AI交接看板-MCP.exe")' in gate, (
-        "两个 PyInstaller 步骤（GUI / MCP）前都要清场，只清一个等于没清")
+    build = (ROOT / "scripts" / "exe_build.py").read_text(encoding="utf-8")
+    assert "sweep_stale_binaries" in build and "move_aside_if_locked" in build, (
+        "打包前不清场/不让位：残留实例或正跑着的实例握着 exe 文件，PyInstaller 直接 WinError 5")
+    assert gate.count("build_exe_step(") >= 2, (
+        "两个 PyInstaller 步骤（GUI / MCP）都要走 exe_build.build_exe_step，绕过它等于没清场")
     fs = (ROOT / "scripts" / "frozen_smoke.py").read_text(encoding="utf-8")
     assert "-ieq" in fs, (
         "残留清扫必须按可执行路径过滤：按映像名杀会误杀用户装在别处的副本")
