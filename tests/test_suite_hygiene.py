@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import collections
 import importlib.util
+import json
 import re
 from pathlib import Path
 
@@ -677,6 +678,40 @@ def test_ci_container_smoke_carries_its_own_diagnostics():
         "断言数必须是**从源码现读**的（TOOL_KIND 登记数），手抄常数会随版本漂")
     assert "/dev/null" not in s, (
         "这一步里不许把任何一路丢进 /dev/null —— 丢弃现场正是本轮那次红的根因")
+
+
+def test_dockerfile_cmd_is_a_clean_json_array():
+    """Dockerfile 的 `CMD`（exec 形式）必须是干净的 JSON 数组 —— 里面**不能有注释**。
+
+    为什么需要它（2026-10-31 实测的真事故）：那一行原本写成
+
+        CMD ["python", "-m", "app.mcp_server"]          # 规范入口（= pyproject 的 …）
+
+    exec 形式是 **JSON 数组，而 JSON 没有注释语法** —— Docker 把 `#` 后面那几个词
+    一起当成参数传给 python，容器起来就死，stderr 只有一句
+    `/bin/sh: 1: [python,: not found`，而 stdout 全空。**镜像构建完全成功**（11 层全绿、
+    两条 tag 都打好了），所以本地怎么测源码都是绿的；干净 runner 上那一步 `tools/list`
+    冒烟因此拿不到任何回包，红在「容器内 tools/list 没有回结果」——现场还是靠上一轮
+    补的 stderr 落盘才看出来的。
+    判据：`CMD` 行按 JSON 解析得通、每个 token 都不含空白与 shell 元字符（`#` / `;` / `&` / `|`）。
+    `JSONArgsRecommended` 那条 buildkit 警告指的是「用 exec 形式」这个**建议**，
+    它拦不住这种写坏 —— 只有把 token 逐个看一遍才拦得住。
+    """
+    text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    cmds = [ln for ln in text.splitlines() if ln.strip().startswith("CMD")]
+    assert cmds, "Dockerfile 里找不到 CMD —— 入口没了，容器起不来"
+    for line in cmds:
+        payload = line.split("CMD", 1)[1].strip()
+        try:
+            arr = json.loads(payload)
+        except Exception as exc:  # noqa: BLE001
+            raise AssertionError(
+                f"CMD 不是合法 JSON 数组：{line!r}（{exc}）—— exec 形式里写注释会变成参数") from exc
+        assert isinstance(arr, list) and arr, f"CMD 必须是 JSON 数组：{line!r}"
+        for tok in arr:
+            assert not re.search(r"[\s;#&|]", str(tok)), (
+                f"CMD 的 token {tok!r} 里有空白或 shell 元字符 —— 多半是把注释写进了同一个数组："
+                f"{line!r}")
 
 
 def test_ci_runs_the_same_release_gate_with_the_exe():

@@ -20,4 +20,9 @@ COPY app/ app/
 ENV KANBAN_DATA_DIR=/data
 VOLUME /data
 
-CMD ["python", "-m", "app.mcp_server"]          # 规范入口（= pyproject 的 console script 跑同一个 serve()）
+# 规范入口（= pyproject 的 console script 跑同一个 serve()）。
+# ⚠️ exec 形式是 **JSON 数组**，JSON 里没有注释语法 —— 这一行尾上不能再跟 `# 说明`：
+# 那些词会被当作**参数**塞进去，容器启动时报 `/bin/sh: 1: [python,: not found`，
+# 而 stdout/stderr 全空（2026-10-31 实测：镜像能构建成功、CI 的容器冒烟却什么都没收到）。
+# 注释只能像上面这样单独成行。
+CMD ["python", "-m", "app.mcp_server"]
