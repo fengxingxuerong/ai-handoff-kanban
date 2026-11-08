@@ -171,14 +171,16 @@ def test_backup_label_reads_the_suffix(app_client):
 # ---------------- 导出落盘 ----------------
 
 def test_export_save_without_path_falls_back_to_desktop(app_client, monkeypatch, tmp_path):
-    """没给路径时优先桌面，桌面写不了才退到数据目录 exports/"""
+    """没给路径时默认落数据目录 exports/（2026-11-03 起不再默默写桌面）"""
     fake_home = tmp_path / "fake-home"
     fake_home.mkdir()
     monkeypatch.setenv("USERPROFILE", str(fake_home))
 
     status, body = app_client.post("/api/export/save", {"filename": "交接包.md", "content": "# hi"})
     assert status == 200 and body["ok"] is True
-    assert Path(body["path"]).parent == fake_home / "Desktop"
+    # 默认落点跟着数据目录走；显式给 path 才写桌面/仓库
+    assert Path(body["path"]).parent.name == "exports"
+    assert Path(body["path"]).parent.parent != fake_home
     assert Path(body["path"]).read_text(encoding="utf-8") == "# hi"
 
 
@@ -335,3 +337,43 @@ def test_handoff_markdown_still_renders_without_budget_noise(app_client):
     pid = app_client.post("/api/projects", {"name": "干净交接包"})[1]["id"]
     md = _build_handoff_markdown(app_client.get(f"/api/projects/{pid}")[1])
     assert "本包约" not in md
+
+
+# ---------------- 2026-11-03：示例数据闭环（打标 / 一键清空 / 退休不再静默） ----------------
+
+def test_sample_projects_are_flagged_in_the_list(app_client):
+    """示例项目必须带 is_sample 标：前端据此显示「这是示例」，而不是被当真板子用。"""
+    _, data = app_client.get("/api/projects")
+    assert data["projects"], "全新实例应当先给示例数据"
+    assert all(p["is_sample"] for p in data["projects"]), data["projects"]
+
+
+def test_first_real_create_reports_how_many_samples_were_retired(app_client):
+    """首条真实数据退休示例：以前是静默的，现在回执要点名清了几条（界面好告知）。"""
+    status, proj = app_client.post("/api/projects", {"name": "首个真实项目", "status": "进行中"})
+    assert status == 201 and proj.get("samples_retired", 0) >= 1, proj
+    _, data = app_client.get("/api/projects")
+    assert [p["name"] for p in data["projects"]] == ["首个真实项目"]
+    assert data["projects"][0]["is_sample"] is False
+
+
+def test_clear_samples_removes_only_samples_and_is_idempotent(app_client):
+    """一键清空只删示例（is_sample 打标与 sample- 前缀 id 两种形态都认）、不动真实项目；
+    没有示例时也不许装删了（removed=0）。自动删用户数据是更坏的体验，删只走这个显式端点。"""
+    app_client.post("/api/projects", {"name": "真实项目", "status": "进行中"})
+    status, body = app_client.post("/api/projects/clear-samples")
+    assert status == 200 and body["ok"] is True
+    assert body["removed"] == 0, "示例已随首条真实数据退休，这里不该再删出数字"
+    _, data = app_client.get("/api/projects")
+    assert [p["name"] for p in data["projects"]] == ["真实项目"]
+
+    # 直接往盘上塞一个「只有 sample- 前缀」形态的示例（老数据可能没打标）
+    df = app_client.data_dir / "projects.json"
+    disk = json.loads(df.read_text(encoding="utf-8"))
+    disk["projects"].insert(0, {"id": "sample-x9", "name": "前缀形态的示例", "tasks": []})
+    df.write_text(json.dumps(disk, ensure_ascii=False), encoding="utf-8")
+
+    status, body = app_client.post("/api/projects/clear-samples")
+    assert status == 200 and body["removed"] == 1, body
+    _, data = app_client.get("/api/projects")
+    assert [p["name"] for p in data["projects"]] == ["真实项目"]

@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from app.assign import DEFAULT_PRIORITY, PRIORITY_SET, allocatable, plan_assign
@@ -152,7 +154,8 @@ def test_plan_assign_partial_overwrite_keeps_others():
 # ---------------- 接口契约 ----------------
 
 def _seed_board(server):
-    status, project = server.create_project("自动分配测试", priority="高")
+    # 项目名唯一（2026-11-03 起 HTTP 创建重名会 409）；同一个 `server` 夹具被多条用例复用
+    status, project = server.create_project(f"自动分配测试-{uuid.uuid4().hex[:6]}", priority="高")
     assert status == 201
     pid = project["id"]
     tid_map = {}

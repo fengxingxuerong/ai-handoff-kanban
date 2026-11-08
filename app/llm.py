@@ -16,9 +16,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import socket
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
@@ -27,6 +29,9 @@ from .filelock import blocking_lock
 
 DEFAULT_TIMEOUT = 60
 MAX_TOKENS = 3000
+# 连接阶段单独限时：网关没启动时 TCP 重试在 Windows 上能拖 20~30s，
+# 用户会对着"AI 转圈"干等。5s 连不上就当场给"网关未启动"的中文结论。
+CONNECT_TIMEOUT = 5
 
 # 配置文件的读-改-写串行化：调度线程与设置界面可能同时写 config.json
 _CFG_LOCK = threading.RLock()
@@ -273,6 +278,74 @@ def _post(base_url: str, api_key: str, model: str, messages: list, temperature: 
     return choice.get("message", {}).get("content", ""), (usage if isinstance(usage, dict) else None), finish
 
 
+def _preflight(base_url: str, timeout: float = CONNECT_TIMEOUT) -> str:
+    """连接预检：返回错误文案，空串表示可以连。
+
+    只做 TCP 握手，不发请求、不耗额度。目的是把"网关没开"从 30~60s 的超时
+    变成 ≤5s 的明确提示 —— 实测网关不可达时 analyze 偶发 33.53s 白屏。
+    """
+    try:
+        u = urllib.parse.urlsplit(base_url or "")
+        host = u.hostname or ""
+        port = u.port or (443 if u.scheme == "https" else 80)
+        if not host:
+            return ""
+        with socket.create_connection((host, port), timeout=timeout):
+            return ""
+    except socket.timeout:
+        return f"连不上 {host}:{port}（{timeout}s 超时）—— AI 网关未启动或端口不通"
+    except OSError as e:
+        return f"连不上 {host}:{port}（{type(e).__name__}）—— AI 网关未启动或端口不通"
+
+
+def _upstream_detail(body: str) -> tuple[str, str]:
+    """拆上游错误体 → (message, code)，取不到就返回 (原文截断, "")。"""
+    try:
+        data = json.loads(body)
+        err = data.get("error") if isinstance(data, dict) else None
+        if isinstance(err, dict):
+            return (str(err.get("message") or "")[:180],
+                    str(err.get("code") or err.get("type") or ""))
+        if isinstance(data, dict):
+            return (str(data.get("message") or data.get("detail") or "")[:180], "")
+    except Exception:
+        pass
+    return ((body or "").strip()[:180], "")
+
+
+def _error_text(code: int, body: str) -> str:
+    """把上游 HTTP 错误翻译成用户能照做的中文，而不是统一一句「HTTP 400」。
+
+    分类顺序按"用户下一步动作"排：改 Key → 充值 → 换模型 → 等一会儿。
+    括号里保留原始状态码/上游 code，方便贴给网关管理员排查。
+    """
+    msg, ecode = _upstream_detail(body)
+    low = (msg + " " + ecode).lower()
+    if code == 429:
+        head = "额度用尽/限流(429)：请稍后重试，或在 AI 设置里换一个端点"
+    elif code in (401, 403):
+        head = f"Key 无效({code})：请到 AI 设置里检查/更换 API Key"
+    elif code == 402:
+        head = "余额不足(402)：请充值，或换用其他端点"
+    elif code in (404, 410):
+        head = f"模型已下线({code})：请换一个模型"
+    elif code >= 500:
+        head = f"服务错误({code})：上游异常，请稍后重试"
+    elif "model_not_found" in low or ("model" in low and ("not found" in low or "no usable" in low or "不存在" in low)):
+        head = "模型名不存在或未开通(model_not_found)：请在 AI 设置里检查模型 id"
+    elif "model" in low and ("format" in low or "invalid" in low):
+        head = "模型名格式不正确：网关要求 provider/model 形式（例如 raccoon/xxx）"
+    elif "insufficient" in low or "balance" in low or "余额" in msg:
+        head = "余额不足(402)：请充值，或换用其他端点"
+    elif "quota" in low or "rate limit" in low or "额度" in msg:
+        head = "额度用尽/限流(429)：请稍后重试，或在 AI 设置里换一个端点"
+    elif code in (400, 422):
+        head = f"请求被上游拒绝({code})：请检查模型名/参数"
+    else:
+        head = f"HTTP {code}"
+    return f"{head}｜上游：{msg}" if msg else head
+
+
 def _usage_file() -> Path:
     return config_file().parent / "usage.jsonl"
 
@@ -372,6 +445,11 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
         if not keys:
             errors.append(f"{ep['name']}: 未配置 Key")
             continue
+        # 先做 5s TCP 预检：网关没开就别进 60s 的读超时
+        pre = _preflight(ep.get("base_url") or "")
+        if pre:
+            errors.append(f"{ep['name']}: {pre}")
+            continue
         # 选定模型：优先 active，否则端点第一个
         model = active if active in models else models[0]
         temp = _model_temp(model, temperature)
@@ -426,23 +504,153 @@ def chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = D
                         time.sleep(0.4)
                         continue
                 _record_usage(feature or "未标注", ep["name"], model, None, time.time() - t0, False)
-                if code == 429:
-                    errors.append(f"{ep['name']}/{model}: 限流(429)")
-                elif code in (401, 403):
-                    errors.append(f"{ep['name']}/{model}: Key 无效({code})")
-                elif code == 402:
-                    errors.append(f"{ep['name']}/{model}: 余额不足(402)")
-                elif code in (404, 410):
-                    errors.append(f"{ep['name']}/{model}: 模型已下线({code})")
-                elif code >= 500:
-                    errors.append(f"{ep['name']}/{model}: 服务错误({code})")
-                else:
-                    errors.append(f"{ep['name']}/{model}: HTTP {code}")
+                errors.append(f"{ep['name']}/{model}: {_error_text(code, body)}")
                 time.sleep(0.4)
             except Exception as e:  # 超时/网络/解析
                 _record_usage(feature or "未标注", ep["name"], model, None, time.time() - t0, False)
-                errors.append(f"{ep['name']}/{model}: {type(e).__name__}")
+                if isinstance(e, (socket.timeout, TimeoutError)):
+                    msg = f"响应超时（>{int(timeout)}s）—— 网关未启动或响应过慢"
+                elif isinstance(e, OSError):
+                    msg = f"连接失败（{type(e).__name__}）—— 网关未启动或端口不通"
+                else:
+                    msg = type(e).__name__
+                errors.append(f"{ep['name']}/{model}: {msg}")
                 time.sleep(0.4)
+    raise LLMError("所有 AI 端点均调用失败：" + " | ".join(errors))
+
+
+def _sse_post(base_url: str, api_key: str, model: str, messages: list, temperature: float,
+              timeout: float, max_tokens: int = MAX_TOKENS):
+    """流式 POST：逐段 yield ("delta", 文本) / ("usage", dict) / ("finish", 原因)。
+
+    上游不支持 SSE（回了普通 JSON）时退化成一次性 delta —— 调用方语义不变，
+    前端照样能拿到最终结果。
+    """
+    url = base_url.rstrip("/") + "/chat/completions"
+    payload = {"model": model, "messages": messages, "temperature": temperature,
+               "max_tokens": max_tokens, "stream": True}
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST", headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + api_key,
+    })
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        ctype = (resp.headers.get("content-type") or "").lower()
+        if "text/event-stream" not in ctype:
+            raw = resp.read().decode("utf-8", "replace")
+            data = json.loads(raw)
+            usage = data.get("usage") if isinstance(data, dict) else None
+            choice = (data.get("choices") or [{}])[0]
+            content = choice.get("message", {}).get("content", "")
+            if content:
+                yield "delta", content
+            if isinstance(usage, dict):
+                yield "usage", usage
+            yield "finish", (choice.get("finish_reason") or "")
+            return
+        for raw_line in resp:
+            line = raw_line.decode("utf-8", "replace").strip()
+            if not line or line.startswith(":"):
+                continue
+            if line.startswith("data:"):
+                chunk = line[5:].strip()
+            elif line.startswith("{"):
+                chunk = line          # 个别网关省略 data: 前缀
+            else:
+                continue
+            if chunk == "[DONE]":
+                break
+            try:
+                data = json.loads(chunk)
+            except Exception:
+                continue
+            if isinstance(data.get("usage"), dict):
+                yield "usage", data["usage"]
+            for ch in (data.get("choices") or []):
+                piece = (ch.get("delta") or {}).get("content")
+                if piece:
+                    yield "delta", piece
+                if ch.get("finish_reason"):
+                    yield "finish", ch["finish_reason"]
+
+
+def stream_chat(cfg: dict, messages: list, temperature: float = 0.2, timeout: float = DEFAULT_TIMEOUT,
+                feature: str = "", max_tokens: int = MAX_TOKENS):
+    """流式对话：yield ("delta", 文本增量)，结束时 yield ("done", {endpoint, model, finish})。
+
+    与 `chat` 共用端点/Key 降级链。差别：**已经吐过字就不再换端点** —— 换端点会把
+    两个模型的输出拼在一起，用户看到的是一段精神分裂的回答；宁可报"中途断开"。
+    """
+    endpoints = [ep for ep in cfg.get("ai", {}).get("endpoints", []) if ep.get("enabled")]
+    if not endpoints:
+        raise LLMError("没有可用的 AI 端点，请在 AI 设置中配置")
+
+    active = cfg.get("ai", {}).get("active_model", "")
+    ordered = sorted(endpoints, key=lambda ep: 0 if (ep.get("models") and active in ep["models"]) else 1)
+
+    errors = []
+    for ep in ordered:
+        keys = [k for k in ep.get("api_keys", []) if k]
+        models = ep.get("models", []) or [active]
+        if not keys:
+            errors.append(f"{ep['name']}: 未配置 Key")
+            continue
+        pre = _preflight(ep.get("base_url") or "")
+        if pre:
+            errors.append(f"{ep['name']}: {pre}")
+            continue
+        model = active if active in models else models[0]
+        temp = _model_temp(model, temperature)
+        for key in keys:
+            t0 = time.time()
+            parts: list[str] = []
+            usage = None
+            finish = ""
+            try:
+                for kind, payload in _sse_post(ep["base_url"], key, model, messages, temp,
+                                               timeout, max_tokens):
+                    if kind == "delta":
+                        parts.append(payload)
+                        yield "delta", payload
+                    elif kind == "usage":
+                        usage = payload
+                    else:
+                        finish = payload or finish
+            except urllib.error.HTTPError as e:
+                body = ""
+                try:
+                    body = e.read().decode("utf-8", "replace")[:300]
+                except Exception:
+                    pass
+                _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t0, False)
+                msg = _error_text(e.code, body)
+                errors.append(f"{ep['name']}/{model}: {msg}")
+                if parts:
+                    raise LLMError("AI 输出中途断开：" + msg)
+                time.sleep(0.4)
+                continue
+            except Exception as e:
+                _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t0, False)
+                if isinstance(e, (socket.timeout, TimeoutError)):
+                    msg = f"响应超时（>{int(timeout)}s）—— 网关未启动或响应过慢"
+                elif isinstance(e, OSError):
+                    msg = f"连接失败（{type(e).__name__}）—— 网关未启动或端口不通"
+                else:
+                    msg = type(e).__name__
+                errors.append(f"{ep['name']}/{model}: {msg}")
+                if parts:
+                    raise LLMError("AI 输出中途断开：" + msg)
+                time.sleep(0.4)
+                continue
+            text = "".join(parts)
+            if _empty_reply(text):
+                _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t0, False)
+                errors.append(f"{ep['name']}/{model}: 返回为空")
+                time.sleep(0.4)
+                continue
+            _record_usage(feature or "未标注", ep["name"], model, usage, time.time() - t0, True)
+            yield "done", {"endpoint": ep["name"], "model": model, "finish": finish}
+            return
     raise LLMError("所有 AI 端点均调用失败：" + " | ".join(errors))
 
 

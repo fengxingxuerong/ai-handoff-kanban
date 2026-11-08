@@ -55,6 +55,15 @@
 </header>
 
 <div id="remind-banner" style="display:none"></div>
+<!-- 示例数据提示：磁盘为空/首次打开时看板里是内置示例，不是用户的真实项目。
+     2026-11-03 起明确标出来：看得见、可一键清空（不自动删，删数据必须用户点头）。 -->
+<div id="sample-banner" style="display:none;margin:0 0 12px;padding:9px 12px;border-radius:8px;
+     background:rgba(230,167,0,.12);border:1px solid rgba(230,167,0,.4);font-size:12.5px;
+     display:none;align-items:center;gap:10px">
+  <span>🧪 当前是<b>示例数据</b>，用于演示看板长什么样；你的真实项目还没有建。</span>
+  <button class="btn small" data-act="clearSamples" style="margin-left:auto">一键清空示例</button>
+  <button class="btn small" data-act="openProjectModal">新建我的项目</button>
+</div>
 
 <div class="filter-bar">
   <button class="chip active" data-f="全部" data-act="setFilter" data-arg="全部">全部</button>
@@ -247,7 +256,13 @@
         </div>
         <div class="panel" id="kanban-panel" style="margin-bottom:0">
           <h3>🗃 任务看板
-            <span style="margin-left:auto; display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:0; font-weight:400">
+            <span class="board-tools" style="margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; min-width:0; max-width:100%; text-transform:none; letter-spacing:0; font-weight:400">
+              <input id="task-search" placeholder="搜索任务…" aria-label="搜索任务"
+                style="font-size:12px;padding:3px 8px;width:min(130px,42vw);min-width:60px;max-width:100%" autocomplete="off">
+              <select id="task-agent-filter" aria-label="按负责人筛选"
+                style="font-size:12px;padding:2px 6px;max-width:45vw" title="按负责 AI 筛选">
+                <option value="">全部负责人</option>
+              </select>
               <span style="color:var(--text-faint)" id="d-task-total"></span>
               <select id="task-sort" style="font-size:12px; padding:2px 6px" title="列内排序（只影响显示，不改数据顺序）">
                 <option value="default">默认顺序</option>
@@ -297,7 +312,8 @@
     <div class="mhead"><h2 id="proj-modal-title">新建项目</h2><button class="btn icon" data-act="closeModal" data-arg="proj-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div class="form-section"><span>基本信息</span></div>
-      <div class="field"><label for="f-name">项目名称 <span class="req">*</span></label><input id="f-name" placeholder="例如：EduSmart 学生管理系统" data-enter="saveProject"></div>
+      <div class="field"><label for="f-name">项目名称 <span class="req">*</span></label><input id="f-name" placeholder="例如：EduSmart 学生管理系统" maxlength="100" data-enter="saveProject">
+        <div id="f-name-hint" style="font-size:11.5px;color:var(--red);margin-top:4px;display:none"></div></div>
       <div class="row3">
         <div class="field"><label for="f-status">状态</label><select id="f-status">
           <option>规划中</option><option>进行中</option><option>已暂停</option><option>已完成</option>
@@ -327,13 +343,16 @@
         <button class="btn small" data-act="addMilestoneRow" type="button">＋ 添加里程碑</button>
       </div>
       <div class="form-section"><span>交接信息（新智能体接手时会优先读这里）</span></div>
-      <div class="field"><label for="f-repo">代码路径（可选）</label><input id="f-repo" placeholder="例如：D:\longmao\edu-smart"></div>
-      <div class="field"><label for="f-bg">项目背景</label><textarea id="f-bg" placeholder="这个项目是做什么的？技术栈、架构、核心模块……"></textarea></div>
+      <div class="field"><label for="f-repo">代码路径（可选）</label><input id="f-repo" maxlength="500" placeholder="例如：D:\longmao\edu-smart"></div>
+      <div class="field"><label for="f-bg">项目背景</label><textarea id="f-bg" placeholder="这个项目是做什么的？技术栈、架构、核心模块……"></textarea>
+        <div class="charcount" data-count-for="f-bg" data-max="5000" style="font-size:11px;color:var(--text-faint);margin-top:4px"></div></div>
       <div class="field">
         <label for="f-handoff">交接说明（写给未来接手的 AI 智能体）</label><textarea class="tall" id="f-handoff" placeholder="写清楚：技术栈与目录结构、已定的关键决策、已知的坑、测试/运行命令、约定与注意事项……交接越具体，接手越顺利"></textarea>
         <div class="hint">新智能体接手时会优先看这里，写清楚能省掉一大半重复沟通</div>
+        <div class="charcount" data-count-for="f-handoff" data-max="5000" style="font-size:11px;color:var(--text-faint);margin-top:4px"></div>
       </div>
-      <div class="field"><label for="f-next">下一步行动</label><textarea id="f-next" placeholder="最近要推进的一件事是什么？"></textarea></div>
+      <div class="field"><label for="f-next">下一步行动</label><textarea id="f-next" placeholder="最近要推进的一件事是什么？"></textarea>
+        <div class="charcount" data-count-for="f-next" data-max="2000" style="font-size:11px;color:var(--text-faint);margin-top:4px"></div></div>
     </div>
     <div class="mfoot">
       <button class="btn" data-act="closeModal" data-arg="proj-modal">取消</button>
@@ -348,8 +367,9 @@
     <div class="mhead"><h2 id="task-modal-title">新建任务</h2><button class="btn icon" data-act="closeModal" data-arg="task-modal" aria-label="关闭">✕</button></div>
     <div class="mbody">
       <div class="form-section"><span>基本信息</span></div>
-      <div class="field"><label for="t-title">任务标题 <span class="req">*</span></label><input id="t-title" placeholder="例如：完成登录模块联调" data-enter="saveTask"></div>
-      <div class="field"><label for="t-desc">任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、背景……"></textarea></div>
+      <div class="field"><label for="t-title">任务标题 <span class="req">*</span></label><input id="t-title" maxlength="200" placeholder="例如：完成登录模块联调" data-enter="saveTask"></div>
+      <div class="field"><label for="t-desc">任务描述</label><textarea id="t-desc" placeholder="补充细节：涉及哪些模块、背景……"></textarea>
+        <div class="charcount" data-count-for="t-desc" data-max="20000" style="font-size:11px;color:var(--text-faint);margin-top:4px"></div></div>
       <div class="form-section"><span>排期与指派</span></div>
       <div class="row3">
         <div class="field"><label for="t-status">状态</label><select id="t-status">
@@ -358,7 +378,7 @@
         <div class="field"><label for="t-priority">优先级</label><select id="t-priority">
           <option>高</option><option>中</option><option>低</option>
         </select></div>
-        <div class="field"><label for="t-agent">负责 AI（可选）</label><input id="t-agent" placeholder="如 cline / 豆包" data-enter="saveTask"></div>
+        <div class="field"><label for="t-agent">负责 AI（可选）</label><input id="t-agent" maxlength="60" placeholder="如 cline / 豆包" data-enter="saveTask"></div>
       </div>
       <div class="field"><label for="t-due">截止日期（可选）</label><input type="date" id="t-due">
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">设了截止日期，仪表盘会统计临期/逾期，任务卡上也会标出来</div>
@@ -614,7 +634,8 @@
     </div>
     <div class="mfoot">
       <button class="btn" data-act="copyPackage">📋 复制</button>
-      <button class="btn" id="package-save-btn" data-act="savePackage">💾 保存到桌面</button>
+      <button class="btn" id="package-save-btn" data-act="savePackage" title="默认保存到数据目录 exports/，不再默默写桌面">💾 保存到导出目录</button>
+      <button class="btn ghost" id="package-save-desktop-btn" data-act="savePackageDesktop" title="显式保存到桌面">🖥 保存到桌面</button>
       <div class="spacer" style="flex:1"></div>
       <button class="btn primary" data-act="closeModal" data-arg="package-modal">完成</button>
     </div>

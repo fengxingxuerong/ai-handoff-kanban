@@ -94,22 +94,30 @@ def aggregate(recs: list[dict], price_map: dict | None = None) -> dict:
 
     `price_map`: `{endpoint名: {"per_1k_input": x, "per_1k_output": y}}`
     （美元 / 千 token）。返回结构：
-    - `totals`: 总调用 / 失败 / prompt / completion / 估算成本
-    - `by_feature` / `by_model`: `{name: {calls, failed, tokens, cost}}`（含失败计数）
-    - `by_date`: `[{date, calls, failed, tokens, cost}]` 升序（折线图直接画）
+    - `totals`: 总尝试 / 成功 / 失败 / prompt / completion / 估算成本
+    - `by_feature` / `by_model`: `{name: {attempts, calls, success, failed, tokens, cost}}`
+    - `by_date`: `[{date, attempts, calls, success, failed, tokens, cost}]` 升序（折线图直接画）
     - `by_endpoint`: `[{endpoint, calls, failed, tokens, cost}]` 按调用数降序
     """
     price_map = price_map or {}
-    totals = {"calls": 0, "failed": 0, "prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0}
+    # 口径修正（2026-11-03）：以前 `calls` 只统计成功、`failed` 只统计失败，
+    # 两个数字分母不同 —— 界面上就出现 "calls=4 / failed=7"、失败率 175% 的鬼故事。
+    # 现在固定三分：`attempts`=总尝试次数，`success`=成功次数，`failed`=失败次数；
+    # `calls` 保留 = success（老接口/老视图的兼容字段，语义不再漂移）。
+    totals = {"calls": 0, "success": 0, "failed": 0, "attempts": 0,
+              "prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0}
     by_feature: dict = {}
     by_model: dict = {}
     by_date: dict = {}
     by_endpoint: dict = {}
 
     def bump(tbl: dict, key: str, rec: dict, ok: bool) -> dict:
-        cell = tbl.setdefault(key, {"calls": 0, "failed": 0, "tokens": 0, "cost": 0.0})
+        cell = tbl.setdefault(key, {"calls": 0, "success": 0, "failed": 0,
+                                    "attempts": 0, "tokens": 0, "cost": 0.0})
+        cell["attempts"] += 1
         if ok:
             cell["calls"] += 1
+            cell["success"] += 1
         else:
             cell["failed"] += 1
         return cell
@@ -119,8 +127,10 @@ def aggregate(recs: list[dict], price_map: dict | None = None) -> dict:
         pt = _f(r.get("prompt_tokens"))
         ct = _f(r.get("completion_tokens"))
         cost = _cost(r, price_map.get(r.get("endpoint") or "")) if ok else 0.0
+        totals["attempts"] += 1
         if ok:
             totals["calls"] += 1
+            totals["success"] += 1
             totals["prompt_tokens"] += pt
             totals["completion_tokens"] += ct
             totals["cost"] += cost
@@ -137,9 +147,12 @@ def aggregate(recs: list[dict], price_map: dict | None = None) -> dict:
 
         d = _date_of(r)
         if d:
-            dcell = by_date.setdefault(d, {"date": d, "calls": 0, "failed": 0, "tokens": 0, "cost": 0.0})
+            dcell = by_date.setdefault(d, {"date": d, "calls": 0, "success": 0, "failed": 0,
+                                           "attempts": 0, "tokens": 0, "cost": 0.0})
+            dcell["attempts"] += 1
             if ok:
                 dcell["calls"] += 1
+                dcell["success"] += 1
                 dcell["tokens"] += pt + ct
                 dcell["cost"] += cost
             else:

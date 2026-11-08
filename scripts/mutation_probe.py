@@ -1054,6 +1054,114 @@ MUTATIONS: list[dict] = [
                "「读-改-写」在 API 边界断掉（2026-10-24 实测）",
         "tests": ["tests/test_milestone.py"],
     },
+    # ---------------- 2026-11-03 用户视角轮（重名 409 / 示例闭环 / 中文 422 / 流式） ----------------
+    {
+        "id": "project_dup_name_allowed",
+        "file": "app/main.py",
+        "old": "        if strict_name:",
+        "new": "        if False:",
+        "why": "HTTP 新建项目重名放行：同名项目让 AI 指令二义（实测返回 need_clarification），"
+               "用户还在界面上看到两块一模一样的板",
+        "tests": ["tests/test_api.py::test_duplicate_project_name_returns_409"],
+    },
+    {
+        "id": "dup_name_update_dropped",
+        "file": "app/main.py",
+        "old": "        _assert_unique_project_name(_data, body.name, p.get(\"id\"))",
+        "new": "        pass",
+        "why": "改名路径绕过查重：新建挡了、PUT/PATCH 没挡，重名照样能被造出来",
+        "tests": ["tests/test_api.py::test_duplicate_project_name_returns_409"],
+    },
+    {
+        "id": "free_text_cap_dropped",
+        "file": "app/schemas.py",
+        "old": "    desc: str = Field(\"\", max_length=MAX_TASK_DESC)",
+        "new": "    desc: str = Field(\"\")",
+        "why": "自由文本上限松掉：一次请求就能把 projects.json 撑成几十 MB（实测 500KB desc 能落盘），"
+               "之后的每次读盘、导出、AI prompt 跟着变慢",
+        "tests": ["tests/test_api.py::test_validation_errors_speak_chinese_with_numbers"],
+    },
+    {
+        "id": "zh_422_loses_length_message",
+        "file": "app/main.py",
+        "old": "        if typ == \"string_too_long\":",
+        "new": "        if False:",
+        "why": "超长报错退回 pydantic 英文长句：用户被拒了却不知道哪的字、超了多少 ——"
+               "422 说人话是这一轮的目的本身",
+        "tests": ["tests/test_api.py::test_validation_errors_speak_chinese_with_numbers"],
+    },
+    {
+        "id": "clear_samples_drops_real",
+        "file": "app/main.py",
+        "old": "                if not (p.get(\"is_sample\") or str(p.get(\"id\", \"\")).startswith(\"sample-\"))]",
+        "new": "                if (p.get(\"is_sample\") or str(p.get(\"id\", \"\")).startswith(\"sample-\"))]",
+        "why": "一键清空删反了：真项目被清掉、示例留下来 —— 删数据的入口判错方向是最坏的一种错",
+        "tests": ["tests/test_misc.py::test_clear_samples_removes_only_samples_and_is_idempotent"],
+    },
+    {
+        "id": "sample_flag_dropped",
+        "file": "app/main.py",
+        "old": "        \"is_sample\": bool(p.get(\"is_sample\") or str(p.get(\"id\", \"\")).startswith(\"sample-\")),",
+        "new": "        \"is_sample\": False,",
+        "why": "示例不打标：用户把示例进度当成自己项目的真实状态，横幅也永远不会出现",
+        "tests": ["tests/test_misc.py::test_sample_projects_are_flagged_in_the_list"],
+    },
+    {
+        "id": "samples_retired_silenced",
+        "file": "app/main.py",
+        "old": "    if box[\"retired\"]:",
+        "new": "    if False:",
+        "why": "首条真实数据退休示例回到「静默」：界面没被告知清掉了什么，"
+               "与 2026-11-03 改这条的初衷相反",
+        "tests": ["tests/test_misc.py::test_first_real_create_reports_how_many_samples_were_retired"],
+    },
+    {
+        "id": "stream_midstream_swaps_endpoint",
+        "file": "app/llm.py",
+        "old": "                    msg = type(e).__name__\n"
+               "                errors.append(f\"{ep['name']}/{model}: {msg}\")\n"
+               "                if parts:",
+        "new": "                    msg = type(e).__name__\n"
+               "                errors.append(f\"{ep['name']}/{model}: {msg}\")\n"
+               "                if False:",
+        "why": "已经吐过字还照样换端点：两个模型的输出被拼成一段精神分裂的回答，"
+               "用户看到的不是任何一方说的 —— 宁可报「中途断开」",
+        "tests": ["tests/test_llm_gateway.py::test_stream_chat_midstream_break_raises_instead_of_swapping"],
+    },
+    {
+        "id": "error_taxonomy_flattened",
+        "file": "app/llm.py",
+        "old": "    if code == 429:",
+        "new": "    if False:",
+        "why": "上游错误分类被抹平：429 退回裸的「HTTP 429」，用户不知道该等一会儿还是换端点",
+        "tests": ["tests/test_llm_gateway.py::test_error_text_translates_upstream_errors"],
+    },
+    {
+        "id": "usage_attempts_not_counted",
+        "file": "app/usage_stats.py",
+        "old": "        cell[\"attempts\"] += 1",
+        "new": "        pass",
+        "why": "总尝试数不再计：三分口径（attempts/success/failed）退回"
+               "「calls=4 / failed=7、失败率 175%」的鬼故事",
+        "tests": ["tests/test_p0_stats.py::test_usage_aggregate_groups_dates_endpoints_and_cost"],
+    },
+    {
+        "id": "js_task_pagination_disabled",
+        "file": "web/js-detail.js",
+        "old": "const TASK_PAGE_STEP = 50;",
+        "new": "const TASK_PAGE_STEP = 1000000;",
+        "why": "分页步长名存实亡：1500 条任务的看板回到五列一次全渲染，"
+               "滚动卡、切项目慢 —— 步长改大了等于没有分页",
+        "tests": ["tests/test_frontend.py::test_task_pagination_and_sample_banner_are_wired"],
+    },
+    {
+        "id": "js_sample_banner_dropped",
+        "file": "web/index.html",
+        "old": "<div id=\"sample-banner\"",
+        "new": "<div id=\"sample-banner-x\"",
+        "why": "示例横幅不见：全新用户把内置示例当真板子用，也不知道可以一键清空",
+        "tests": ["tests/test_frontend.py::test_task_pagination_and_sample_banner_are_wired"],
+    },
 ]
 
 

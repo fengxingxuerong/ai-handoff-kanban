@@ -301,3 +301,73 @@ def test_every_report_id_in_the_list_is_fetchable(ai):
     assert "2099-01-02-1300" not in ids2, ids2
     for rid in ids2:
         assert ai.get("/api/ai/reports/" + rid)[0] == 200, rid
+
+
+# ---------------- 2026-11-03：AI 流式输出（SSE） ----------------
+
+def _sse_frames(text: str) -> list[dict]:
+    return [json.loads(line[len("data:"):]) for line in text.splitlines()
+            if line.startswith("data:")]
+
+
+def test_analyze_stream_yields_delta_then_done_with_report(ai):
+    """stream=1 回 text/event-stream：delta 帧吐字，done 帧带落盘的报告（流式与非流式同一收尾）。"""
+    pid = first_project(ai)["id"]
+    ai.stub.push_json({"summary": "整体健康", "insights": [
+        {"id": pid, "name": "示例", "health": 88, "reason": "节奏正常",
+         "risks": ["人手不足"], "suggestions": []}], "global_suggestions": []})
+    r = ai.client.post("/api/ai/analyze?stream=1")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/event-stream")
+    frames = _sse_frames(r.text)
+    assert frames and any("delta" in f for f in frames), frames
+    done = [f for f in frames if f.get("done")]
+    assert done and done[-1]["endpoint"] == "桩端点", done
+    assert done[-1]["report"]["insights"][0]["health"] == 88, done[-1]
+    _, listing = ai.get("/api/ai/reports")
+    assert any(x["id"] == done[-1]["report"]["id"] for x in listing["reports"])
+
+
+def test_handoff_stream_returns_text(ai):
+    pid = first_project(ai)["id"]
+    ai.stub.push_text("# 项目概况\n\n流式交接说明正文。" * 3)
+    r = ai.client.post(f"/api/ai/handoff/{pid}?stream=1", json={"mode": "generate"})
+    assert r.status_code == 200
+    done = [f for f in _sse_frames(r.text) if f.get("done")][-1]
+    assert "项目概况" in done["text"]
+
+
+def test_command_stream_returns_parsed_and_batch_ref(ai):
+    ai.stub.push_json({"actions": [{"type": "create_task", "project_id": "x", "title": "流式加任务"}]})
+    r = ai.client.post("/api/ai/command?stream=1", json={"text": "给第一个项目加个任务"})
+    assert r.status_code == 200
+    done = [f for f in _sse_frames(r.text) if f.get("done")][-1]
+    assert done["parsed"]["actions"][0]["title"] == "流式加任务"
+    assert done["batch_ref"]
+
+
+def test_stream_failure_is_an_error_frame_not_a_500(ai):
+    """端点全挂时流式不回 502，而是 SSE 里的 error 帧 —— 前端直接弹这条中文说明。"""
+    ai.stub.set_default_status(503)
+    r = ai.client.post("/api/ai/analyze?stream=1")
+    assert r.status_code == 200
+    frames = _sse_frames(r.text)
+    assert frames and "error" in frames[-1], frames
+    assert "服务错误(503)" in frames[-1]["error"] or "AI 端点" in frames[-1]["error"], frames[-1]
+
+
+def test_stream_garbage_json_reports_parse_failure_in_frame(ai):
+    ai.stub.push_text("这不是 JSON")
+    r = ai.client.post("/api/ai/analyze?stream=1")
+    frames = _sse_frames(r.text)
+    assert any("解析失败" in f.get("error", "") for f in frames), frames
+
+
+def test_handoff_usage_is_labeled_handoff_not_summarize(ai):
+    """用量标签修正：交接说明的生成以前错记成「会话提炼」，用量页就张冠李戴。"""
+    pid = first_project(ai)["id"]
+    ai.stub.push_text("# 项目概况\n\n正文，要够长才能过校验。" * 3)
+    assert ai.post(f"/api/ai/handoff/{pid}", {"mode": "generate"})[0] == 200
+    rows = [json.loads(x) for x in
+            (ai.data_dir / "usage.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    assert rows and rows[-1]["feature"] == "交接生成", rows[-1]

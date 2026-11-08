@@ -29,7 +29,7 @@ def sample_data() -> dict:
     def due(days: int) -> str:
         return (now + timedelta(days=days)).strftime("%Y-%m-%d")
 
-    return {
+    data = {
         "projects": [
             {
                 "id": "sample-a",
@@ -120,3 +120,8 @@ def sample_data() -> dict:
             },
         ]
     }
+    # 示例项目统一打标（2026-11-03）：前端据此显示"这是示例，可一键清空"，
+    # 避免用户把示例进度当成自己项目的真实状态。真实项目永远不带这个键。
+    for p in data["projects"]:
+        p["is_sample"] = True
+    return data

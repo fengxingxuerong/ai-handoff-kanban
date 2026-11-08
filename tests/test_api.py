@@ -1432,3 +1432,63 @@ def test_today_items_carry_task_status_and_blocked_reason(server):
     assert rows["今天要做的事"]["blocked_reason"] == ""
     assert rows["今天卡住的事"]["status"] == "阻塞"
     assert rows["今天卡住的事"]["blocked_reason"] == "在等接口文档"
+
+
+# ---------------- 2026-11-03 用户视角轮：重名 409 / 422 说人话 / 自由文本上限 ----------------
+
+def test_duplicate_project_name_returns_409(server):
+    """同名项目会让 AI 指令二义（实测返回 need_clarification）：HTTP 新建/改名重名必须 409。
+
+    三条边界：新建挡、改名挡（PUT 与 PATCH 两条路都挡）、只动状态不动名不算重名。
+    唯一性有意只做在 HTTP 门面 —— MCP 的 kanban_create_project 沿用旧行为，
+    历史用例正是靠两个同名项目验证「提示词二义性」的自保护逻辑。
+    """
+    status, first = server.create_project("重名项目甲")
+    assert status == 201, first
+
+    status, err = server.create_project("重名项目甲")
+    assert status == 409, err
+    assert "已存在同名项目" in str(err)
+
+    _, second = server.create_project("重名项目乙")
+    status, err = server.put(f"/api/projects/{second['id']}",
+                             {"name": "重名项目甲", "status": "进行中"})
+    assert status == 409, err
+    status, err = server.patch(f"/api/projects/{second['id']}", {"name": "重名项目甲"})
+    assert status == 409, err
+
+    # 自己改自己（只动状态、名字不动）不能被自己挡下来
+    status, body = server.put(f"/api/projects/{first['id']}",
+                              {"name": "重名项目甲", "status": "已暂停"})
+    assert status == 200, body
+
+
+def test_validation_errors_speak_chinese_with_numbers(server):
+    """422 说人话：pydantic 的英文长句翻成「字段 X 超长：最多 N 字，当前 M 字」。
+
+    2026-11-03 之前 desc 500KB 都能收（projects.json 被一次请求撑成几十 MB），
+    现在超限在边界被拒；拒的时候如果还是英文长句，用户等于什么都没看见。
+    detail（给人读的那份）里不许再漏出英文原句。
+    """
+    status, body = server.post("/api/projects", {"name": "超长背景", "background": "背" * 5001})
+    assert status == 422, body
+    detail = body["detail"] if isinstance(body, dict) else str(body)
+    assert "background" in detail and "5000" in detail and "超长" in detail, detail
+    assert "must be" not in detail and "should" not in detail, detail
+
+    _, proj = server.create_project("上限边界项目")
+    status, err = server.post(f"/api/projects/{proj['id']}/tasks",
+                              {"title": "超长描述", "desc": "描" * 20001})
+    assert status == 422, err
+    detail = err["detail"] if isinstance(err, dict) else str(err)
+    assert "desc" in detail and "20000" in detail and "20001" in detail, detail
+
+    # 顶格（正好 20000）必须收得下 —— 上限是拦超限的，不是拦正常使用的
+    status, ok = server.post(f"/api/projects/{proj['id']}/tasks",
+                             {"title": "顶格描述", "desc": "描" * 20000})
+    assert status == 201, ok
+
+    # 非法枚举同样说人话，不再是英文 Literal 报错
+    status, err = server.post(f"/api/projects/{proj['id']}/tasks",
+                              {"title": "坏状态", "status": "wtf"})
+    assert status == 422 and "取值不合法" in str(err), err

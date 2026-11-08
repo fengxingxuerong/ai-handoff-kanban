@@ -109,6 +109,70 @@ function showOverview() {
 let taskSortMode = "default";
 try { taskSortMode = localStorage.getItem("kanban-task-sort") || "default"; } catch (e) {}
 
+// ============ 任务搜索 / 负责人筛选 / 列内分页（2026-11-03） ============
+// 实测有 1500 条任务的看板：五个列一次全渲染，滚动卡、切项目慢。
+// 这里做三件事：关键字搜索（标题/描述/负责人/阻塞原因/涉及文件）、按负责人筛选、
+// 每列先渲染 50 张卡，其余折叠成"还有 N 条 · 加载更多"。
+let taskQuery = "";
+let taskAgentFilter = "";
+let colPageSize = 50;
+const TASK_PAGE_STEP = 50;
+
+(function bindTaskFilters() {
+  const q = document.getElementById("task-search");
+  const af = document.getElementById("task-agent-filter");
+  if (q) q.addEventListener("input", () => {
+    taskQuery = q.value.trim();
+    colPageSize = TASK_PAGE_STEP;
+    if (current) renderDetail();
+  });
+  if (af) af.addEventListener("change", () => {
+    taskAgentFilter = af.value;
+    colPageSize = TASK_PAGE_STEP;
+    if (current) renderDetail();
+  });
+})();
+
+function filterTasks(all) {
+  const q = taskQuery.toLowerCase();
+  return (all || []).filter(t => {
+    const agent = String(t.agent || "").trim();
+    if (taskAgentFilter) {
+      if (taskAgentFilter === "__none" ? agent !== "" : agent !== taskAgentFilter) return false;
+    }
+    if (!q) return true;
+    const hay = [t.title, t.desc, agent, t.blocked_reason, (t.refs || []).join(" ")]
+      .map(x => String(x || "")).join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function refreshAgentFilterOptions(all) {
+  const sel = document.getElementById("task-agent-filter");
+  if (!sel) return;
+  const agents = [...new Set((all || []).map(t => String(t.agent || "").trim()).filter(Boolean))].sort();
+  const cur = taskAgentFilter;
+  sel.innerHTML = '<option value="">全部负责人</option>'
+    + agents.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join("")
+    + ((all || []).some(t => !String(t.agent || "").trim())
+      ? '<option value="__none">（未指派）</option>' : "");
+  sel.value = (cur === "__none" || agents.includes(cur)) ? cur : "";
+  if (sel.value !== cur) taskAgentFilter = sel.value;   // 选中的人已不在列表里 → 自动回"全部"
+}
+
+function renderTaskColumnMore(colId, hiddenCount) {
+  const col = document.getElementById(colId);
+  if (!col || !hiddenCount) return;
+  const btn = document.createElement("button");
+  btn.className = "btn small more-tasks";
+  btn.type = "button";
+  btn.style.cssText = "width:100%;margin-top:6px";
+  btn.textContent = `还有 ${hiddenCount} 条，点此加载更多`;
+  // 交互一律走 data-act 委托（约定 3），不挂内联 onclick —— 动态建的按钮也一样
+  btn.setAttribute("data-act", "loadMoreTasks");
+  col.appendChild(btn);
+}
+
 function sortTasks(tasks, mode) {
   const arr = (tasks || []).slice();
   const pri = { "高": 0, "中": 1, "低": 2 };
@@ -150,19 +214,29 @@ function renderDetail() {
   renderMemories(p.id);
   renderMilestones();
   renderTimeline();
-  const tasks = sortTasks(p.tasks || [], taskSortMode);
+  const allTasks = p.tasks || [];
+  const tasks = sortTasks(filterTasks(allTasks), taskSortMode);
+  refreshAgentFilterOptions(allTasks);
   const board = document.getElementById("kanban-board");
   const boardEmpty = document.getElementById("kanban-empty");
-  if (board) board.style.display = tasks.length ? "" : "none";
-  if (boardEmpty) boardEmpty.hidden = tasks.length > 0;
-  document.getElementById("d-task-total").textContent = "共 " + tasks.length + " 个任务";
+  if (board) board.style.display = allTasks.length ? "" : "none";
+  if (boardEmpty) boardEmpty.hidden = allTasks.length > 0;
+  document.getElementById("d-task-total").textContent =
+    "共 " + allTasks.length + " 个任务"
+    + (tasks.length !== allTasks.length ? " · 筛选后 " + tasks.length : "")
+    + (tasks.length ? "（每列显示前 " + colPageSize + " 条）" : "");
   const cols = { "待办": "col-todo", "进行中": "col-doing", "待审查": "col-review", "已完成": "col-done", "阻塞": "col-blocked" };
   const counts = { "待办": 0, "进行中": 0, "待审查": 0, "已完成": 0, "阻塞": 0 };
+  const shown = { "待办": 0, "进行中": 0, "待审查": 0, "已完成": 0, "阻塞": 0 };
+  const hidden = { "待办": 0, "进行中": 0, "待审查": 0, "已完成": 0, "阻塞": 0 };
   for (const k of Object.keys(cols)) document.getElementById(cols[k]).innerHTML = "";
   tasks.forEach(t => {
     const tst = taskStCls(t.status);
     const tpri = priCls(t.priority);
     counts[tst] = (counts[tst] || 0) + 1;
+    // 分页：前 colPageSize 条正常渲染，其余只计数不建 DOM（1500 条时这是主要收益）
+    if (shown[tst] >= colPageSize) { hidden[tst] += 1; return; }
+    shown[tst] += 1;
     const el = document.createElement("div");
     el.className = "tcard";
     el.draggable = true;
@@ -228,6 +302,8 @@ function renderDetail() {
   for (const [k, v] of Object.entries(counts)) {
     document.getElementById("c-" + ({ "待办": "todo", "进行中": "doing", "待审查": "review", "已完成": "done", "阻塞": "blocked" }[k])).textContent = v;
   }
+  // 每列折叠入口（只在该列被截断时出现）
+  for (const k of Object.keys(cols)) renderTaskColumnMore(cols[k], hidden[k]);
 renderReality();
   renderGraph();
   renderStats();

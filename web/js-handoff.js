@@ -112,13 +112,16 @@ async function copyPackage() {
   catch (e) { fallbackCopy(ta.value); }
 }
 
-async function savePackage(ev) {
+async function savePackage(ev, toDesktop) {
   const content = document.getElementById("package-content").value;
   const name = (packageMode === "all" ? "全项目交接包" : (current ? current.name : "项目")) + "_" + new Date().toISOString().slice(0, 10) + ".md";
   const btn = (ev && ev.currentTarget) || document.getElementById("package-save-btn");
   btn.classList.add("ai-loading-btn");
   try {
-    const r = await api("/api/export/save", { method: "POST", body: JSON.stringify({ filename: name, content }) });
+    const r = await api("/api/export/save", {
+      method: "POST",
+      body: JSON.stringify({ filename: name, content, to_desktop: !!toDesktop }),
+    });
     toast("已保存：" + r.path);
   } catch (e) { toast("保存失败：" + e.message); }
   btn.classList.remove("ai-loading-btn");

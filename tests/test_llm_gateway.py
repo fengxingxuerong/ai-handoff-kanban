@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
@@ -270,3 +272,175 @@ def test_load_config_recovers_from_last_good(tmp_path, monkeypatch):
     assert got["ai"]["active_model"] == "m"
     assert (tmp_path / "config.json.bak").exists(), "损坏原文没有留证"
     assert json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))["ai"]["active_model"] == "m"
+
+
+# ---------------- 2026-11-03：流式网关（stream_chat）与错误分类 ----------------
+
+class _RawHandler(BaseHTTPRequestHandler):
+    """按字节回放预编排响应的最小服务器：SSE 解析逻辑需要一个真正的 text/event-stream 对端。"""
+
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *args):        # 静音
+        pass
+
+    def do_POST(self):  # noqa: N802
+        srv = self.server
+        length = int(self.headers.get("Content-Length") or 0)
+        if length:
+            srv.requests.append(json.loads(self.rfile.read(length).decode("utf-8")))
+        body = srv.body
+        self.send_response(srv.status)
+        self.send_header("Content-Type", srv.ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class _RawSSE:
+    def __init__(self) -> None:
+        self.srv = None
+        self.requests: list[dict] = []
+
+    def __call__(self, ctype: str, body: bytes, status: int = 200) -> str:
+        self.stop()
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), _RawHandler)
+        self.srv.ctype, self.srv.body, self.srv.status = ctype, body, status
+        self.srv.requests = self.requests = []
+        self.srv.daemon_threads = True
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        return f"http://127.0.0.1:{self.srv.server_address[1]}/v1"
+
+    def stop(self) -> None:
+        if self.srv:
+            self.srv.shutdown()
+            self.srv.server_close()
+            self.srv = None
+
+
+@pytest.fixture
+def raw_sse():
+    box = _RawSSE()
+    yield box
+    box.stop()
+
+
+def _ep(name: str, base_url: str, models=("m",)) -> dict:
+    return {"name": name, "base_url": base_url, "api_keys": ["sk-stub-000000000001"],
+            "models": list(models), "enabled": True}
+
+
+SSE_BODY = (
+    'data: {"choices":[{"delta":{"content":"你"}}]}\n\n'
+    'data: {"choices":[{"delta":{"content":"好"}}]}\n\n'
+    'data: {"choices":[{"delta":{},"finish_reason":"stop"}],'
+    '"usage":{"prompt_tokens":1,"completion_tokens":2}}\n\n'
+    'data: [DONE]\n\n'
+).encode("utf-8")
+
+
+def test_stream_chat_parses_real_sse(raw_sse, no_sleep):
+    """真 text/event-stream 对端：逐帧拆 delta，done 帧带 finish 与端点名；请求必须带 stream=True。"""
+    url = raw_sse("text/event-stream", SSE_BODY)
+    events = list(llm.stream_chat(cfg_with(_ep("甲", url)), MSGS))
+    assert "".join(p for k, p in events if k == "delta") == "你好"
+    dones = [p for k, p in events if k == "done"]
+    assert dones and dones[0]["endpoint"] == "甲" and dones[0]["finish"] == "stop", dones
+    assert raw_sse.requests and raw_sse.requests[0].get("stream") is True, raw_sse.requests
+
+
+def test_stream_chat_tolerates_weird_sse_framing(raw_sse, no_sleep):
+    """省略 data: 前缀的行、注释行、坏 JSON 帧都要被跳过或收下，不能整个崩掉。"""
+    body = (
+        ': keepalive\n'
+        'not-a-frame\n'
+        '{"choices":[{"delta":{"content":"甲"}}]}\n'
+        'data: {不是JSON}\n'
+        'data: {"choices":[{"delta":{"content":"乙"}}]}\n\n'
+        'data: [DONE]\n\n'
+    ).encode("utf-8")
+    url = raw_sse("text/event-stream", body)
+    events = list(llm.stream_chat(cfg_with(_ep("甲", url)), MSGS))
+    assert "".join(p for k, p in events if k == "delta") == "甲乙"
+
+
+def test_stream_chat_falls_back_when_upstream_not_sse(stub, no_sleep):
+    """上游不支持 SSE（回普通 JSON）时退化成一次性 delta —— 调用方语义不变。"""
+    stub.push_text("整段回复")
+    events = list(llm.stream_chat(cfg_with(stub.endpoint("甲")), MSGS))
+    assert [p for k, p in events if k == "delta"] == ["整段回复"]
+    assert [p for k, p in events if k == "done"][0]["endpoint"] == "甲"
+
+
+def test_stream_chat_empty_reply_falls_to_next_endpoint(monkeypatch, no_sleep):
+    """空回复与 chat 同判：记失败、换下一个端点，而不是把空串当成功吐给前端。"""
+    monkeypatch.setattr(llm, "_preflight", lambda *a, **k: "")
+
+    def fake_sse(base_url, api_key, model, messages, temperature, timeout, max_tokens=llm.MAX_TOKENS):
+        if model == "空模型":
+            return
+        yield "delta", "有货"
+
+    monkeypatch.setattr(llm, "_sse_post", fake_sse)
+    cfg = cfg_with(_ep("甲", "http://127.0.0.1:9/v1", models=["空模型"]),
+                   _ep("乙", "http://127.0.0.1:9/v1", models=["满模型"]))
+    dones = [p for k, p in llm.stream_chat(cfg, MSGS) if k == "done"]
+    assert dones and dones[0]["endpoint"] == "乙"
+
+
+def test_stream_chat_midstream_break_raises_instead_of_swapping(monkeypatch, no_sleep):
+    """已经吐过字就不再换端点 —— 换端点会把两个模型的输出拼成一段精神分裂的回答；
+    宁可报「中途断开」让用户重试。"""
+    monkeypatch.setattr(llm, "_preflight", lambda *a, **k: "")
+
+    def fake_sse(base_url, api_key, model, messages, temperature, timeout, max_tokens=llm.MAX_TOKENS):
+        yield "delta", "前半段"
+        raise ConnectionResetError("reset by peer")
+
+    monkeypatch.setattr(llm, "_sse_post", fake_sse)
+    gen = llm.stream_chat(cfg_with(_ep("甲", "http://127.0.0.1:9/v1")), MSGS)
+    assert next(gen) == ("delta", "前半段")
+    with pytest.raises(llm.LLMError, match="中途断开"):
+        next(gen)
+
+
+def test_stream_chat_upstream_error_translates_to_chinese(stub, no_sleep):
+    """上游 4xx/5xx 不再是裸的「HTTP 400」：按正文与状态码翻成用户能照做的中文。"""
+    stub.push_status_body(400, "insufficient balance")
+    with pytest.raises(llm.LLMError) as ei:
+        list(llm.stream_chat(cfg_with(stub.endpoint("甲")), MSGS))
+    assert "余额不足" in str(ei.value), ei.value
+
+
+def test_chat_preflight_reports_dead_gateway_in_chinese():
+    """网关没开时 5s TCP 预检当场给中文结论，不再进 60s 读超时让用户干等。"""
+    cfg = cfg_with(_ep("死端点", "http://127.0.0.1:9/v1"))
+    with pytest.raises(llm.LLMError) as ei:
+        llm.chat(cfg, MSGS)
+    assert "连不上" in str(ei.value) and "网关未启动或端口不通" in str(ei.value), ei.value
+
+
+def test_preflight_direct():
+    assert llm._preflight("") == ""          # 空 host 不拦（交给后续请求去报错）
+    msg = llm._preflight("http://127.0.0.1:9/v1")
+    assert "连不上" in msg and "127.0.0.1:9" in msg, msg
+
+
+@pytest.mark.parametrize("code,body,expect", [
+    (429, "", "额度用尽/限流(429)"),
+    (401, "", "Key 无效(401)"),
+    (403, "", "Key 无效(403)"),
+    (402, "", "余额不足(402)"),
+    (404, "", "模型已下线(404)"),
+    (500, "", "服务错误(500)"),
+    (400, '{"error":{"message":"model not found","code":"model_not_found"}}', "模型名不存在"),
+    (400, '{"error":{"message":"invalid model format"}}', "模型名格式不正确"),
+    (400, '{"error":{"message":"insufficient balance"}}', "余额不足"),
+    (400, '{"error":{"message":"rate limit exceeded"}}', "额度用尽"),
+    (422, "", "请求被上游拒绝(422)"),
+    (418, "", "HTTP 418"),
+])
+def test_error_text_translates_upstream_errors(code, body, expect):
+    """分类顺序按「用户下一步动作」排：改 Key → 充值 → 换模型 → 等一会儿。"""
+    msg = llm._error_text(code, body)
+    assert expect in msg, msg

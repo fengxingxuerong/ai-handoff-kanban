@@ -25,7 +25,13 @@ from .fields import (
     DEFAULT_STATUS,
     MAX_BLOCKED_REASON,
     MAX_MILESTONE_NAME,
+    MAX_PROJECT_BACKGROUND,
+    MAX_PROJECT_HANDOFF,
+    MAX_PROJECT_NEXT_ACTION,
+    MAX_PROJECT_REPO_PATH,
     MAX_REPO_ACK_NOTE,
+    MAX_TASK_AGENT,
+    MAX_TASK_DESC,
     MAX_VIEW_NAME,
     MAX_VIEW_QUERY,
     _clean_milestones,
@@ -43,10 +49,10 @@ class ProjectIn(BaseModel):
     priority: Literal["高", "中", "低"] = "中"
     _canon_priority = field_validator("priority", mode="before")(canonical_priority)
     tags: list[str] = []
-    repo_path: str = ""
-    background: str = ""
-    handoff_note: str = ""
-    next_action: str = ""
+    repo_path: str = Field("", max_length=MAX_PROJECT_REPO_PATH)
+    background: str = Field("", max_length=MAX_PROJECT_BACKGROUND)
+    handoff_note: str = Field("", max_length=MAX_PROJECT_HANDOFF)
+    next_action: str = Field("", max_length=MAX_PROJECT_NEXT_ACTION)
     # 类型放宽为 list | None：清洗全部交给 _clean_milestones（非 dict 元素按规则丢弃、
     # 不 422 —— 方案口径是「类型不对的整条丢弃」）。若钉死 list[dict]，
     # pydantic 会在 validator 之前就把非 dict 元素拒掉，容错永远走不到。
@@ -69,14 +75,14 @@ class ProjectIn(BaseModel):
         return _clean_milestones(v or [])
 class TaskIn(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
-    desc: str = ""
+    desc: str = Field("", max_length=MAX_TASK_DESC)
     status: Literal["待办", "进行中", "待审查", "已完成", "阻塞"] = "待办"
     # 英文别名（todo / in_progress …）先归一，Literal 再判规范值 ——
     # mode="before" 跑在 Literal 校验**之前**，否则别名到不了 Literal
     _canon_status = field_validator("status", mode="before")(canonical_status)
     priority: Literal["高", "中", "低"] = "中"
     _canon_priority = field_validator("priority", mode="before")(canonical_priority)
-    agent: str = ""
+    agent: str = Field("", max_length=MAX_TASK_AGENT)
     due_date: str = ""            # 截止日期 YYYY-MM-DD，空=未设置
     refs: list[str] = []          # 相关代码位置，如 app/main.py:120；交接时用来说明"改哪里"
     depends_on: list[str] = []    # 前置任务 id（同一项目内），用于排"先做哪个"
@@ -167,6 +173,7 @@ class SaveExportBody(BaseModel):
     content: str = ""
     path: str | None = None  # 可选：显式保存路径（用户输入）
     overwrite: bool = False  # 显式路径时是否允许覆盖已有文件（默认不覆盖）
+    to_desktop: bool = False  # 显式选择"保存到桌面"；默认落 data_dir/exports/
 class AgentFilesBody(BaseModel):
     dir: str = ""                       # 目标仓库根目录；留空表示只预览不写盘
     targets: list[str] | None = None

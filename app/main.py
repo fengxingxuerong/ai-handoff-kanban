@@ -22,8 +22,9 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from html import escape as html_escape
 from pydantic import BaseModel, Field, field_validator, ValidationError
 
@@ -599,6 +600,39 @@ def _clean_views(v) -> list[dict]:
 
 app = FastAPI(title="AI 交接看板", docs_url=None, redoc_url=None)
 
+
+@app.exception_handler(RequestValidationError)
+async def _zh_validation_error(request: Request, exc: RequestValidationError):
+    """422 说人话：pydantic 的英文长句直接摊给用户，等于什么都没说。
+
+    最常撞的就是"文本超长"（2026-11-03 之前 desc 500KB 都能收），
+    这里统一翻成「字段 X 最多 N 字，当前 M 字」。
+    """
+    parts = []
+    for err in exc.errors():
+        loc = [str(x) for x in err.get("loc", []) if x not in ("body", "query", "path")]
+        field = ".".join(loc) or "请求体"
+        typ = err.get("type", "")
+        ctx = err.get("ctx") or {}
+        if typ == "string_too_long":
+            actual = ctx.get("actual_length")
+            if actual is None and isinstance(err.get("input"), str):
+                actual = len(err["input"])       # 部分 pydantic 版本不带 actual_length，用原始输入兜底
+            now = f"，当前 {actual} 字" if actual is not None else ""
+            parts.append(f"「{field}」超长：最多 {ctx.get('max_length')} 字{now}，请精简后再保存")
+        elif typ == "string_too_short":
+            parts.append(f"「{field}」不能为空")
+        elif typ in ("literal_error", "enum"):
+            parts.append(f"「{field}」取值不合法：只能是 {ctx.get('expected', '规定选项')}")
+        elif typ == "missing":
+            parts.append(f"缺少必填字段「{field}」")
+        elif typ in ("int_parsing", "int_type", "greater_than_equal", "less_than_equal"):
+            parts.append(f"「{field}」数值不合法")
+        else:
+            parts.append(f"「{field}」{err.get('msg', '格式不正确')}")
+    return JSONResponse({"detail": "；".join(parts) or "请求参数不合法", "errors": exc.errors()},
+                        status_code=422)
+
 WEB_DIR = _resource_path("web")
 DATA_FILE = data_file()
 
@@ -935,6 +969,8 @@ def list_projects():
             "next_action": p.get("next_action", ""),
             "created_at": p.get("created_at", ""), "updated_at": p.get("updated_at", ""),
             "task_counts": counts, "total_tasks": len(tasks),
+            # 示例数据打标：前端据此显示"这是示例，可一键清空"，而不是当真板子用
+            "is_sample": bool(p.get("is_sample") or str(p.get("id", "")).startswith("sample-")),
         })
     # 数据文件损坏并重建过：必须让用户知道，否则会以为项目凭空消失
     recovered, recovered_from = take_recovered_flag()
@@ -954,7 +990,16 @@ def list_projects():
 
 
 @app.post("/api/projects", status_code=201)
-def create_project(body: ProjectIn, client_ref: str = ""):
+def create_project_http(body: ProjectIn, client_ref: str = ""):
+    """HTTP 新建项目：重名直接 409。
+
+    只在 HTTP 门面做唯一性：MCP 的 `kanban_create_project` 仍沿用旧行为
+    （历史用例正是靠两个同名项目来验证「提示词二义性」的自保护逻辑）。
+    """
+    return create_project(body, client_ref, strict_name=True)
+
+
+def create_project(body: ProjectIn, client_ref: str = "", strict_name: bool = False):
     now = now_str()
     project = {
         "id": uuid.uuid4().hex[:12], "name": body.name.strip(), "status": body.status,
@@ -966,6 +1011,7 @@ def create_project(body: ProjectIn, client_ref: str = ""):
         "created_at": now, "updated_at": now,
     }
     ref = _clean_ref(client_ref)
+    box = {"retired": 0}
 
     def worker(data: dict):
         if ref:
@@ -975,9 +1021,22 @@ def create_project(body: ProjectIn, client_ref: str = ""):
                     if p.get("id") == hit:
                         return False, p      # 重试：原样返回，一个字节都不写
                 data.get(IDEM_KEY, {}).pop(ref, None)   # 键指向的记录已被删，别再认它
+        if strict_name:
+            want = project["name"].strip()
+            for other in data.get("projects", []):
+                if (other.get("name") or "").strip() == want:
+                    raise HTTPException(
+                        409,
+                        f"已存在同名项目「{want}」，请换一个名字，或直接在该项目内新建任务",
+                    )
 # 首次落盘：磁盘上还没有数据文件时，说明看板从未被真正使用过，
         # 内置示例数据只用于引导界面，不该跟着用户的第一条真实数据一起写进去。
+        # 2026-11-03：不再"静默" —— 把清掉了几条示例回传给前端，由界面明确告知。
         if not data_file().exists():
+            box["retired"] = sum(
+                1 for p in data.get("projects", [])
+                if p.get("is_sample") or str(p.get("id", "")).startswith("sample-")
+            )
             data["projects"] = []
         data.setdefault("projects", []).insert(0, project)
         if ref:
@@ -987,7 +1046,30 @@ def create_project(body: ProjectIn, client_ref: str = ""):
     changed, result = mutate(worker)
     if not changed:
         return {**result, "client_ref_replayed": True}   # 同 create_task：复制后再打标记
-    return result
+    resp = dict(result)
+    if box["retired"]:
+        resp["samples_retired"] = box["retired"]
+    return resp
+
+
+@app.post("/api/projects/clear-samples")
+def clear_sample_projects():
+    """一键清空示例项目（前端示例横幅用）。
+
+    示例是"首次引导"，可能被用户留在盘上很久。用户明确点"清空"才删，
+    不做任何自动清理 —— 自动删用户数据是更坏的体验。
+    """
+    def worker(data: dict):
+        projects = data.get("projects", [])
+        keep = [p for p in projects
+                if not (p.get("is_sample") or str(p.get("id", "")).startswith("sample-"))]
+        if len(keep) == len(projects):
+            return False, 0
+        data["projects"] = keep
+        return True, len(projects) - len(keep)
+
+    _, removed = mutate(worker)
+    return {"ok": True, "removed": removed}
 
 
 # ---- 持久化自定义视图（Plane Views 轻量版） ----
@@ -1156,6 +1238,21 @@ def _apply_project(p: dict, body: ProjectIn) -> None:
     })
 
 
+def _assert_unique_project_name(data: dict, name: str, exclude_id: str = "") -> None:
+    """改名/新建时挡重名：同名项目会让 AI 指令二义（实测返回 need_clarification）。
+
+    只比去空白后的全名，大小写按原样（中文项目名没有大小写概念）；
+    排除自己，否则"只改状态、名字不动"的提交会被自己挡下来。
+    """
+    want = (name or "").strip()
+    for other in data.get("projects", []):
+        if other.get("id") != exclude_id and (other.get("name") or "").strip() == want:
+            raise HTTPException(
+                409,
+                f"已存在同名项目「{want}」，请换一个名字，或直接在该项目内新建任务",
+            )
+
+
 def _as_list(v) -> list:
     if v is None:
         return []
@@ -1238,7 +1335,9 @@ def patch_project(pid: str, changes: dict) -> dict:
     所以补全必须发生在 `mutate` 里面。MCP 那几个 `*_update_*` 工具原来正是这样在外面读的。
     """
     def apply(p: dict, _data: dict) -> None:
-        _apply_project(p, _merge_into(ProjectIn, p, changes))
+        merged = _merge_into(ProjectIn, p, changes)
+        _assert_unique_project_name(_data, merged.name, p.get("id"))
+        _apply_project(p, merged)
 
     p = mutate_project(pid, apply)
     if p is None:
@@ -1264,6 +1363,7 @@ def patch_project_http(pid: str, body: dict):
 @app.put("/api/projects/{pid}")
 def update_project(pid: str, body: ProjectIn):
     def apply(p: dict, _data: dict) -> None:
+        _assert_unique_project_name(_data, body.name, p.get("id"))
         _apply_project(p, body)
 
     p = mutate_project(pid, apply)
@@ -1687,7 +1787,11 @@ def api_stats():
 
 @app.post("/api/export/save")
 def save_export(body: SaveExportBody):
-    """保存交接包：优先按用户指定路径，否则桌面，最后回退数据目录 exports/"""
+    """保存交接包：显式路径 > 数据目录 exports/ > 桌面（最后兜底）。
+
+    2026-11-03 改默认：以前默认先写桌面，用户桌面上会莫名多出「交接包.md」，
+    还容易被当成临时文件删掉。导出物是数据的一部分，默认跟着数据目录走；
+    想放桌面/仓库，走显式路径（前端提供"保存到桌面"按钮）。"""
     name = (body.filename or "交接包.md").strip().replace("/", "_").replace("\\", "_")
     content = body.content or ""
     if body.path and body.path.strip():
@@ -1714,8 +1818,15 @@ def save_export(body: SaveExportBody):
             raise HTTPException(500, f"写入失败：{e}")
     candidates = []
     desktop = Path(os.environ.get("USERPROFILE") or str(Path.home())) / "Desktop"
-    candidates.append(desktop / name)
-    candidates.append(data_dir() / "exports" / name)
+    if body.to_desktop:
+        # 用户显式点"保存到桌面"才写桌面；默认不再默默丢一个文件到桌面
+        candidates.append(desktop / name)
+        candidates.append(data_dir() / "exports" / name)
+    else:
+        # 默认落点：data_dir/exports/（与备份、报告同一处，用户找得回来）
+        candidates.append(data_dir() / "exports" / name)
+        # 数据目录不可写时才退到桌面，避免"什么都没保存"
+        candidates.append(desktop / name)
     for c in candidates:
         try:
             c.parent.mkdir(parents=True, exist_ok=True)
@@ -3152,13 +3263,8 @@ from .aireports import (  # noqa: E402
 )
 
 
-def _run_analyze(trigger: str = "manual") -> dict:
-    data = get_projects_data()
-    projects = data.get("projects", [])
-    cfg = llm.load_config()
-    messages = _build_analyze_prompt(_projects_brief(projects))
-    text, ep = llm.chat(cfg, messages, temperature=0.2, feature="监管分析")
-    parsed = _extract_json(text)
+def _build_analyze_report(parsed, ep: str, trigger: str) -> dict:
+    """把模型输出装配成报告并落盘（流式/非流式共用同一收尾）。"""
     if not isinstance(parsed, dict):
         raise ValueError("监管分析结果格式不正确")
     report = {
@@ -3174,8 +3280,75 @@ def _run_analyze(trigger: str = "manual") -> dict:
     return _save_report(report)
 
 
+def _run_analyze(trigger: str = "manual") -> dict:
+    data = get_projects_data()
+    projects = data.get("projects", [])
+    cfg = llm.load_config()
+    messages = _build_analyze_prompt(_projects_brief(projects))
+    text, ep = llm.chat(cfg, messages, temperature=0.2, feature="监管分析")
+    parsed = _extract_json(text)
+    return _build_analyze_report(parsed, ep, trigger)
+
+
+def _sse(payload: dict) -> str:
+    return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+
+
+def _ai_stream(messages: list, feature: str, temperature: float, finalize):
+    """把 `llm.stream_chat` 包成 SSE 响应。
+
+    - 每个 `data:` 帧：`{"delta": 片段, "chars": 累计字数}`（前端用来显示"已收到 N 字"）；
+    - 最后一帧：`{"done": true, "elapsed": 秒, "endpoint": 端点, ...finalize 结果}`；
+    - 失败帧：`{"error": 中文说明}` —— 前端直接弹这条，不再显示裸的 HTTP 400。
+    """
+    cfg = llm.load_config()
+    started = time.time()
+
+    def gen():
+        parts: list[str] = []
+        chars = 0
+        try:
+            for kind, payload in llm.stream_chat(cfg, messages, temperature=temperature,
+                                                 feature=feature):
+                if kind == "delta":
+                    parts.append(payload)
+                    chars += len(payload)
+                    yield _sse({"delta": payload, "chars": chars})
+                    continue
+                full = dict(payload)
+                full["text"] = "".join(parts)
+                try:
+                    final = finalize(full) or {}
+                except Exception as e:
+                    yield _sse({"error": f"AI 返回结果解析失败：{e}"})
+                    return
+                yield _sse({"done": True,
+                            "elapsed": round(time.time() - started, 2),
+                            "endpoint": full.get("endpoint", ""),
+                            "chars": len(full["text"]),
+                            **final})
+        except llm.LLMError as e:
+            yield _sse({"error": str(e)})
+        except Exception as e:
+            yield _sse({"error": f"AI 调用失败：{e}"})
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
+
+
 @app.post("/api/ai/analyze")
-def ai_analyze():
+def ai_analyze(stream: int = 0):
+    if stream:
+        data = get_projects_data()
+        messages = _build_analyze_prompt(_projects_brief(data.get("projects", [])))
+
+        def finalize(payload):
+            parsed = _extract_json(payload["text"])
+            return {"report": _build_analyze_report(parsed, payload.get("endpoint", ""), "manual")}
+
+        return _ai_stream(messages, "监管分析", 0.2, finalize)
     try:
         report = _run_analyze("manual")
         return report
@@ -3299,7 +3472,7 @@ def ai_apply_suggestions(body: list[SuggestionUpdate], dry_run: int = 0):
 
 
 @app.post("/api/ai/handoff/{pid}")
-def ai_generate_handoff(pid: str, body: HandoffBody):
+def ai_generate_handoff(pid: str, body: HandoffBody, stream: int = 0):
     found = find_project(pid)
     if not found:
         raise HTTPException(404, "项目不存在")
@@ -3314,9 +3487,17 @@ def ai_generate_handoff(pid: str, body: HandoffBody):
     user_msg = "项目信息：\n" + json.dumps(_projects_brief([p])[0], ensure_ascii=False, indent=1)
     if body.mode == "polish" and p.get("handoff_note"):
         user_msg += "\n\n现有交接说明（请在其基础上润色增强，保留有效信息）：\n" + p["handoff_note"]
+    messages = [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}]
+    # 用量标签修正（2026-11-03）：这里生成的是交接说明，以前错记成"会话提炼"，
+    # 导致用量页把交接生成的调用算在会话提炼头上。
+    if stream:
+        def finalize(payload):
+            return {"text": (payload.get("text") or "").strip()}
+
+        return _ai_stream(messages, "交接生成", 0.3, finalize)
     try:
         cfg = llm.load_config()
-        text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}], temperature=0.3, feature="会话提炼")
+        text, ep = llm.chat(cfg, messages, temperature=0.3, feature="交接生成")
         return {"text": text.strip(), "endpoint": ep}
     except llm.LLMError as e:
         raise HTTPException(502, f"AI 调用失败：{e}")
@@ -3348,7 +3529,7 @@ _CMD_TYPES = (
 
 
 @app.post("/api/ai/command")
-def ai_command(body: CommandBody):
+def ai_command(body: CommandBody, stream: int = 0):
     data = get_projects_data()
     projects = _projects_brief(data.get("projects", []))
     sys_msg = (
@@ -3366,9 +3547,15 @@ def ai_command(body: CommandBody):
     )
     user_msg = "看板数据：\n" + json.dumps(projects, ensure_ascii=False, indent=1) + "\n\n用户指令：" + body.text
     cmd_batch = uuid.uuid4().hex      # 前端执行这批动作时当幂等键前缀用，理由同会话提炼
+    messages = [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}]
+    if stream:
+        def finalize(payload):
+            return {"parsed": _extract_json(payload["text"]), "batch_ref": cmd_batch}
+
+        return _ai_stream(messages, "自然语言指令", 0.1, finalize)
     try:
         cfg = llm.load_config()
-        text, ep = llm.chat(cfg, [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}], temperature=0.1, feature="自然语言指令")
+        text, ep = llm.chat(cfg, messages, temperature=0.1, feature="自然语言指令")
         parsed = _extract_json(text)
         return {"parsed": parsed, "endpoint": ep, "batch_ref": cmd_batch}
     except llm.LLMError as e:

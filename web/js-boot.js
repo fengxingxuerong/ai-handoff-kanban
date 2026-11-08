@@ -383,10 +383,10 @@ async function loadUsage() {
     if (days.length) {
       const W = 560, H = 130, PL = 34, PR = 10, PT = 12, PB = 22;
       const iw = W - PL - PR, ih = H - PT - PB;
-      const maxCalls = Math.max(1, ...days.map(d => Math.max(d.calls || 0, 1)));
+      const maxCalls = Math.max(1, ...days.map(d => Math.max(d.attempts ?? d.calls ?? 0, 1)));
       const xs = i => PL + (days.length === 1 ? iw / 2 : i * iw / (days.length - 1));
       const ys = c => PT + ih - (c / maxCalls) * ih;
-      const pts = days.map((d, i) => `${xs(i).toFixed(1)},${ys(d.calls || 0).toFixed(1)}`).join(" ");
+      const pts = days.map((d, i) => `${xs(i).toFixed(1)},${ys(d.attempts ?? d.calls ?? 0).toFixed(1)}`).join(" ");
       const grid = [0, 0.5, 1].map(f => {
         const y = PT + ih * f;
         return `<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W - PR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>` +
@@ -397,7 +397,7 @@ async function loadUsage() {
         return show ? `<text x="${xs(i).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="var(--text-faint)">${esc(d.date.slice(5))}</text>` : "";
       }).join("");
       const dots = days.map((d, i) =>
-        `<circle cx="${xs(i).toFixed(1)}" cy="${ys(d.calls || 0).toFixed(1)}" r="2.6" fill="var(--accent, #2e7cf6)"><title>${esc(d.date)}：${d.calls} 次调用${d.failed ? "（失败 " + d.failed + "）" : ""}</title></circle>`).join("");
+        `<circle cx="${xs(i).toFixed(1)}" cy="${ys(d.attempts ?? d.calls ?? 0).toFixed(1)}" r="2.6" fill="var(--accent, #2e7cf6)"><title>${esc(d.date)}：尝试 ${d.attempts ?? d.calls} 次，成功 ${d.success ?? d.calls}，失败 ${d.failed || 0}</title></circle>`).join("");
       chartHtml = `
         <div style="margin:8px 0 4px"><b>按日调用趋势</b></div>
         <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="按日 AI 调用次数折线图">
@@ -411,20 +411,27 @@ async function loadUsage() {
     // —— 分布：端点 + 模型（都按调用数降序，最近 8 条） ——
     const rows = (list, kf, showCost) => list.slice(0, 8).map((it, i) => {
       const name = kf(it);
-      const c = it.calls || 0, f = it.failed || 0, tk = it.tokens || 0;
+      // 口径统一：attempts 是分母，success/failed 是分子 —— 不再让"调用 4 次 / 失败 7 次"这种
+      // 分母不同的两个数字同屏出现。老记录没有 attempts 时退回 calls+failed。
+      const a = it.attempts ?? ((it.calls || 0) + (it.failed || 0));
+      const c = it.success ?? (it.calls || 0), f = it.failed || 0, tk = it.tokens || 0;
       return `<div style="display:flex;gap:8px;align-items:center;font-size:12px;padding:2.5px 0">
         <span style="width:16px;color:var(--text-faint);text-align:right">${i + 1}</span>
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(name)}">${esc(name)}</span>
-        <span style="color:var(--text-dim)">${c}次${f ? `<span style="color:var(--red)">/败${f}</span>` : ""} · ${tk.toLocaleString()}tk</span>
+        <span style="color:var(--text-dim)">${a}次${f ? `<span style="color:var(--red)">（成功 ${c}/失败 ${f}）</span>` : ""} · ${tk.toLocaleString()}tk</span>
         ${showCost ? `<span style="min-width:64px;text-align:right">$${esc((it.cost || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }))}</span>` : ""}
       </div>`;
     }).join("") || "<div class='hint'>暂无记录（AI 功能调用后自动记录）</div>";
     const priced = eps.some(e => e.cost > 0);
 
+    const attempts = t.attempts ?? ((t.calls || 0) + (t.failed || 0));
+    const success = t.success ?? (t.calls || 0);
+    const failed = t.failed || 0;
+    const failRate = attempts ? Math.round(failed * 100 / attempts) : 0;
     box.innerHTML = `
       ${budgetHtml}
       <div style="font-size:12px;line-height:1.9">
-        调用 <b>${t.calls || 0}</b> 次（失败 ${t.failed || 0}） ·
+        尝试 <b>${attempts}</b> 次（成功 <b>${success}</b> / 失败 <b>${failed}</b>${attempts ? `，失败率 ${failRate}%` : ""}） ·
         Token <b>${(t.prompt_tokens || 0).toLocaleString()}</b> + <b>${(t.completion_tokens || 0).toLocaleString()}</b> ·
         估算成本 <b>$${esc((t.cost || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }))}</b>${priced ? "" : "（未配单价按 0）"}
       </div>

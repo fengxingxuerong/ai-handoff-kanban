@@ -105,6 +105,19 @@ MAX_SAVED_VIEWS = 30
 # 备注被原样写进审计行：不设上限时，一次请求就能把一行撑成任意长
 # （行数上限挡不住行内膨胀）。与 journal 同一条纪律：超限在边界被拒，不是被静默裁。
 MAX_REPO_ACK_NOTE = 500
+# ---- 自由文本长度上限（2026-11-03 用户视角优化）----
+# 以前项目背景 / 交接说明 / 下一步 / 任务描述都是"照收不误"：实测 500KB 的 desc、
+# 200KB 的 background 都能落盘，一次请求就能把 projects.json 撑成几十 MB，
+# 之后的每次读盘、导出、AI prompt 都跟着变慢。超限必须在边界被拒（422 + 中文说明），
+# 不是静默截断 —— 截断会让用户以为内容存上了。
+MAX_TASK_DESC = 20000
+MAX_PROJECT_BACKGROUND = 5000
+MAX_PROJECT_HANDOFF = 5000
+MAX_PROJECT_NEXT_ACTION = 2000
+MAX_PROJECT_REPO_PATH = 500
+MAX_TASK_AGENT = 60
+
+
 def _clean_milestones(v) -> list[dict]:
     """清洗项目的里程碑数组：`[{name, done?}]`。
 

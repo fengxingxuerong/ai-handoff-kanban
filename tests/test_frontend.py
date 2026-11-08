@@ -721,3 +721,22 @@ def test_empty_state_onboarding_shows_the_three_steps():
     assert "onboard.hidden = false" in blank.group(1), "真没项目时没显示引导"
     others = re.findall(r"onboard\.hidden = (true|false)", src)
     assert others.count("false") == 1, f"引导只该在「一个项目都没有」时出现，实际 false 出现 {others.count('false')} 次"
+
+
+def test_task_pagination_and_sample_banner_are_wired():
+    """2026-11-03 两处用户体验收口的静态契约。
+
+    ① 1500 条任务的看板五列一次全渲染会卡（实测滚动卡、切项目慢）：每列先渲染
+       TASK_PAGE_STEP 条，其余折叠成「加载更多」；步长要真是分页（10~200），
+       改成 1000000 等于没有分页。
+    ② 示例数据要打标并给「一键清空」的显式入口 —— 用户不该把示例当真板子用。
+    ③ 「加载更多」是动态建的按钮，也必须走 data-act 委托（约定 3），不挂内联 onclick。
+    """
+    assert 'id="sample-banner"' in HTML, "示例数据横幅不见了"
+    assert 'data-act="clearSamples"' in HTML, "横幅上的清空按钮没接线"
+    m = re.search(r"const TASK_PAGE_STEP = (\d+)", HTML)
+    assert m and 10 <= int(m.group(1)) <= 200, f"任务列分页步长不像分页：{m and m.group(1)}"
+    assert "function renderTaskColumnMore" in HTML, "「加载更多」渲染函数不见了"
+    assert 'setAttribute("data-act", "loadMoreTasks")' in HTML, \
+        "加载更多按钮必须走 data-act 委托，不能挂内联 onclick"
+    assert "loadMoreTasks" in ACTIONS_KEYS, "loadMoreTasks 没在 ACTIONS 表里登记"

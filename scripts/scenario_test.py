@@ -737,18 +737,17 @@ def run_all(api: Http, mcp: Mcp, data_dir: Path, repo_dir: Path, stub: StubLLM, 
           "创建成功、读回完全一致、导出不破坏 Markdown 结构（竖线需转义）", b2)
 
     def b3():
+        # 2026-11-03 起 HTTP 挡重名（同名项目让 AI 指令二义，实测返回 need_clarification）：
+        # 第二个同名项目要被 409 拒掉并给中文指引，且不影响已经建好的那个。
         st1, p1 = api.post("/api/projects", {"name": "重名项目", "status": "进行中", "priority": "中"})
-        st2, p2 = api.post("/api/projects", {"name": "重名项目", "status": "已完成", "priority": "低"})
+        st2, err = api.post("/api/projects", {"name": "重名项目", "status": "已完成", "priority": "低"})
         st3, d1 = api.get(f"/api/projects/{p1['id']}")
-        st4, d2 = api.get(f"/api/projects/{p2['id']}")
-        return expect(f"两个同名项目 id 不同（{p1['id'][:6]}… / {p2['id'][:6]}…），"
-                      f"各自状态 {d1['status']} / {d2['status']}",
-                      st1 == st2 == 201 and p1["id"] != p2["id"]
-                      and d1["status"] == "进行中" and d2["status"] == "已完成")
+        return expect(f"第二个同名项目被拒（{st2}：{str(err)[:42]}…），原项目不受影响（状态 {d1['status']}）",
+                      st1 == 201 and st2 == 409 and d1["status"] == "进行中")
 
     check("B3", "两个项目重名（很常见：版本并行、同名分支）",
-          "连续创建两个同名项目，状态不同",
-          "id 各自独立、互不干扰，字段不串", b3)
+          "先建一个，再建第二个同名项目",
+          "HTTP 直接 409 并给中文指引（同名会让 AI 指令二义），原项目不受影响", b3)
 
     def b4():
         pid = ids["闲鱼商品页 HTML 短链 v7.0"]

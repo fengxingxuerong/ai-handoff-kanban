@@ -59,6 +59,162 @@ async function api(path, opts) {
   return ct.includes("application/json") ? res.json() : res.text();
 }
 
+// ============ AI 长耗时可见反馈（2026-11-03） ============
+// 以前点「生成交接说明 / AI 指令 / 监管分析」后界面只剩按钮转圈，实测要等 30–50 秒，
+// 用户不知道是卡死还是还在跑。这里统一做三件事：
+//   1) 右下角浮条显示「已等待 N.N 秒 / 已收到 M 字」，每秒刷新（不是白屏）；
+//   2) 「取消」按钮直接 AbortController 断开请求（后端流式生成也随之停止）；
+//   3) 120 秒兜底超时，给中文说明而不是一直转。
+// 优先走服务端 SSE（stream=1）；服务端若回普通 JSON（如 summarize）自动降级，语义不变。
+let _aiProgressEl = null;
+let _aiAbort = null;
+
+function _aiProgressEnsure() {
+  if (_aiProgressEl) return _aiProgressEl;
+  const el = document.createElement("div");
+  el.id = "ai-progress";
+  el.setAttribute("role", "status");
+  el.setAttribute("aria-live", "polite");
+  el.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:9999;display:none;"
+    + "max-width:min(430px,82vw);background:var(--card,#1b1f27);color:var(--text,#e6e6e6);"
+    + "border:1px solid var(--border,#333);border-radius:10px;padding:10px 12px;"
+    + "box-shadow:0 8px 30px rgba(0,0,0,.35);font-size:12px;line-height:1.55";
+  el.innerHTML = '<div class="aip-text" style="font-weight:600"></div>'
+    + '<div style="display:flex;gap:10px;align-items:center;margin-top:6px">'
+    + '<button class="btn small aip-cancel" type="button">取消</button>'
+    + '<span class="aip-hint" style="opacity:.72;font-size:11px"></span></div>';
+  document.body.appendChild(el);
+  el.querySelector(".aip-cancel").addEventListener("click", () => {
+    if (_aiAbort) _aiAbort("cancel");
+  });
+  _aiProgressEl = el;
+  return el;
+}
+
+function _aiProgressShow(label) {
+  const el = _aiProgressEnsure();
+  el.style.display = "block";
+  el.querySelector(".aip-text").textContent = "🤖 " + label;
+  el.querySelector(".aip-hint").textContent = "已等待 0.0 秒";
+  return el;
+}
+
+function _aiProgressTick(el, secs, chars) {
+  el.querySelector(".aip-hint").textContent =
+    "已等待 " + secs.toFixed(1) + " 秒" + (chars ? " · 已收到 " + chars + " 字" : "");
+}
+
+function _aiProgressHide() {
+  if (_aiProgressEl) _aiProgressEl.style.display = "none";
+}
+
+/**
+ * 带进度/取消/超时的 AI 请求。
+ * @param {string} path  接口路径（自动追加 stream=1）
+ * @param {object} body  请求体
+ * @param {object} opts  {label, onDelta(piece, chars), timeoutMs}
+ * @returns {Promise<object>} 最终对象（SSE 的 done 帧或普通 JSON）
+ */
+async function aiFetch(path, body, opts) {
+  const o = opts || {};
+  const timeoutMs = o.timeoutMs || 120000;
+  const url = path + (path.includes("?") ? "&" : "?") + "stream=1";
+  const headers = { "Content-Type": "application/json" };
+  const tokenMeta = document.querySelector('meta[name="kanban-token"]');
+  if (tokenMeta && tokenMeta.content) headers["X-Kanban-Token"] = tokenMeta.content;
+
+  const el = _aiProgressShow(o.label || "AI 处理中");
+  const started = Date.now();
+  let chars = 0;
+  let abortedBy = "";
+  const ctrl = new AbortController();
+  _aiAbort = why => { abortedBy = why || "cancel"; ctrl.abort(); };
+  const tick = setInterval(() => _aiProgressTick(el, (Date.now() - started) / 1000, chars), 250);
+  const timer = setTimeout(() => { abortedBy = "timeout"; ctrl.abort(); }, timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "POST", headers, signal: ctrl.signal,
+      body: JSON.stringify(body === undefined || body === null ? {} : body),
+    });
+    if (!res.ok) {
+      let msg = "请求失败 (" + res.status + ")";
+      try { const j = await res.json(); if (j.detail) msg = j.detail; } catch (e) {}
+      throw new Error(msg);
+    }
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("text/event-stream")) {
+      const j = await res.json();                 // 该接口不支持流式：退化为一次性返回
+      _aiProgressTick(el, (Date.now() - started) / 1000, chars);
+      return j;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder("utf-8");
+    let buf = "";
+    let final = null;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) !== -1) {
+        const chunk = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        for (const line of chunk.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          let evt;
+          try { evt = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+          if (evt.delta) {
+            chars = evt.chars || (chars + evt.delta.length);
+            if (o.onDelta) o.onDelta(evt.delta, chars);
+            _aiProgressTick(el, (Date.now() - started) / 1000, chars);
+          } else if (evt.error) {
+            throw new Error(evt.error);
+          } else if (evt.done) {
+            final = evt;
+          }
+        }
+      }
+    }
+    if (!final) throw new Error("AI 流式响应结束但没收到完成标记，请重试一次");
+    return final;
+  } catch (e) {
+    if (e.name === "AbortError") {
+      if (abortedBy === "timeout") {
+        throw new Error("AI 响应超时（已等待 " + Math.round(timeoutMs / 1000)
+          + " 秒），已自动取消。可重试，或到 AI 设置里检查网关与模型");
+      }
+      throw new Error("已取消（已等待 " + ((Date.now() - started) / 1000).toFixed(1) + " 秒）");
+    }
+    if (e instanceof TypeError) throw new Error("网络错误：连不上本地看板服务，请确认服务仍在运行");
+    throw e;
+  } finally {
+    clearInterval(tick);
+    clearTimeout(timer);
+    _aiAbort = null;
+    _aiProgressHide();
+  }
+}
+
+// ============ 文本框字数计数（2026-11-03） ============
+// 后端加了 max_length（desc 20k / 背景·交接 5k / 下一步 2k），前端必须"边打字边看见"，
+// 否则用户是提交后才撞 422。约定：<div data-count-for="文本域id" data-max="上限">。
+function refreshCharCounters(scope) {
+  (scope || document).querySelectorAll("[data-count-for]").forEach(box => {
+    const ta = document.getElementById(box.dataset.countFor);
+    if (!ta) return;
+    const max = Number(box.dataset.max) || Number(ta.maxLength) || 0;
+    const len = (ta.value || "").length;
+    const over = max > 0 && len > max;
+    box.textContent = len.toLocaleString() + " / " + max.toLocaleString()
+      + (over ? " —— 超出上限，请精简后再保存" : "");
+    box.style.color = over ? "var(--red)" : "var(--text-faint)";
+  });
+}
+
+document.addEventListener("input", e => {
+  if (e.target.closest("textarea")) refreshCharCounters();
+});
+
 let toastTimer = null;
 function toast(msg) {
   const el = document.getElementById("toast");
@@ -159,6 +315,7 @@ function openModal(id) {
   if (!m.classList.contains("show")) modalOpener = document.activeElement;
   m.classList.add("show");
   modalScroller(m).scrollTop = modalScroll.get(id) || 0;
+  refreshCharCounters(m);      // 表单回填是代码赋值、不触发 input，这里补一次字数
   focusInto(m);
 }
 
@@ -174,6 +331,7 @@ const ACTIONS = {
   openProjectModal: () => openProjectModal(),
   clearSearch: () => clearSearch(),
   resetOverview: () => resetOverview(),
+  clearSamples: () => clearSamples(),
   openAICmd: () => openAICmd(),
   // 要转发 data-arg：报告面板既能"现生成一份"（无参）也能回看某一份历史（带 rid）。
   // 写成 `() => openReport()` 会把 rid 丢掉，点历史条目变成重新跑一次分析。
@@ -196,6 +354,8 @@ const ACTIONS = {
   gotoTask: (arg) => gotoTask(arg),
   // —— 详情页 ——
   openTaskModal: () => openTaskModal(),
+  // 任务列「还有 N 条，加载更多」：步长在 js-detail 的 TASK_PAGE_STEP
+  loadMoreTasks: () => { colPageSize += TASK_PAGE_STEP; renderDetail(); },
   openAssignModal: () => openAssignModal(),
   runAutoAssign: () => runAutoAssign(),
   editProject: () => editProject(),
@@ -225,6 +385,7 @@ const ACTIONS = {
   skipBlockedReason: () => skipBlockedReason(),
   saveAISettings: () => saveAISettings(),
   savePackage: (arg, ev, el) => savePackage({ currentTarget: el }),
+  savePackageDesktop: (arg, ev, el) => savePackage({ currentTarget: el }, true),
   saveAgentsMD: (arg, ev, el) => saveAgentsMD({ currentTarget: el }),
   // —— AI 能力 ——
   testAI: () => testAI(),

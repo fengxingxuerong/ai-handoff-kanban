@@ -48,12 +48,15 @@ def test_usage_aggregate_groups_dates_endpoints_and_cost():
     ]
     got = us.aggregate(recs, price_map)
     assert got["totals"] == {
-        "calls": 2, "failed": 1, "prompt_tokens": 300, "completion_tokens": 150,
+        # 三分口径：attempts=总尝试，success=成功，calls 保留=success（兼容老视图）
+        "calls": 2, "success": 2, "failed": 1, "attempts": 3,
+        "prompt_tokens": 300, "completion_tokens": 150,
         "cost": pytest.approx(0.3)}      # 0.05+0.05 + 0.1+0.1
     assert [d["date"] for d in got["by_date"]] == ["2026-10-01", "2026-10-02"]
+    assert got["by_date"][0]["attempts"] == 2
     assert got["by_date"][0]["calls"] == 1 and got["by_date"][0]["failed"] == 1
     assert [e["endpoint"] for e in got["by_endpoint"]] == ["A", "B"]
-    assert got["by_endpoint"][0]["calls"] == 2
+    assert got["by_endpoint"][0]["calls"] == 2 and got["by_endpoint"][0]["attempts"] == 2
     assert got["by_model"]["m1"]["calls"] == 2 and got["by_model"]["m2"]["failed"] == 1
     assert got["by_feature"]["监管"]["cost"] == pytest.approx(0.1)   # 100/1000*0.5 + 50/1000*1.0
 
@@ -93,7 +96,8 @@ def test_usage_endpoint_returns_by_date_by_endpoint_and_budget(app_client):
     # 旧键保留（test_api.py 也在断）
     assert "totals" in body and "by_feature" in body and "by_model" in body and "recent" in body
     # 新键
-    assert body["by_date"] == [{"date": "2026-10-01", "calls": 1, "failed": 1,
+    assert body["by_date"] == [{"date": "2026-10-01", "calls": 1, "success": 1,
+                                "failed": 1, "attempts": 2,
                                 "tokens": 100, "cost": 0.0}]
     assert body["by_endpoint"][0]["endpoint"] == "A"
     assert body["budget"] is None

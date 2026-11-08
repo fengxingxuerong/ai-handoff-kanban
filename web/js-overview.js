@@ -5,6 +5,7 @@ async function loadOverview() {
     const [pData, sData] = await Promise.all([api("/api/projects"), api("/api/stats")]);
     projects = pData.projects;
     stats = sData;
+    updateSampleBanner();
     if (pData.data_recovered) {
       toast(pData.recovered_from === "last-good"
         ? "数据文件损坏：已自动从最近一次正常保存的数据恢复（损坏文件留档为 .bak）"
@@ -33,6 +34,15 @@ async function loadOverview() {
         + ' <button class="btn" data-act="loadOverview">重试</button></div>';
     }
   }
+}
+
+// 示例数据横幅：当前列表只要还有示例项目就亮出来（标 is_sample 或 id 以 sample- 开头）。
+// 不放"自动消失"逻辑：清不清空由用户点按钮决定。
+function updateSampleBanner() {
+  const el = document.getElementById("sample-banner");
+  if (!el) return;
+  const has = (projects || []).some(p => p.is_sample || String(p.id || "").startsWith("sample-"));
+  el.style.display = has ? "flex" : "none";
 }
 
 function setFilter(el, f) {

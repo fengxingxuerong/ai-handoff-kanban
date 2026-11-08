@@ -197,7 +197,34 @@ from pathlib import Path
 # 前端 20 条是新的覆盖层）、雷达基线读-改-写补跨进程锁、社区入口文件 + 让它们失效会红、
 # `.gitignore` 双向钉子；**2026-10-31 打包健壮性**：产物被外部进程占用时改名让位 +
 # 一次重试（scripts/exe_build.py，事故根因是 MCP 产物被 AI 代理宿主当服务跑着）。
-__version__ = "1.10.0"
+# 1.11.0（2026-11-03~04）：用户视角收口轮（一次面向用户的体验改版，故按次版本号）。
+# ① AI 流式输出：llm.stream_chat/_sse_post（上游不支持 SSE 时退化成一次性 delta，调用方
+#    语义不变）；analyze/handoff/command 三端点加 stream=1 —— SSE 帧 delta（带累计字数）/
+#    done（带最终结果）/error（中文说明），端点全挂不再回 502 而是在帧里说人话；
+#    **已经吐过字就不再换端点**（换端点会把两个模型的输出拼成一段精神分裂的回答，
+#    宁可报「中途断开」）。前端 aiFetch 流式读取 + 进度（已收到 N 字/耗时）。
+# ② 连接预检：llm._preflight 5s TCP 握手 —— 网关没开从 30~60s 白等变成 ≤5s 的中文结论
+#    （实测 analyze 偶发 33.53s 白屏的根因）。
+# ③ 上游错误分类 llm._error_text：429/401/402/404/5xx/model_not_found 翻成用户能照做的
+#    中文动作（改 Key → 充值 → 换模型 → 等一会儿），括号保留原始状态码与上游原文。
+# ④ 自由文本长度上限（fields/schemas）：desc 20000 / background·handoff 5000 /
+#    next_action 2000 / repo_path 500 / agent 60 —— 实测 500KB desc、200KB background
+#    都能落盘，一次请求能把 projects.json 撑成几十 MB。超限 422 拒绝，不静默截断。
+# ⑤ 422 说人话：_zh_validation_error 把 pydantic 英文长句翻成
+#    「字段 X 超长：最多 N 字，当前 M 字」。
+# ⑥ 项目重名 409：新建/改名（PUT/PATCH）挡重名 —— 同名项目实测让 AI 指令二义
+#    （need_clarification）。唯一性有意只做 HTTP 门面（MCP 历史用例靠两个同名项目
+#    验证「提示词二义性」的自保护逻辑）。
+# ⑦ 示例数据闭环：is_sample 打标（sample- 前缀同认）+ 首屏横幅与一键清空端点
+#    （只删示例、幂等）+ 首条真实数据退休示例时回执点名清了几条 —— 不再静默。
+# ⑧ 杂项：任务列分页（每列 50 条 +「加载更多」；1500 条任务的看板五列一次全渲染实测卡）；
+#    交接包默认落数据目录 exports/（显式「保存到桌面」才写桌面，不再默默丢文件）；
+#    用量统计三分口径 attempts/success/failed（以前 calls=4 / failed=7、失败率 175%）；
+#    交接生成的用量标签从「会话提炼」改正。
+# 收口（11-04）：补 32 条用例（重名 409 / 中文 422 / 清示例 / SSE 三端点与错误帧 /
+# 网关流式与错误分类 / 前端静态钉子）+ 12 条变异探针（113→125）；修 js-detail 的
+# btn.onclick（动态内联事件 → data-act 委托，约定 3）。
+__version__ = "1.11.0"
 
 ROOT = Path(__file__).resolve().parent.parent
 

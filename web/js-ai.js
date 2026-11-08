@@ -48,7 +48,8 @@ async function runSummarize() {
   const btn = document.getElementById("summarize-btn");
   btn.classList.add("ai-loading-btn");
   try {
-    const r = await api("/api/ai/summarize", { method: "POST", body: JSON.stringify({ pid: currentPid, text }) });
+    const r = await aiFetch("/api/ai/summarize", { pid: currentPid, text },
+      { label: "AI 正在提炼会话（可随时取消）" });
     summarizeData = r.parsed;
     summarizeTargetPid = currentPid;
     summarizeBatchRef = r.batch_ref || "";
@@ -225,7 +226,7 @@ async function testAI() {
   const btn = document.getElementById("ai-test-btn");
   btn.classList.add("ai-loading-btn");
   try {
-    const r = await api("/api/ai/test", { method: "POST" });
+    const r = await aiFetch("/api/ai/test", null, { label: "正在测试 AI 连接", timeoutMs: 40000 });
     if (r.ok) toast("连接成功：" + r.endpoint + " → " + (r.reply || "OK") + " ✓");
     else toast("连接失败：" + r.error);
   } catch (e) { toast("测试失败：" + e.message); }
@@ -272,7 +273,13 @@ async function openReport(rid) {
       currentReport = await api("/api/ai/reports/" + rid);
       document.getElementById("report-meta").textContent = "历史报告 · " + currentReport.created_at + " · " + (currentReport.endpoint || "");
     } else {
-      currentReport = await api("/api/ai/analyze", { method: "POST" });
+      const r = await aiFetch("/api/ai/analyze", null, {
+        label: "AI 正在分析全部项目（可取消）",
+        onDelta: (_, chars) => {
+          document.getElementById("report-meta").textContent = "生成中… 已收到 " + chars + " 字";
+        },
+      });
+      currentReport = r.report || r;
       document.getElementById("report-meta").textContent = "生成于 " + currentReport.created_at + " · " + (currentReport.endpoint || "");
     }
     renderReport(currentReport);
@@ -426,7 +433,8 @@ async function sendCommand() {
   const sendBtn = document.getElementById("cmd-send-btn");
   sendBtn.classList.add("ai-loading-btn");
   try {
-    const r = await api("/api/ai/command", { method: "POST", body: JSON.stringify({ text }) });
+    const r = await aiFetch("/api/ai/command", { text },
+      { label: "AI 正在解析指令（可取消）" });
     const parsed = r.parsed || {};
     cmdBatchRef = r.batch_ref || "";
     if (parsed.need_clarification) {
@@ -570,10 +578,15 @@ async function openAIHandoff() {
 async function generateHandoff() {
   const mode = document.getElementById("ai-handoff-mode").value;
   const btn = document.getElementById("ai-handoff-gen-btn");
+  const out = document.getElementById("ai-handoff-result");
+  out.value = "";
   btn.classList.add("ai-loading-btn");
   try {
-    const r = await api("/api/ai/handoff/" + currentPid, { method: "POST", body: JSON.stringify({ mode }) });
-    document.getElementById("ai-handoff-result").value = r.text;
+    const r = await aiFetch("/api/ai/handoff/" + currentPid, { mode }, {
+      label: "AI 正在生成交接说明（可取消）",
+      onDelta: (piece) => { out.value += piece; },   // 边生成边写入，40 秒不再白屏
+    });
+    out.value = r.text;
     toast("生成完成 ✓");
   } catch (e) { toast("生成失败：" + e.message); }
   btn.classList.remove("ai-loading-btn");

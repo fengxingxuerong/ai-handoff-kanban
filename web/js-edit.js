@@ -48,6 +48,35 @@ function fallbackCopy(text) {
 }
 
 // ============ 项目增删改 ============
+// 前端即时重名校验（后端还有一道 409）：列表里已经有同名项目时，输入框下面当场提示，
+// 不要让用户填完整张表单、点保存、才看到"已存在同名项目"。
+function projectNameTaken(name, excludeId) {
+  const want = String(name || "").trim();
+  if (!want) return false;
+  return (projects || []).some(p => p.id !== excludeId && String(p.name || "").trim() === want);
+}
+
+(function bindProjectNameCheck() {
+  const input = document.getElementById("f-name");
+  const hint = document.getElementById("f-name-hint");
+  if (!input || !hint) return;
+  input.addEventListener("input", () => {
+    const taken = projectNameTaken(input.value, editProjectId);
+    hint.textContent = taken ? "已存在同名项目，请换一个名字，或直接在该项目内新建任务" : "";
+    hint.style.display = taken ? "block" : "none";
+  });
+})();
+
+// 一键清空示例项目（只删 is_sample / sample-*，真实项目一条不动）。
+async function clearSamples() {
+  if (!confirm("确定清空所有示例项目吗？你自己创建的真实项目不会受影响。")) return;
+  try {
+    const r = await api("/api/projects/clear-samples", { method: "POST" });
+    toast(r && r.removed ? `已清空 ${r.removed} 个示例项目 ✓` : "没有可清空的示例项目");
+    loadOverview();
+  } catch (e) { toast("清空失败：" + e.message); }
+}
+
 // 标签 chip：预设的写在 HTML 里，项目自带的自定义标签按需创建（同名只留一个）。
 // 关键是"界面上的 chip"与 selTags（保存时的真值）必须始终一一对应 ——
 // 以前自定义 chip 的创建/删除散在输入框事件里，出现过标签在 selTags 里
@@ -192,6 +221,26 @@ document.getElementById("f-tag-input").addEventListener("keydown", e => {
 async function saveProject() {
   const name = document.getElementById("f-name").value.trim();
   if (!name) { toast("请填写项目名称"); return; }
+  // 字数上限与后端 max_length 对齐：超限当场说清楚，不发请求、也不静默截断
+  const LIMITS = [
+    ["f-bg", 5000, "项目背景"],
+    ["f-handoff", 5000, "交接说明"],
+    ["f-next", 2000, "下一步行动"],
+  ];
+  for (const [id, max, label] of LIMITS) {
+    const val = document.getElementById(id).value;
+    if (val.length > max) {
+      toast(`${label}超长：最多 ${max} 字，当前 ${val.length} 字，请精简后再保存`);
+      refreshCharCounters(document.getElementById("proj-modal"));
+      return;
+    }
+  }
+  if (projectNameTaken(name, editProjectId)) {
+    const hint = document.getElementById("f-name-hint");
+    if (hint) { hint.textContent = "已存在同名项目，请换一个名字，或直接在该项目内新建任务"; hint.style.display = "block"; }
+    toast("已存在同名项目「" + name + "」，请换一个名字");
+    return;
+  }
   const body = {
     name,
     status: document.getElementById("f-status").value,
@@ -210,13 +259,14 @@ next_action: document.getElementById("f-next").value.trim(),
       toast("项目已更新 ✓");
     } else {
       // 示例数据只用于引导（app/main.py create worker 的「首次落盘」分支）：
-      // 第一笔真实创建时，示例项目会被整体丢弃、不落盘。检测「当前列表全是
-      // sample-*」，把这件事在 toast 里说透 —— 否则新用户会以为示例数据被误删。
-      const hasSample = projects.some(p => String(p.id || "").startsWith("sample-"));
-      const hasReal = projects.some(p => !String(p.id || "").startsWith("sample-"));
+      // 第一笔真实创建时，示例项目会被整体丢弃、不落盘。后端把清掉的数量回传
+      // （samples_retired），这里把这件事说透 —— 否则新用户会以为示例数据被误删。
+      const hasSample = projects.some(p => String(p.id || "").startsWith("sample-") || p.is_sample);
+      const hasReal = projects.some(p => !String(p.id || "").startsWith("sample-") && !p.is_sample);
       const created = await api("/api/projects", { method: "POST", body: JSON.stringify(body) });
-      toast(hasSample && !hasReal
-        ? "项目已创建 ✓ 示例数据已完成引导使命，已自动让位"
+      const retired = (created && created.samples_retired) || 0;
+      toast((hasSample && !hasReal) || retired
+        ? `项目已创建 ✓ 示例数据已完成引导使命，已自动让位${retired ? `（${retired} 条，未写入磁盘）` : ""}`
         : "项目已创建 ✓");
     }
     closeModal("proj-modal");
@@ -369,12 +419,16 @@ function syncBlockedRow() {
 async function saveTask() {
   const title = document.getElementById("t-title").value.trim();
   if (!title) { toast("请填写任务标题"); return; }
+  const desc = document.getElementById("t-desc").value.trim();
+  const agent = document.getElementById("t-agent").value.trim();
+  if (desc.length > 20000) { toast(`任务描述超长：最多 20000 字，当前 ${desc.length} 字，请精简后再保存`); return; }
+  if (agent.length > 60) { toast("负责 AI 名称最多 60 字"); return; }
   const body = {
     title,
-    desc: document.getElementById("t-desc").value.trim(),
+    desc,
     status: document.getElementById("t-status").value,
     priority: document.getElementById("t-priority").value,
-    agent: document.getElementById("t-agent").value.trim(),
+    agent,
     due_date: document.getElementById("t-due").value || "",
     refs: document.getElementById("t-refs").value.split(",").map(s => s.trim()).filter(Boolean),
     // 验收标准一行一条；后端会再去空去重限量（超 10 条留前 10、单条超 120 字截断）

@@ -54,7 +54,7 @@
 | `app/aireports.py` | 监管报告的落盘/裁剪/历史/趋势（2026-10-06 拆出）：`reports_dir` / `_save_report` / `_trim_reports` / `_latest_report_before` / `_attach_trends` / 提示词构造。**`MAX_REPORTS` 的 monkeypatch 点在这里**（main 是转发别名）；`_run_analyze` 编排留在 main |
 | `app/aiprompt.py` | AI 编排的只读计算层（2026-10-06 拆出，依赖注入式）：看板简报 `projects_brief`（记忆分桶/git 探测经回调注入，main 的 monkeypatch 照常有效）与会话提炼 `summarize_inner`（find_project 注入）。**不落库** —— 写动作仍走 main 的 mutate() 临界区 |
 | `app/service.py` | 端口兜底值 `DEFAULT_PORT`、「活数据直链」`local_url(port, path)` 与**挑空闲端口** `free_port()` 的唯一实现（前两者 2026-10-24 拆出：此前这个数写死三份、直链格式抄两份；`free_port()` 2026-10-25 收拢 —— 此前 `ci_local` / `delivery_drill` / `scenario_test` 各写了一遍，而 `release_regression` 写死 `18399`，于是它成了唯一会被残留实例咬的那个）。**端口当参数收**，不自读环境变量 —— `test_api.py` 钉着「直链端口必须来自 `SERVICE_PORT`」。钉子 `test_default_port_is_written_in_exactly_one_place`；探针 `live_url_wrong_port` 在这里。为什么这么切见模块 docstring |
-| `app/fields.py` | 字段白名单、上限与清洗（纯常量 + 纯函数，2026-10-24 拆出）：`DEFAULT_*` 三个白名单、`MAX_MILESTONES` / `MAX_MILESTONE_NAME` / `MAX_BLOCKED_REASON` / `MAX_VIEW_*` / `MAX_SAVED_VIEWS` / `MAX_REPO_ACK_NOTE`、`_clean_milestones`。独立出来是为了**不成环**（`schemas` 要引用它们）。探针 `milestone_dedupe_removed` / `milestone_cap_removed` 在这里 |
+| `app/fields.py` | 字段白名单、上限与清洗（纯常量 + 纯函数，2026-10-24 拆出）：`DEFAULT_*` 三个白名单、`MAX_MILESTONES` / `MAX_MILESTONE_NAME` / `MAX_BLOCKED_REASON` / `MAX_VIEW_*` / `MAX_SAVED_VIEWS` / `MAX_REPO_ACK_NOTE`、**自由文本上限六个**（`MAX_TASK_DESC` / `MAX_PROJECT_BACKGROUND·HANDOFF·NEXT_ACTION` / `MAX_PROJECT_REPO_PATH` / `MAX_TASK_AGENT`，2026-11-03 起 schemas 用 `Field(max_length)` 在边界 422，不静默截断）、`_clean_milestones`。独立出来是为了**不成环**（`schemas` 要引用它们）。探针 `milestone_dedupe_removed` / `milestone_cap_removed` / `free_text_cap_dropped` 在这里 |
 | `app/schemas.py` | 17 个 HTTP 请求模型（Pydantic，2026-10-24 搬出、逐字未改）：入参形状与字段级清洗。只依赖叶子模块（`fields`/`journal`/`taskgraph`），**不 import main**；main 同名转发，`kanban.ProjectIn` 之类照旧。探针 `milestone_task_name_not_trimmed` / `repo_ack_note_uncapped` 在这里 |
 | `app/sampledata.py` | 首次运行的示例数据 `sample_data()`（纯函数，2026-10-24 拆出）。两条纪律跟着搬：时间戳按相对今天生成、**保持脱敏**（随 exe 分发，硬性约定 8）。探针 `sample_dates_hardcoded_again` 在这里 |
 | `app/repo_snapshot.py` | **看板快照 → 仓库内文件**（纯渲染器，2026-10-25）：把一块板渲染成 `docs/kanban/` 下一份人读 Markdown（目录页 + 每项目一份）+ 一份机读 `board.json` —— 于是 clone 了仓库、或没接 MCP 的 agent 也能看见看板（选项 A：数据仍以 `~/.ai-kanban` 为唯一真相源）。不读盘、不写盘、不认识脱敏（脱敏由调用方在渲染结果上统一做）。覆盖策略认文件里的**标记**：我们生成的才更新，用户手写的默认不动 |
@@ -76,7 +76,7 @@
 | `app/mcp_server.py` | **MCP 服务**（stdio，25 工具 + 资源 + 提示词；2026-10-25 从 `scripts/` 搬进包里，`pyproject.toml` 才指得到它）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/mcp_server.py` | **上面那份的兼容壳**（2026-10-25）：十几个调用点写着这条路径，改它们换不来功能。用**透明别名**（`sys.modules[__name__] = 真模块`，不是 `import *`）。必须薄，两条钉子看着 |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往源码注入 113 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。 **逐轮史**（哪一轮加了几条、为什么、每条 killer 是谁）已整段搬进 [docs/测试约定.md](docs/测试约定.md) 的「变异探针：逐轮史」一节 —— 内容搬走，不是删掉（**每一批加了哪几条、为什么**也在那一节）。**被外部信号打断时不会走到 `finally`**：2026-10-22 前台跑探针被沙箱 SIGTERM（进程外杀），变异留在 `web/index.html` 里没还原，下一次跑报"变异文本没匹配上"才暴露 —— 中断过的探针一律先 `git status` 自检再继续。**2026-10-24 起有启动预检**（`--preflight`，ci_local 两种模式都先跑）：old 命不中而 new 还在源码里 = **残渣**（报 `git checkout` 处置）；否则 = **表没同步**（哑火）。删除型变异 new 为空判不出残渣（空串 `in` 恒真，必须先排除）。**还原是「字节进、字节出」**（2026-10-25）：`read_bytes()` 进、`write_bytes()` 出，逐字节相等构造上成立；变异表里的 LF 文本由 `_native()` 适配文件自己的行尾 —— 为什么必须这样、两个方向各被什么咬过，见 [docs/测试约定.md](docs/测试约定.md)。钉子 `test_apply_and_run_restores_bytes_for_both_line_endings`。**第四批 4 条全静态**（见逐轮史）。**跑的时候挂 `running_lock()`**：第二份探针会**拒绝开跑**（退出码 3），陈锁自动清掉。id 一律全小写 snake_case。 |
+| `scripts/mutation_probe.py` | **变异探针**：往源码注入 125 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。 **逐轮史**（哪一轮加了几条、为什么、每条 killer 是谁）已整段搬进 [docs/测试约定.md](docs/测试约定.md) 的「变异探针：逐轮史」一节 —— 内容搬走，不是删掉（**每一批加了哪几条、为什么**也在那一节）。**被外部信号打断时不会走到 `finally`**：2026-10-22 前台跑探针被沙箱 SIGTERM（进程外杀），变异留在 `web/index.html` 里没还原，下一次跑报"变异文本没匹配上"才暴露 —— 中断过的探针一律先 `git status` 自检再继续。**2026-10-24 起有启动预检**（`--preflight`，ci_local 两种模式都先跑）：old 命不中而 new 还在源码里 = **残渣**（报 `git checkout` 处置）；否则 = **表没同步**（哑火）。删除型变异 new 为空判不出残渣（空串 `in` 恒真，必须先排除）。**还原是「字节进、字节出」**（2026-10-25）：`read_bytes()` 进、`write_bytes()` 出，逐字节相等构造上成立；变异表里的 LF 文本由 `_native()` 适配文件自己的行尾 —— 为什么必须这样、两个方向各被什么咬过，见 [docs/测试约定.md](docs/测试约定.md)。钉子 `test_apply_and_run_restores_bytes_for_both_line_endings`。**第四批 4 条全静态**（见逐轮史）。**跑的时候挂 `running_lock()`**：第二份探针会**拒绝开跑**（退出码 3），陈锁自动清掉。id 一律全小写 snake_case。 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打**两个**产物：`AI交接看板.exe`（GUI，`-w`，带 `web/`）与 `AI交接看板-MCP.exe`（**控制台子系统，故意不加 `-w`** —— MCP 走 stdio，而 `-w` 的 GUI 程序在 Windows 上拿不到标准流）。第二份是「只装了 exe 的用户没有 .venv，MCP 因此不可用」这个缺口的正解 |
 
@@ -513,33 +513,16 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 当前状态与下一步
 
-**状态：v1.10.0（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
+**状态：v1.11.0（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 写的是同一个数。
 
-**验证基线**：`pytest` 886 收集（881 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/ 分支覆盖率 92%（门槛 90）/ 37 个测试文件、835 个 `def test_` 且无重名；
-变异探针 113 条全被杀。**逐轮明细、每轮改了什么为什么、性能基线** → [docs/进度与版本档案.md](docs/进度与版本档案.md)；
+**验证基线（2026-11-09 实测）**：`pytest` 920 收集（915 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
+分支覆盖率 92%（门槛 90）/ 37 个测试文件、858 个 `def test_` 且无重名；变异探针 125 条全被杀。
+**逐轮明细、性能基线、打包前必读（exe 被占的 WinError 5）、下一步路线图（main 拆分已到头 /
+发版节奏 / 条件触发的路线图）** → [docs/进度与版本档案.md](docs/进度与版本档案.md) 的
+「当前状态与下一步（详版，2026-11-09 自本文件迁入）」一节 —— 内容搬走不是删掉；
 **本轮发版判据的可复算收档** → `DELIVERY/2026-10-31-交付判定.md`。
-
-**打包前必读的一条（2026-10-31 实测）**：`dist\AI交接看板-MCP.exe` 可能**正被用户自己的 AI 代理宿主
-当 MCP 服务跑着**（DSH 配置里 `command:` 指向它），清场杀掉会被宿主立刻拉起 —— 打包报
-`WinError 5` 时先想这一种，别只当残留。处置已收口在 `scripts/exe_build.py`（改名让位 + 一次重试）。
-
-**下一步（按价值排序，详版在档案里）**：
-1. **`app/main.py` 的拆分已到头**（3596 → 3255 行，历次拆出与纪律见目录表与档案）：
-   再往下只剩数据层本体（mutate / _load_data / 自愈备份）—— **那是临界区的心脏，不拆**；
-   守住「写操作必须走 `mutate()`」。`ai_command` 的提示词**有意留在 main**
-   （`test_ai_command_prompt_keys_on_ids_not_titles` 直接 inspect 端点源码，搬它要连测试迁，收益不值）。
-   以后搬任何模块，先 `grep` 探针表把门禁的 `file` 指针一起搬（哑火教训见档案）。
-2. **发版节奏（2026-10-24 起）**：`ci_local --with-exe` 全绿 → 推 main 等 CI 绿 →
-   打 tag（`v` + version.py 的数，不同源 CI 会拦）→ CI 自动发 GitHub Release（两个 exe）
-   并推 GHCR 镜像。仓库已更名 `fengxingxuerong/ai-handoff-kanban`（旧 URL 自动重定向），
-   配了 description/topics 与英文 README；官方 Registry 的元数据在仓库根 `server.json`。
-3. **条件触发的路线图（都已想清楚并论证，别提前做）**：evidence 完成证据（等真实
-   「缺证据导致接手失败」案例）、任务 claim/租约（等同时跑 2+ agent 改同一块板）、
-   SQLite（等列表接口日常 >300ms）、Smithery（等将来发包）。论证与触发线见档案
-   「不要再做的事」与各轮叙事。分发侧的待办是用户的登录动作（glama/表单/Registry 发布），
-   清单在 DELIVERY 材料，不属于工程。
 
 > ⚠️ **本文件可能被加载预算截断**（实测 65536 字节）。若你读到的内容在中途断掉，
 > 按上面那张「去哪看」的表去 `docs/` 取对应小节 —— **没读到不等于没有**。
