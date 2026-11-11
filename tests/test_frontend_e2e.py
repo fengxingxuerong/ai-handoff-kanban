@@ -884,7 +884,10 @@ def test_today_panel_lists_tasks_and_jumps_to_project(ui):
 
     page.click("[data-act='openToday']")
     page.wait_for_selector("#today-modal.show", timeout=10000)
-    assert "今日可做任务" in page.locator("#today-body").inner_text()
+    # 正文是 openToday 异步拉回来的：模态先 .show、内容后到 —— 等内容再断言，
+    # 别赌本机 fetch 比断言快（本仓库 E2E 假红的头号形状，修法见 AGENTS.md CI 教训）
+    page.wait_for_function(
+        "() => document.getElementById('today-body').innerText.includes('今日可做任务')", timeout=10000)
 
     page.click("[data-act='gotoTask']")
     page.wait_for_selector("#view-detail.active", timeout=10000)

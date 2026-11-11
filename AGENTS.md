@@ -434,6 +434,15 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 容易踩的坑
 
+- **pytest 全量 / live_ui_check 报 `FileNotFoundError: [WinError 2]` 时先查 playwright 的 driver**
+  （2026-11-12 实测）：两条失败路径的共同点是 `sync_playwright()` 要起它自带的 node driver ——
+  venv 里 `Lib\site-packages\playwright\driver\node.exe` 被清掉（杀软/半截 pip 操作都可能）后，
+  pytest 的 E2E 段与 live_ui_check 会在 0.4~60s 内同型报 WinError 2，而探针/场景/演练全绿，
+  极易误读成"代码红了"。检测：`Test-Path .venv\Lib\site-packages\playwright\driver\node.exe`；
+  修法：`pip install --force-reinstall --no-deps playwright==<锁文件里的版本>` +
+  `python -m playwright install chromium`（补齐第三级降级的 headless_shell）。
+  node.exe（JS 语法门禁用）与 git.exe 缺失是另两种 WinError 2 来源，但前者缺失时用例会
+  显式 skip、后者在探活里先暴露，形状不同。
 - **`-w` 打包后 `sys.stdout` / `sys.stderr` 是 `None`**（最坑的一个，2026-09-14 才挖出来）：
   uvicorn 的 `configure_logging()` 会调 `sys.stdout.isatty()` → `AttributeError`
   → `ValueError: Unable to configure formatter 'default'` → 后端线程直接死，
@@ -513,16 +522,16 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 
 ## 当前状态与下一步
 
-**状态：v1.11.0（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
+**状态：v1.11.1（以 `app/version.py` 为准）、可用。** 版本号是单一事实来源，改一处即贯通
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 写的是同一个数。
 
-**验证基线（2026-11-09 实测）**：`pytest` 920 收集（915 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
-分支覆盖率 92%（门槛 90）/ 37 个测试文件、858 个 `def test_` 且无重名；变异探针 125 条全被杀。
+**验证基线（2026-11-12 实测，`ci_local` full 8/8）**：`pytest` 920 收集（915 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
+分支覆盖率 92.23%（门槛 90）/ 37 个测试文件、858 个 `def test_` 且无重名；变异探针 125 条全被杀。
 **逐轮明细、性能基线、打包前必读（exe 被占的 WinError 5）、下一步路线图（main 拆分已到头 /
 发版节奏 / 条件触发的路线图）** → [docs/进度与版本档案.md](docs/进度与版本档案.md) 的
 「当前状态与下一步（详版，2026-11-09 自本文件迁入）」一节 —— 内容搬走不是删掉；
-**本轮发版判据的可复算收档** → `DELIVERY/2026-10-31-交付判定.md`。
+**本轮发版判据的可复算收档** → `DELIVERY/2026-11-12-交付判定.md`。
 
 > ⚠️ **本文件可能被加载预算截断**（实测 65536 字节）。若你读到的内容在中途断掉，
 > 按上面那张「去哪看」的表去 `docs/` 取对应小节 —— **没读到不等于没有**。

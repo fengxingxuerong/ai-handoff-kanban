@@ -34,7 +34,10 @@
   /* —— 文本 —— */
   --text: #e9eefb;
   --text-dim: #96a7c6;
-  --text-faint: #7a89a3;
+  /* faint 担着 10~11px 元信息（.pcard .meta / .tag2 / .agent / .due-badge / .op-tag）：
+     2026-11-09 体感轮提亮一档 —— 旧值 #7a89a3 在卡片底上 4.6:1，小字贴着可读下限；
+     #8a97b0 拉到 5.5:1，桌面 100% 缩放下元信息不再靠眯眼 */
+  --text-faint: #8a97b0;
 
   /* —— 品牌 / 语义色 —— */
   --accent: #4cc2ff;
@@ -304,7 +307,7 @@ header {
 .pcard .name { font-size: 15px; font-weight: 700; line-height: 1.35; letter-spacing: .01em; }
 .pcard .actions { display: flex; gap: 4px; opacity: 0; transition: opacity var(--t-fast) var(--ease); }
 .pcard:hover .actions, .pcard:focus-within .actions { opacity: 1; }
-.pcard .actions .btn { padding: 3px 7px; font-size: 11px; }
+.pcard .actions .btn { padding: 4px 9px; font-size: 11px; }
 
 .badge {
   display: inline-flex; align-items: center; gap: 5px;
@@ -477,12 +480,12 @@ header {
 .tcard .tfoot { display: flex; align-items: center; gap: 6px; }
 /* 阻塞原因：给到三行（决策材料不该被两行钳断）并上色，完整文本在 title */
 .tcard .blocked-reason { color: var(--red); -webkit-line-clamp: 3; }
-.tcard .tag2 { font-size: 10px; padding: 1px 7px; border-radius: var(--r-xs); }
+.tcard .tag2 { font-size: 10.5px; padding: 1px 7px; border-radius: var(--r-xs); }
 .tcard .tag2.pri-高 { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
 .tcard .tag2.pri-中 { color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, transparent); }
 .tcard .tag2.pri-低 { color: var(--gray); background: color-mix(in srgb, var(--gray) 12%, transparent); }
 .agent {
-  font-size: 10px; color: var(--accent); background: var(--accent-soft);
+  font-size: 10.5px; color: var(--accent); background: var(--accent-soft);
   padding: 1px 7px; border-radius: var(--r-xs); max-width: 120px; flex-shrink: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -661,7 +664,7 @@ header {
 .cmd-msg.ai { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); color: var(--text-dim); white-space: pre-wrap; }
 .cmd-msg.ai .op { display: flex; align-items: center; gap: 8px; padding: 6px 0; color: var(--text); border-bottom: 1px dashed var(--border); }
 .cmd-msg.ai .op:last-child { border-bottom: none; }
-.op-tag { font-size: 10px; padding: 1px 7px; border-radius: var(--r-xs); flex-shrink: 0; font-weight: 600; }
+.op-tag { font-size: 10.5px; padding: 1px 7px; border-radius: var(--r-xs); flex-shrink: 0; font-weight: 600; }
 .op-tag.create { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
 .op-tag.update { color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, transparent); }
 .op-tag.delete { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
@@ -800,7 +803,7 @@ header {
 .trend-empty .big { font-size: 34px; margin-bottom: 10px; }
 
 /* ---------- 截止日期 / 拖拽 ---------- */
-.due-badge { font-size: 10px; padding: 1px 7px; border-radius: var(--r-xs); margin-left: 6px; display: inline-block; vertical-align: 1px; }
+.due-badge { font-size: 10.5px; padding: 1px 7px; border-radius: var(--r-xs); margin-left: 6px; display: inline-block; vertical-align: 1px; }
 .due-overdue { color: var(--red); background: color-mix(in srgb, var(--red) 15%, transparent); font-weight: 700; }
 .due-soon { color: var(--orange); background: color-mix(in srgb, var(--orange) 15%, transparent); }
 .due-ok { color: var(--text-dim); background: var(--bg-soft); }
@@ -1200,6 +1203,14 @@ header {
 }
 @media (prefers-reduced-motion: reduce) {
   .skel-card::after { animation: none; opacity: .45; }
+  /* 2026-11-09 体感轮：从"只停骨架屏"扩成全局降级。JS 不监听 transitionend/animationend
+     （弹窗动画复位走 setTimeout），动效瞬时不留孤儿监听 —— 全局砍时长是安全的 */
+  *, *::before, *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ============================================================================
@@ -1464,7 +1475,7 @@ header { padding: 10px 20px; gap: 12px; }
 .repo-flag {
   display: inline-block; margin-left: 2px; padding: 1px 5px;
   border: 1px solid var(--accent-line); border-radius: 5px;
-  font: 9px var(--mono); letter-spacing: .02em; color: var(--accent);
+  font: 10px var(--mono); letter-spacing: .02em; color: var(--accent);
   white-space: nowrap;
 }
 
@@ -1546,3 +1557,26 @@ header { padding: 10px 20px; gap: 12px; }
 .kanban-empty .ke-icon { font-size: 30px; margin-bottom: 8px; }
 .kanban-empty .ke-title { font-size: 14px; font-weight: 650; color: var(--text); }
 .kanban-empty .ke-hint { font-size: 12px; color: var(--text-faint); margin: 6px 0 14px; }
+
+/* ============================================================================
+   2026-11-09 体感轮（第一批：可读性 / 横幅一致性 / 触屏可发现性 / 动效降级）
+   只动样式值与媒体查询，零 DOM 结构与 JS 改动；门禁钉住的形状全部未碰。
+   ========================================================================== */
+
+/* 示例数据横幅：此前是一坨内联样式，几何与 #remind-banner 不是一个系统
+   （左右不缩进 22px、圆角更小、两条横幅贴死无间隙）。迁进来对齐横幅家族的几何，
+   保留琥珀色身份（信息提示，不上警告红）。JS 用内联 display:flex 亮它，CSS 不碰 display */
+#sample-banner {
+  margin: 10px 22px 12px; padding: 10px 14px; border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--orange) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--orange) 30%, transparent);
+  color: var(--text); font-size: 13px;
+  align-items: center; gap: 10px; flex-shrink: 0;
+}
+#sample-banner b { color: var(--orange); }
+
+/* 触屏 / 无 hover 设备：.pcard 的 ☆✎🗑 此前 opacity:0、只在 hover 时浮现，
+   手指永远够不到。hover:none 环境下常显（鼠标环境的悬停浮现不变） */
+@media (hover: none) {
+  .pcard .actions { opacity: 1; }
+}

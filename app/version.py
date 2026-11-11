@@ -224,7 +224,23 @@ from pathlib import Path
 # 收口（11-04）：补 32 条用例（重名 409 / 中文 422 / 清示例 / SSE 三端点与错误帧 /
 # 网关流式与错误分类 / 前端静态钉子）+ 12 条变异探针（113→125）；修 js-detail 的
 # btn.onclick（动态内联事件 → data-act 委托，约定 3）。
-__version__ = "1.11.0"
+# 1.11.1（2026-11-09 工作、11-12 收口交付）：桌面体感轮 + 交付收口（修复为主，故按修订号）。
+# ① 可读性：--text-faint #7a89a3→#8a97b0 —— 它担着 10~11px 元信息（卡片 meta / tag2 /
+#    agent / due-badge / op-tag），4.6:1 贴着小字可读下限，5.5:1 后 100% 缩放不再眯眼；
+#    tag2 / agent / op-tag / due-badge 10→10.5px、repo-flag 9→10px、卡片操作按钮 padding
+#    3×7→4×9。
+# ② 触屏可发现性：@media (hover:none) 下 .pcard 的 ☆✎🗑 常显 —— 此前 opacity:0 只在
+#    hover 时浮现，手指环境永远够不到；鼠标环境的悬停浮现不变。
+# ③ prefers-reduced-motion 从「只停骨架屏」扩成全局动效降级（JS 弹窗动画复位走
+#    setTimeout、不依赖 transitionend/animationend，全局砍时长是安全的）。
+# ④ 示例数据横幅从一坨内联样式迁入 CSS：对齐横幅家族几何（22px 缩进 / --r-lg 圆角 /
+#    琥珀色身份保留；JS 用内联 display:flex 亮它，CSS 不碰 display）。零 DOM 结构与 JS 改动。
+# ⑤ E2E：today-panel 用例改 wait_for_function 等正文异步到达 —— 「本机 fetch 比断言快」
+#    是本仓库 E2E 假红的头号形状（AGENTS.md CI 教训），先确定性复现才改。
+# ⑥ 交付收口：v1.10.0 / v1.11.0 此前都停在「已提交、未打 tag」—— GitHub 最新 Release
+#    停在 v1.9.6，v1.10.0 的四项新能力与 v1.11.0 的整轮体验改版从没送到用户手里。
+#    本版随体感轮一起补上发版链（ci_local --with-exe 全绿 → 推 main → tag → CI 自动 Release）。
+__version__ = "1.11.1"
 
 ROOT = Path(__file__).resolve().parent.parent
 
