@@ -97,6 +97,12 @@ def call_with_retry(method, path, body=None, tries=2, timeout=180):
 
 
 def main():
+    # ✓/✗ 这类字符在 cp936 控制台（尤其输出被重定向进文件时）编不了码，整个测试
+    # 中途崩在 print 上 —— 2026-11-13 实测（与 release_regression 的编码教训同款形状）。
+    # 统一按 UTF-8 输出，编不了的字节降级，别让一次打印毁掉整轮结论。
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     print("=" * 66)
     print("真实 AI 功能测试：5 大功能 × 多模型交叉（消耗真实配额）")
     print("=" * 66)
