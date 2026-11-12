@@ -1,0 +1,2 @@
+d72e062b447affcbaca401992dd8a2f3f15e98ea2d6620b7f1f7237eabcc88e4 *dist/AI交接看板-MCP.exe
+5936a20a1216703aad79c250de917e443977119757f74f076caf26c0efc332f8 *dist/AI交接看板.exe

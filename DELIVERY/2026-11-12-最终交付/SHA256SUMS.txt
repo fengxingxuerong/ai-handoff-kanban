@@ -1,0 +1,17 @@
+# AI 交接看板 v1.11.1 —— 交付产物 SHA-256 校验清单
+# 采集时间：2026-11-12 22:2x（北京时间）；commit 2d7f802b5449e58d96f3c7e9d366916fa27541a1
+#
+# 两组产物是同一 commit、两次不同构建，字节不同，**不要交叉校验**：
+#   A 组 = 本机 dist/，2026-11-12 06:14 打包，PE PrivateBuild=2026-11-12 06:14
+#   B 组 = GitHub Release v1.11.1 资产，2026-11-11 23:02 UTC 由 CI runner 干净重打包
+# B 组的哈希来自 GitHub Release API 的 assets[].digest（sha256: 前缀已去掉）。
+#
+# --- A 组：本地 dist（sha256sum dist/*.exe 实测，见 evidence/local-sha256.txt）---
+5936a20a1216703aad79c250de917e443977119757f74f076caf26c0efc332f8  dist/AI交接看板.exe
+d72e062b447affcbaca401992dd8a2f3f15e98ea2d6620b7f1f7237eabcc88e4  dist/AI交接看板-MCP.exe
+#
+# --- B 组：GitHub Release 资产（evidence/release-v1.11.1.json 的 digest 字段）---
+febd92630845c9117146b6ad603a934c986f9b980cb5acdbf9dc6ba39ac337dc  AI-Handoff-Kanban-v1.11.1.exe
+3a80d6a08959b1414400557917c2b4e480e4055ed2e2c507fa9cb9e3bd0e0e3e  AI-Handoff-Kanban-MCP-v1.11.1.exe
+#
+# 复算：Get-FileHash -Algorithm SHA256 <文件>  或  sha256sum <文件>

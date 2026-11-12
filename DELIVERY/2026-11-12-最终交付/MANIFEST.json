@@ -1,0 +1,100 @@
+{
+  "schema": "ai-kanban-delivery-manifest/1",
+  "project": "AI 交接看板 / ai-handoff-kanban",
+  "version": "1.11.1",
+  "collected_at": "2026-11-12T22:59:46+08:00",
+  "repository": "https://github.com/fengxingxuerong/ai-handoff-kanban",
+  "delivered_commit": "2d7f802b5449e58d96f3c7e9d366916fa27541a1",
+  "version_single_source": "app/version.py::__version__",
+  "tag": {
+    "name": "v1.11.1",
+    "object": "e449b5cf1d6009b42992f9dce1daae4db1c5361b",
+    "peeled": "2d7f802b5449e58d96f3c7e9d366916fa27541a1",
+    "pushed": true,
+    "same_source_check": "ci run 43114262861 step 7 success"
+  },
+  "release": {
+    "tag": "v1.11.1",
+    "published_at": "2026-11-11T23:02:42Z",
+    "draft": false,
+    "prerelease": false,
+    "body": "**Full Changelog**: https://github.com/fengxingxuerong/ai-handoff-kanban/compare/v1.9.6...v1.11.1",
+    "assets": [
+      {
+        "name": "AI-Handoff-Kanban-v1.11.1.exe",
+        "size": 19462128,
+        "sha256": "febd92630845c9117146b6ad603a934c986f9b980cb5acdbf9dc6ba39ac337dc",
+        "head_http": 200
+      },
+      {
+        "name": "AI-Handoff-Kanban-MCP-v1.11.1.exe",
+        "size": 15858993,
+        "sha256": "3a80d6a08959b1414400557917c2b4e480e4055ed2e2c507fa9cb9e3bd0e0e3e",
+        "head_http": 200
+      }
+    ]
+  },
+  "ci": {
+    "gate_command": "python scripts/ci_local.py --with-exe",
+    "runs_for_delivered_commit": [
+      { "id": 43110514479, "event": "push", "conclusion": "success", "created_at": "2026-11-11T22:17:31Z", "completed_at": "2026-11-11T22:31:39Z" },
+      { "id": 43114262861, "event": "push", "conclusion": "success", "created_at": "2026-11-11T22:44:25Z", "completed_at": "2026-11-11T23:03:34Z" }
+    ],
+    "tag_run_jobs": {
+      "gates": { "conclusion": "success", "steps_success": 9, "notable": ["全部门禁 + 重新打包 + 冻结版冒烟", "tag 与 version.py 必须同源", "发布 GitHub Release"] },
+      "container": { "conclusion": "success", "steps_success": 6, "notable": ["容器真冒烟（tools/list）", "登录 GHCR 并推送 1.11.1 + latest"] }
+    }
+  },
+  "artifacts": {
+    "local_dist_note": "同一 commit 的另一次构建（2026-11-12 06:14），与 Release 资产字节不同，勿交叉校验",
+    "local_dist": [
+      { "file": "dist/AI交接看板.exe", "size": 18106262, "sha256": "5936a20a1216703ad79c250de917e443977119757f74f076caf26c0efc332f8", "pe_file_version": "1.11.1", "pe_private_build": "2026-11-12 06:14" },
+      { "file": "dist/AI交接看板-MCP.exe", "size": 14510422, "sha256": "d72e062b447affcbaca401992dd8a2f3f15e98ea2d6620b7f1f7237eabcc88e4", "pe_file_version": "1.11.1", "pe_private_build": "2026-11-12 06:14" }
+    ],
+    "oci_image": "ghcr.io/fengxingxuerong/ai-handoff-kanban-mcp:1.11.1"
+  },
+  "code_metrics": {
+    "app_py_files": 34, "app_py_lines": 10226,
+    "web_files": 12, "web_lines": 6605,
+    "test_py_files": 40, "test_py_lines": 16124, "def_test_count": 858,
+    "script_py_files": 21,
+    "http_routes": 64, "mcp_tools": 25, "agent_entry_targets": 9,
+    "docs_bytes": 331611
+  },
+  "quality": {
+    "published_baseline": {
+      "source": "DELIVERY/2026-11-12-交付判定.md (2026-11-12 06:14)",
+      "ci_local_full": "8/8", "ci_local_with_exe": "14/14",
+      "pytest_collected": 920, "pytest_passed": 915, "pytest_skipped": 5,
+      "branch_coverage": "92.23%", "coverage_floor": 90,
+      "mutation_probe": "125/125 killed",
+      "scenario": "32/32", "regression": "16 verified + 2 unverified (--no-ai)",
+      "drill": "21/21", "live_check": "14/0", "live_ui_check": "16/0",
+      "frozen_smoke": "11/0", "mcp_frozen_smoke": "10/0"
+    },
+    "closing_recheck": {
+      "ci_local_full": { "exit": 1, "steps": "7/8", "failed_step": "pytest 全量", "reported_coverage": "22.78%" },
+      "parallel_rerun": { "exit": 1, "reported_coverage": "14.82%", "root_cause": "[gw6] node down: Not properly terminated -> coverage: failed workers: gw6 -> 分片未交回", "tests_failed": 0, "tests_skipped": 5 },
+      "serial_rerun": { "command": "pytest -q -n0 --cov-fail-under 90", "exit": 0, "branch_coverage": "92.23%" },
+      "frozen_smoke": { "exit": 0, "result": "11/0" },
+      "mcp_frozen_smoke": { "exit": 0, "result": "10/0" },
+      "verdict": "本机 xdist/环境抖动导致覆盖率分片丢失，非代码缺陷；发版判据以远端 CI 两次 success + 06:14 本地 14/14 为准"
+    }
+  },
+  "known_gaps": [
+    "release_regression --no-ai 有 2 项标未验（需真实模型配额）",
+    "5 条 test_ai.py 活体用例默认跳过（需 KANBAN_LIVE=1），跳过审计按文件对账",
+    "非工程分发待办：GHCR 包转公开、MCP Registry publish、glama.ai 与目录站表单、PyPI 发包",
+    "条件触发路线图：evidence / claim 租约 / SQLite(>300ms) / Smithery",
+    "Release 正文未附 SHA-256 文本（README 承诺），本包 SHA256SUMS.txt 补齐；上传为第三资产属未做的外部动作",
+    "GHCR 包公开可见性本轮未判定（未认证 API 401）",
+    "本机 -n auto 偶发 worker 崩溃 → 覆盖率假红；串行 -n0 复跑可复算"
+  ],
+  "deliverable_files": [
+    "交付总报告.md", "SHA256SUMS.txt", "MANIFEST.json",
+    "evidence/ci_local-full.log", "evidence/pytest-recheck.log", "evidence/pytest-serial.log",
+    "evidence/frozen-smoke.log", "evidence/mcp-frozen-smoke.log",
+    "evidence/release-v1.11.1.json", "evidence/ci-runs.json", "evidence/ci-jobs-tag-run.json",
+    "evidence/git-meta.txt", "evidence/local-sha256.txt", "evidence/local-exe-stat.txt", "evidence/debug.log"
+  ]
+}
