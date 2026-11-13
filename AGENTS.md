@@ -76,7 +76,7 @@
 | `app/mcp_server.py` | **MCP 服务**（stdio，25 工具 + 资源 + 提示词；2026-10-25 从 `scripts/` 搬进包里，`pyproject.toml` 才指得到它）：代理可列项目/拉接手包(context)/读写任务与记忆/删任务删项目/生成交接物/导出全项目包/拍数据快照，交接内容与接手包可 `resources/read`、接手流程可 `prompts/get`。每个工具在 `TOOL_KIND` 里登记读写属性与标题（决定 `annotations`，也决定只读模式下是否出现在 `tools/list`），入参按各自 `inputSchema` 的 required/enum/type/additionalProperties 真的校验；`kanban_delete_project` 是唯一要求 `confirm=true` 的写操作，**恢复快照故意不做成工具** |
 | `scripts/mcp_server.py` | **上面那份的兼容壳**（2026-10-25）：十几个调用点写着这条路径，改它们换不来功能。用**透明别名**（`sys.modules[__name__] = 真模块`，不是 `import *`）。必须薄，两条钉子看着 |
 | `scripts/bench.py` | 读写性能基准（先量再改） |
-| `scripts/mutation_probe.py` | **变异探针**：往源码注入 125 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。 **逐轮史**（哪一轮加了几条、为什么、每条 killer 是谁）已整段搬进 [docs/测试约定.md](docs/测试约定.md) 的「变异探针：逐轮史」一节 —— 内容搬走，不是删掉（**每一批加了哪几条、为什么**也在那一节）。**被外部信号打断时不会走到 `finally`**：2026-10-22 前台跑探针被沙箱 SIGTERM（进程外杀），变异留在 `web/index.html` 里没还原，下一次跑报"变异文本没匹配上"才暴露 —— 中断过的探针一律先 `git status` 自检再继续。**2026-10-24 起有启动预检**（`--preflight`，ci_local 两种模式都先跑）：old 命不中而 new 还在源码里 = **残渣**（报 `git checkout` 处置）；否则 = **表没同步**（哑火）。删除型变异 new 为空判不出残渣（空串 `in` 恒真，必须先排除）。**还原是「字节进、字节出」**（2026-10-25）：`read_bytes()` 进、`write_bytes()` 出，逐字节相等构造上成立；变异表里的 LF 文本由 `_native()` 适配文件自己的行尾 —— 为什么必须这样、两个方向各被什么咬过，见 [docs/测试约定.md](docs/测试约定.md)。钉子 `test_apply_and_run_restores_bytes_for_both_line_endings`。**第四批 4 条全静态**（见逐轮史）。**跑的时候挂 `running_lock()`**：第二份探针会**拒绝开跑**（退出码 3），陈锁自动清掉。id 一律全小写 snake_case。 |
+| `scripts/mutation_probe.py` | **变异探针**：往源码注入 125 处语义改动（临期窗口、Origin 反转、脱敏漏规则、journal 折叠、幂等键截断、待拍板过滤、记忆召回权重、条目尺寸、落盘黑名单 fail-open…），逐条跑相关用例；**改了还全绿 = 盲区，判失败**。覆盖率回答"这行跑过没有"，它回答"这行错了会不会红"。 **逐轮史**（哪一轮加了几条、为什么、每条 killer 是谁）已整段搬进 [docs/测试约定.md](docs/测试约定.md) 的「变异探针：逐轮史」一节 —— 内容搬走，不是删掉（**每一批加了哪几条、为什么**也在那一节）。**被外部信号打断时不会走到 `finally`**：2026-10-22 前台跑探针被沙箱 SIGTERM（进程外杀），变异留在 `web/index.html` 里没还原，下一次跑报"变异文本没匹配上"才暴露 —— 中断过的探针一律先 `git status` 自检再继续。**2026-10-24 起有启动预检**（`--preflight`，ci_local 两种模式都先跑）：old 命不中而 new 还在源码里 = **残渣**（报 `git checkout` 处置）；否则 = **表没同步**（哑火）。删除型变异 new 为空判不出残渣（空串 `in` 恒真，必须先排除）。**还原是「字节进、字节出」**（2026-10-25）：`read_bytes()` 进、`write_bytes()` 出，逐字节相等构造上成立；变异表里的 LF 文本由 `_native()` 适配文件自己的行尾 —— 为什么必须这样、两个方向各被什么咬过，见 [docs/测试约定.md](docs/测试约定.md)。钉子 `test_apply_and_run_restores_bytes_for_both_line_endings`。**第四批 4 条全静态**（见逐轮史）。**跑的时候挂 `running_lock()`**：第二份探针会**拒绝开跑**（退出码 3），陈锁自动清掉。id 一律全小写 snake_case。**2026-11-14 起默认并行沙箱**：每 worker 一份 ≈10MB 工作区副本，变异只发生在副本里、**真源码全程只读**，691s → ~90s；`--workers 0` 回原地串行，契约不变（详见档案 2026-11-14 节与 `test_mutation_probe.py` 沙箱三条）。 |
 | `scripts/make_stamp.py` | **打包前**生成构建戳 `app/_build_stamp.py`（版本条显示的打包时间）；`build.bat` 与 CI 都会调，手动打包别忘了 |
 | `build.bat` | 建 venv、装依赖、生成构建戳、PyInstaller 打**两个**产物：`AI交接看板.exe`（GUI，`-w`，带 `web/`）与 `AI交接看板-MCP.exe`（**控制台子系统，故意不加 `-w`** —— MCP 走 stdio，而 `-w` 的 GUI 程序在 Windows 上拿不到标准流）。第二份是「只装了 exe 的用户没有 .venv，MCP 因此不可用」这个缺口的正解 |
 
@@ -497,7 +497,8 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
   **不要手填时间**：历史上它是常量 `"2026-09-15 12:00"`，而 exe 实际是 23:46 打的，
   于是"靠它判断是否落后"完全落空。
   **这条判据吃 mtime，所以任何"改文件又还原"的工具都会污染它** —— 变异探针就踩过
-  （2026-10-18 起已修：`_restore_mtime` 把时间戳一起拨回去）。看到它点名一串文件、
+  （2026-10-18 起已修：`_restore_mtime`；2026-11-14 起探针并行沙箱、真源码只读，污染源消失）。
+  看到它点名一串文件、
   而"内嵌前端就是仓库这一份"却是过的，先怀疑是不是刚跑过探针，别急着重打包。
 - **数据目录**：默认 `%USERPROFILE%\.ai-kanban`（Windows 下优先 `USERPROFILE` 而不是 `HOME`，
   否则受 Git Bash 的 HOME 干扰）。测试请用 `KANBAN_DATA_DIR` 隔离。
@@ -526,8 +527,9 @@ GEMINI.md / .clinerules/project.md / CONVENTIONS.md / .windsurfrules
 （界面版本条 / `/api/health` / MCP `serverInfo` / exe 的 PE 版本资源 / `tests/test_version.py`），
 且 `tests/test_docs.py` 会核对本文件与 README 写的是同一个数。
 
-**验证基线（2026-11-12 实测，`ci_local` full 8/8）**：`pytest` 920 收集（915 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
-分支覆盖率 92.23%（门槛 90）/ 37 个测试文件、858 个 `def test_` 且无重名；变异探针 125 条全被杀。
+**验证基线（2026-11-14 实测，`ci_local` full 8/8，门禁提速轮后）**：`pytest` 923 收集（918 通过 / 5 跳过，跳过的需 `KANBAN_LIVE=1`）/
+分支覆盖率 92.23%（门槛 90）/ 37 个测试文件、861 个 `def test_` 且无重名；变异探针 125 条全被杀
+（并行沙箱，691s → ~90s，详见档案）。
 **逐轮明细、性能基线、打包前必读（exe 被占的 WinError 5）、下一步路线图（main 拆分已到头 /
 发版节奏 / 条件触发的路线图）** → [docs/进度与版本档案.md](docs/进度与版本档案.md) 的
 「当前状态与下一步（详版，2026-11-09 自本文件迁入）」一节 —— 内容搬走不是删掉；

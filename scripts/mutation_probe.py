@@ -11,7 +11,8 @@
 - **inconclusive**    变异本身没生效（文本没匹配上）或探针跑挂了 → 别当成"过了"
 
 用法：
-    python scripts/mutation_probe.py                 # 全跑
+    python scripts/mutation_probe.py                 # 全跑（默认并行沙箱）
+    python scripts/mutation_probe.py --workers 0     # 原地串行（改真源码的老路径）
     python scripts/mutation_probe.py --only due_soon # 只跑某几条（逗号分隔）
     python scripts/mutation_probe.py --json out.json # 机器可读结果（给 CI/报告用）
 
@@ -20,10 +21,10 @@
    跑出来"存活"没有任何意义，不要往表里加。
 2. 存活不等于"测试写错了"，也可能是"这条规则确实没被测到"—— 两者都要补断言，
    补完再跑一次本脚本自证（存活 → 被杀）才闭环。
-3. 探针只改本地工作区文件，**跑完一定还原**（内存备份 + finally，不依赖 git），
-   而且**内容与 mtime 都要还原**（见 `_restore_mtime`：还原只写内容会把 mtime 刷成"刚刚"，
-   让 frozen_smoke 的"产物比源码旧"那条门禁在每次探针之后稳定假红）。
-   探针运行期间不要并行跑别的测试。
+3. 默认的**并行模式**只改每个 worker 的沙箱副本，真工作区全程只读（比串行版更
+   干净：mtime 不再被 125 次注入/还原扰动，frozen_smoke 的假红源头被拔掉）；
+   串行模式（`--workers 0`）才改本地工作区文件，跑完一定还原（内存备份 + finally，
+   不依赖 git），而且**内容与 mtime 都要还原**（见 `_restore_mtime`）。
 """
 from __future__ import annotations
 
@@ -35,7 +36,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,6 +48,64 @@ try:
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 except Exception:                                              # noqa: BLE001
     pass
+
+# ---------------------------------------------------------------------------
+# 沙箱并行（2026-11-14）
+#
+# 串行版每条变异 5.5s × 125 = 691s，占 ci_local 的 85%。并行化的关键不是把 pytest
+# 跑快，而是**别再让 125 条变异共用同一份源码**："注入→跑→还原"要求工作窗口里
+# 独占目标文件，串行版靠"同一时刻只有一份工作区"实现；并行版给每个 worker 一份
+# **工作区副本**，变异只发生在副本里 —— 真源码全程只读：
+#   · 字节还原 / mtime 还原契约原样保留（在副本里验，钉子不变）；
+#   · 真工作区的 mtime 不再被 125 次注入/还原扰动（frozen_smoke 假红的源头被拔掉）；
+#   · running_lock 仍全局唯一（防两份探针的副本落到同一份真源码上互不相识）。
+# ---------------------------------------------------------------------------
+
+SANDBOX_PREFIX = "kanban_probe_sb_"
+
+# 沙箱只要"源码 + 门禁要用到的东西"（pytest.ini / .coveragerc / .github / docs /
+# AGENTS.md 这些会被对账类用例读）；重目录拷了没用还拖慢启动。
+# 实测（2026-11-14）：全排除后每份 ≈10MB、复制 <1s。
+_SANDBOX_SKIP_DIRS = {
+    ".git", ".venv", "venv", "build", "dist", "DELIVERY", ".tmp",
+    "node_modules", ".pytest_cache", "__pycache__", ".idea",
+}
+
+
+def _sandbox_ignore(directory: str, names: list[str]) -> set:
+    return {n for n in names
+            if n in _SANDBOX_SKIP_DIRS or n.startswith("_backup_") or n == "__pycache__"}
+
+
+def _make_sandbox(tag: str) -> Path:
+    sb = Path(tempfile.gettempdir()) / f"{SANDBOX_PREFIX}{os.getpid()}_{tag}"
+    if sb.exists():                                   # 同名残留（理论不该有）先清
+        shutil.rmtree(sb, ignore_errors=True)
+    shutil.copytree(ROOT, sb, ignore=_sandbox_ignore)
+    return sb
+
+
+def _sweep_dead_sandboxes() -> int:
+    """上次被进程外击杀（走不到 finally）留下的沙箱：主人已死就清掉。
+
+    与 `running_lock` 的陈锁同一哲学 —— "进程已不在"比"文件在不在"更可靠。
+    """
+    n = 0
+    for p in Path(tempfile.gettempdir()).glob(SANDBOX_PREFIX + "*"):
+        pid_txt = p.name[len(SANDBOX_PREFIX):].split("_", 1)[0]
+        if pid_txt.isdigit() and not _pid_alive(int(pid_txt)):
+            shutil.rmtree(p, ignore_errors=True)
+            n += 1
+    return n
+
+
+_root_local = threading.local()
+
+
+def _current_root() -> Path:
+    """run_tests 的 cwd：并行 worker 里是它的沙箱，串行/测试里是真 ROOT。"""
+    r = getattr(_root_local, "root", None)
+    return ROOT if r is None else r
 
 # ---------------------------------------------------------------------------
 # 变异表
@@ -1187,13 +1248,17 @@ def _js_syntax_ok(path: Path) -> tuple[bool, str]:
 
 
 def run_tests(files: list[str], timeout: int) -> tuple[str, float]:
-    """跑测试子集。返回 (killed|survived|error, 耗时)。"""
+    """跑测试子集。返回 (killed|survived|error, 耗时)。
+
+    cwd 取 `_current_root()`（并行 worker 的沙箱 / 其余场合的真 ROOT）——
+    签名保持两参不动：契约用例 monkeypatch 的 `lambda files, timeout` 靠它活着。
+    """
     t0 = time.time()
     try:
         r = subprocess.run(
             [PY, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--no-cov",
              "-x", "-n", "0", *files],
-            cwd=str(ROOT), capture_output=True, text=True,
+            cwd=str(_current_root()), capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=timeout,
         )
     except subprocess.TimeoutExpired:
@@ -1274,7 +1339,7 @@ def _native(text: str, crlf: bool) -> str:
     return text.replace("\n", "\r\n") if crlf else text
 
 
-def apply_and_run(m: dict, timeout: int) -> dict:
+def apply_and_run(m: dict, timeout: int, root: Path | None = None) -> dict:
     """注入 → 跑 killer → **按原始字节**还原。
 
     还原为什么用 `write_bytes(raw)` 而不是重写文本（2026-10-25，两条都被实测咬过）：
@@ -1286,8 +1351,13 @@ def apply_and_run(m: dict, timeout: int) -> dict:
     就不再是"尽量做到"，而是构造上成立。这条缺口它自己的用例一直没抓到，因为
     `read_text` 两次读回来是一样的（钉子见 `test_apply_and_run_restores_bytes_not_just_text`，
     里面两种行尾各验一条）。
+
+    `root` 是变异发生的工作区根：缺省 = 真 ROOT（串行路径与契约用例的 monkeypatch
+    点），并行 worker 传它的沙箱副本。`run_tests` 从线程本地的 `_root_local.root`
+    拿 cwd —— 它的签名不能变（契约用例钉着两参调用）。
     """
-    path = ROOT / m["file"]
+    root = ROOT if root is None else root
+    path = root / m["file"]
     raw = path.read_bytes()                       # ← 还原用的就是它，原样写回
     crlf = b"\r\n" in raw
     original = raw.decode("utf-8")
@@ -1296,6 +1366,7 @@ def apply_and_run(m: dict, timeout: int) -> dict:
         return {**m, "status": "inconclusive", "note": "变异文本没匹配上（源码改过？更新变异表）",
                 "dt": 0.0}
     st = path.stat()
+    _root_local.root = root                       # run_tests 从这里拿 cwd（签名不动）
     try:
         path.write_bytes(original.replace(old, new, 1).encode("utf-8"))
         if path.suffix == ".js":                       # 前端探针：先确认语法没被改坏
@@ -1307,6 +1378,7 @@ def apply_and_run(m: dict, timeout: int) -> dict:
     finally:
         path.write_bytes(raw)                      # 逐字节还原（构造上就相等）
         _restore_mtime(path, st)
+        _root_local.root = None
 
 
 def running_lock() -> Path:
@@ -1390,10 +1462,61 @@ def _probe_is_running() -> str:
     return ""
 
 
+def _execute(todo: list[dict], timeout: int, workers: int) -> list[dict]:
+    """跑完所有变异，返回**按 todo 顺序**的结果（与串行版同一份输出契约）。
+
+    workers <= 1：原地串行（改真源码的老路径，异常照旧向上抛）。
+    workers >= 2：每个 worker 一份沙箱副本，变异只发生在副本里，真源码只读；
+    副本在收尾时删掉，进程外击杀留下的由下一轮 `_sweep_dead_sandboxes` 认领。
+    worker 内异常转成 error 档 —— 一条变异的沙箱失败不该把整轮探针炸掉。
+    """
+    marks = {"killed": "被杀 ✓", "survived": "存活 ✗（盲区）",
+             "inconclusive": "未生效 ?", "error": "探针异常 !"}
+    results: list = [None] * len(todo)
+
+    def _report(i: int, res: dict) -> None:
+        results[i] = res
+        print(f"  {marks[res['status']]:16s} {res['id']:32s} {res['dt']:6.1f}s  {res['note']}",
+              flush=True)
+
+    if workers <= 1:
+        for i, m in enumerate(todo):
+            _report(i, apply_and_run(m, timeout))
+        return results
+
+    _sweep_dead_sandboxes()
+    print(f"并行：{workers} 份沙箱副本（真源码全程只读）")
+    created: list[Path] = []
+    created_lock = threading.Lock()
+
+    def _one(i: int, m: dict) -> None:
+        try:
+            sb = getattr(_root_local, "sandbox", None)
+            if sb is None or not sb.exists():          # 线程被复用，副本可能已被收尾清掉
+                sb = _make_sandbox(str(threading.get_ident()))
+                _root_local.sandbox = sb
+                with created_lock:
+                    created.append(sb)
+            _report(i, apply_and_run(m, timeout, root=sb))
+        except Exception as e:                         # noqa: BLE001
+            _report(i, {**m, "status": "error", "note": f"沙箱执行异常：{e}", "dt": 0.0})
+
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            list(pool.map(_one, range(len(todo)), todo))
+    finally:
+        for sb in created:
+            shutil.rmtree(sb, ignore_errors=True)
+        _root_local.sandbox = None                      # 线程本地缓存跟着副本一起作废
+    return results
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="变异探针：找测试看不出来的语义盲区")
     ap.add_argument("--only", default="", help="只跑这些 id（逗号分隔）")
     ap.add_argument("--timeout", type=int, default=600, help="每个变异的测试超时秒数")
+    ap.add_argument("--workers", type=int, default=min(8, os.cpu_count() or 4),
+                    help="并行沙箱 worker 数（默认 min(8, CPU 核数)；0/1 = 原地串行，改真源码的老路径）")
     ap.add_argument("--json", default="", help="结果写到 JSON 文件")
     ap.add_argument("--preflight", action="store_true",
                     help="只做启动预检（old 能否命中），不跑变异")
@@ -1419,19 +1542,13 @@ def main() -> int:
         return 0
 
     print(f"变异探针：{len(todo)}/{len(MUTATIONS)} 条（判据：改了还全绿 = 盲区）\n")
-    # 从这一刻起源码会被反复变异 —— 挂上标记，让「同时跑别的门禁」这件事有名字
+    # 从这一刻起工作区/沙箱会被反复变异 —— 挂上标记，让「同时跑别的门禁」这件事有名字
     lock = running_lock()
     lock.write_text(json.dumps({"pid": os.getpid(), "todo": len(todo),
                                 "started": time.strftime("%Y-%m-%d %H:%M:%S")},
                                ensure_ascii=False), encoding="utf-8")
-    results = []
     try:
-        for m in todo:
-            res = apply_and_run(m, args.timeout)
-            results.append(res)
-            mark = {"killed": "被杀 ✓", "survived": "存活 ✗（盲区）",
-                    "inconclusive": "未生效 ?", "error": "探针异常 !"}[res["status"]]
-            print(f"  {mark:16s} {res['id']:32s} {res['dt']:6.1f}s  {res['note']}", flush=True)
+        results = _execute(todo, args.timeout, args.workers)
     finally:
         # 外部信号杀掉时走不到这里 —— 所以 _probe_is_running() 还得认"进程已不在"的陈锁
         lock.unlink(missing_ok=True)

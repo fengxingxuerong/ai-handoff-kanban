@@ -19,6 +19,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -318,3 +319,64 @@ def test_probe_table_keeps_covering_the_frontend_js():
     for m in js:
         assert m["tests"], f"{m['id']} 没有 killer 用例 —— 探针跑了也判不出"
         assert str(m["file"]).startswith("web/"), f"{m['id']} 的 target 不在 web/ 下"
+
+
+# ---------------- 沙箱并行（2026-11-14）的契约 ----------------
+
+def test_sandbox_copy_keeps_gate_files_and_skips_heavy_dirs():
+    """沙箱副本必须带上门禁要用的东西（pytest.ini / conftest / web / AGENTS.md），
+    重目录（.git / .venv / dist / build / DELIVERY）必须不带 —— 拷了没用还拖慢启动。"""
+    probe = _load_probe()
+    sb = probe._make_sandbox("contract")
+    try:
+        assert (sb / "pytest.ini").exists()
+        assert (sb / "tests" / "conftest.py").exists()
+        assert (sb / "web" / "index.html").exists()
+        assert (sb / "AGENTS.md").exists()
+        assert not (sb / ".git").exists()
+        assert not (sb / ".venv").exists()
+        assert not (sb / "dist").exists()
+        assert not (sb / "build").exists()
+        assert not (sb / "DELIVERY").exists()
+    finally:
+        shutil.rmtree(sb, ignore_errors=True)
+
+
+def test_parallel_execution_reports_every_mutation_in_table_order(tmp_path, monkeypatch):
+    """并行编排的两条契约：结果**按变异表顺序**完整落位（与串行版同一份输出契约）；
+    worker 内异常转成 error 档而不是把整轮炸掉。沙箱真跑 pytest 的全量自证在
+    ci_local 的探针步（125 条真跑，判据还是 125/125 被杀），这里只验编排。"""
+    probe = _load_probe()
+    todo = [{"id": i, "file": "x.py", "old": "", "new": "", "why": "", "tests": []}
+            for i in ("a", "b", "c", "d", "e")]
+
+    def fake_apply(m, timeout, root=None):
+        if m["id"] == "c":
+            raise RuntimeError("模拟 worker 崩溃")
+        return {**m, "status": "killed", "note": "", "dt": 0.1}
+
+    monkeypatch.setattr(probe, "apply_and_run", fake_apply)
+    monkeypatch.setattr(probe, "_make_sandbox", lambda tag: tmp_path)
+    monkeypatch.setattr(probe, "_sweep_dead_sandboxes", lambda: 0)
+
+    res = probe._execute(todo, timeout=1, workers=3)
+
+    assert [r["id"] for r in res] == ["a", "b", "c", "d", "e"], "结果必须按变异表顺序落位"
+    assert res[2]["status"] == "error" and "模拟 worker 崩溃" in res[2]["note"]
+    assert all(r["status"] == "killed" for r in res if r["id"] != "c")
+
+
+def test_sweep_removes_sandboxes_of_dead_owners_only(tmp_path, monkeypatch):
+    """陈沙箱的认领规则与陈锁同一哲学：主人（PID）死了才清，活人的不能动。"""
+    probe = _load_probe()
+    mine = tmp_path / f"{probe.SANDBOX_PREFIX}424242_x"
+    mine.mkdir()
+    monkeypatch.setattr(probe.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(probe, "_pid_alive", lambda pid: pid == 424242)  # 424242 活着
+
+    assert probe._sweep_dead_sandboxes() == 0, "活人的沙箱不许动"
+    assert mine.exists()
+
+    monkeypatch.setattr(probe, "_pid_alive", lambda pid: False)
+    assert probe._sweep_dead_sandboxes() == 1, "主人已死的沙箱要被认领清掉"
+    assert not mine.exists()

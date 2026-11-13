@@ -221,8 +221,12 @@ def test_theme_colors_come_from_variables_not_hardcoded_values():
 def test_keyboard_focus_ring_is_defined():
     """卡片/条目都是 div+click，键盘用户至少要看得见焦点在哪"""
     assert ":focus-visible" in HTML
+    # 2026-11-14 实测：原来的 `[^{}]*` 前缀让这条纯静态断言在 300KB+ 文本上吃 22.7s
+    # （并行跑被 CPU 争抢放大到 78.7s，曾是全库最慢单测、pytest 门禁的墙钟顶点）。
+    # 去掉前缀**不改变判定集合**：搜索式匹配里该前缀可以匹配零个字符，
+    # `sel:focus-visible` 出现在任何位置时两种写法同样命中、同样缺席。
     for sel in (".btn", ".pcard", ".tcard", ".gs-item", ".sess-item"):
-        assert re.search(r"[^{}]*" + re.escape(sel) + r":focus-visible", HTML), f"{sel} 缺焦点环"
+        assert re.search(re.escape(sel) + r":focus-visible", HTML), f"{sel} 缺焦点环"
 
 
 # ---------------- 关闭路径与键盘可达性 ----------------

@@ -189,19 +189,28 @@ def test_reports_dir_is_capped_and_keeps_the_newest(tmp_path, monkeypatch):
     assert "20260000" not in names, "该被裁掉的最旧一份还在"
 
 
-def test_idempotency_table_is_capped(app_client):
-    """client_ref 表也是追加型存储：只会比"最近这么多键"更长，必须自己收口"""
+def test_idempotency_table_is_capped(app_client, monkeypatch):
+    """client_ref 表也是追加型存储：只会比"最近这么多键"更长，必须自己收口。
+
+    上限值在这里打小（patch 点随常量住处：`app.idem`，main 里的 `MAX_IDEM` 是转发
+    别名，改不到函数读的那个全局 —— 与 journal / MAX_REPORTS 同一套纪律）。
+    2026-11-14 实测：照真实 500 打满 560 条 POST 要 48.6s，曾是全库第二慢；
+    机制验证只需要"超限 → FIFO 丢最老"这一件事，换小常数不换语义 —— 若有人把
+    收口逻辑改成硬编码 500，这里 table 会涨到 100 > 40，照样红。
+    """
+    import app.idem as idem
     import app.main as kanban
 
+    monkeypatch.setattr(idem, "MAX_IDEM", 40)
     _, proj = app_client.create_project("幂等表上限")
     pid = proj["id"]
-    for i in range(kanban.MAX_IDEM + 60):
+    for i in range(idem.MAX_IDEM + 60):
         app_client.post(f"/api/projects/{pid}/tasks?client_ref=op-{i}",
                         {"title": f"任务 {i}"})
     data = json.loads((kanban.data_dir() / "projects.json").read_text(encoding="utf-8"))
     table = data.get(kanban.IDEM_KEY) or {}
-    assert len(table) <= kanban.MAX_IDEM, f"幂等表涨到 {len(table)} 条，没裁"
-    assert "op-0" not in table and f"op-{kanban.MAX_IDEM + 59}" in table, "应当丢最老的键"
+    assert len(table) <= idem.MAX_IDEM, f"幂等表涨到 {len(table)} 条，没裁"
+    assert "op-0" not in table and f"op-{idem.MAX_IDEM + 59}" in table, "应当丢最老的键"
 
 
 def test_http_create_accepts_client_ref_query_param(app_client):
