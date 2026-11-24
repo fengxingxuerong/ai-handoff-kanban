@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-25",
+  "release_gate": {
+    "command": "PYTEST_XDIST_AUTO_NUM_WORKERS=8 .venv/Scripts/python.exe scripts/ci_local.py --with-exe",
+    "exit_code": 0,
+    "steps_passed": 14,
+    "steps_failed": 0,
+    "pytest_collected": 1015,
+    "pytest_passed": 1010,
+    "pytest_skipped": 5,
+    "branch_coverage_percent": 92.39,
+    "mutation_probes_killed": 147,
+    "mutation_probes_total": 147,
+    "scenario_passed": 32,
+    "delivery_drill_passed": 21,
+    "live_check_passed": 14,
+    "live_ui_passed": 16,
+    "gui_frozen_smoke_passed": 11,
+    "mcp_frozen_smoke_passed": 10,
+    "build_stamp": "2026-11-25 03:20"
+  },
+  "schemathesis": {
+    "version": "4.34.1",
+    "seed": 20261125,
+    "operations_tested": 18,
+    "cases_generated": 3233,
+    "cases_passed": 3233,
+    "heuristic_warnings": 1,
+    "warning_reason": "Random pid values referenced nonexistent projects and correctly received business-level 400 responses."
+  },
+  "axe_core": {
+    "version": "4.10.2",
+    "sha256": "b511cd9dec01c76f4b2ad1723b66b6db37d4c2eb4ed199076e1829d9ee7b75e3",
+    "states": ["overview", "detail", "project-modal", "task-modal", "ai-settings-modal"],
+    "violations": 0,
+    "javascript_errors": 0,
+    "manual_review_remaining": ["color-contrast incomplete nodes", "aria-valid-attr-value incomplete node"]
+  },
+  "mcp": {
+    "source_stdlib_tests_passed": 127,
+    "official_full_conformance_run": false,
+    "reason": "The project exposes stdio only; the official server conformance runner targets HTTP. Relevant negative and lifecycle scenarios were adapted."
+  },
+  "real_llm": {
+    "live_tests_passed": 5,
+    "release_regression_passed": 23,
+    "quota_used": true
+  },
+  "reference_kanban_contracts": {
+    "tests_passed": 33,
+    "sources": {
+      "plane": "723bb178f97b87e80a23df9eed134eb1388d7465",
+      "vikunja": "cfc59e34f90f845296df5eddfc44ae3c4fbe1400",
+      "kanboard": "58a2605058219b1d20b32f98d78872a5b1d9ff12"
+    },
+    "excluded": ["multi-user permissions", "ParadeDB fuzzy search", "CSV export"]
+  },
+  "not_verified": [
+    "Native window show/hide/close lifecycle was not exercised in a real desktop session.",
+    "Fault injection does not prove power-loss durability.",
+    "Automated accessibility scanning does not replace manual screen-reader review."
+  ],
+  "sources": [
+    "https://github.com/schemathesis/schemathesis",
+    "https://github.com/dequelabs/axe-core",
+    "https://github.com/modelcontextprotocol/conformance",
+    "https://github.com/makeplane/plane",
+    "https://github.com/go-vikunja/vikunja",
+    "https://github.com/kanboard/kanboard"
+  ]
+}

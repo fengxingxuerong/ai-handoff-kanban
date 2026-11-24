@@ -120,6 +120,22 @@ def test_active_model_and_schedule_update(seeded_server):
     assert "恶意字段" not in sched, "未知调度字段不应写进配置"
 
 
+@pytest.mark.parametrize("bad", [True, False, float("nan"), float("inf")])
+def test_budget_limit_rejects_booleans_and_non_finite_numbers(seeded_server, bad):
+    before = read_cfg(seeded_server)
+    status, body = seeded_server.put("/api/ai/config", {"budget_limit": bad})
+    assert status == 422, f"budget_limit={bad!r} 应 422，实际 {status}: {body}"
+    assert read_cfg(seeded_server) == before, "非法预算不能改写配置"
+
+
+@pytest.mark.parametrize("bad", [0, 1, "true", [], {}])
+def test_mcp_readonly_rejects_non_boolean_values(seeded_server, bad):
+    before = read_cfg(seeded_server)
+    status, body = seeded_server.put("/api/ai/config", {"mcp_readonly": bad})
+    assert status == 422, f"mcp_readonly={bad!r} 应 422，实际 {status}: {body}"
+    assert read_cfg(seeded_server) == before, "非法只读开关不能改写配置"
+
+
 def test_period_key_daily_and_weekly():
     d = datetime(2026, 9, 14, 9, 0)          # 周一
     assert _period_key(d, "daily") == "2026-09-14"

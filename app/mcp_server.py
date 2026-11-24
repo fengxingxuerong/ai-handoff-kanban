@@ -1628,9 +1628,21 @@ def _negotiate(client_version: str | None) -> str:
 def handle(msg: dict) -> dict | None:
     """处理一条消息；返回 None 表示是通知、不回包"""
     method = msg.get("method")
+    has_id = "id" in msg
     mid = msg.get("id")
-    params = msg.get("params") or {}
-    is_notification = mid is None
+    if msg.get("jsonrpc") != "2.0" or not isinstance(method, str):
+        return _err(None, -32600, "Invalid Request")
+    if has_id and mid is not None and (isinstance(mid, bool) or not isinstance(mid, (str, int, float))):
+        return _err(None, -32600, "Invalid Request")
+    is_notification = not has_id
+    params = msg.get("params")
+    if params is None:
+        params = {}
+    elif not isinstance(params, dict):
+        return None if is_notification else _err(mid, -32602, "params 必须是对象")
+    if is_notification and method not in ("notifications/initialized", "initialized"):
+        log(f"忽略未知通知：{method}")
+        return None
 
     if method == "initialize":
         client_version = (params.get("protocolVersion") or "")
@@ -1717,9 +1729,6 @@ def handle(msg: dict) -> dict | None:
         except ValueError as e:
             return _err(mid, -32602, str(e))
 
-    if is_notification:
-        log(f"忽略未知通知：{method}")
-        return None
     return _err(mid, -32601, f"Method not found: {method}")
 
 
@@ -1745,7 +1754,18 @@ def serve(stdin=None, stdout=None) -> None:
             log(traceback.format_exc())
             resp = _err(msg.get("id"), -32603, "Internal error")
         if resp is not None:
-            _write(stdout, resp)
+            try:
+                _write(stdout, resp)
+            except (BrokenPipeError, OSError, ValueError):
+                log("stdout 已关闭，停止 MCP 服务")
+                # 解释器退出时还会再 flush 一次；不把坏 fd 换成空设备，退出码仍是 120。
+                try:
+                    null_fd = os.open(os.devnull, os.O_WRONLY)
+                    os.dup2(null_fd, stdout.fileno())
+                    os.close(null_fd)
+                except (OSError, AttributeError, ValueError):
+                    pass
+                return
 
 
 def _write(stdout, payload: dict) -> None:

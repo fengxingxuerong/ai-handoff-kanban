@@ -2,6 +2,7 @@
 """安全与数据完整性：字段白名单、特殊字符、Host/Origin 防护、保存路径、Token 鉴权"""
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -74,6 +75,37 @@ def test_same_origin_allowed(server):
 
 def test_foreign_host_rejected(server):
     assert server.get("/api/health", host="evil.example.com")[0] == 403
+
+
+@pytest.mark.parametrize("method,path,body", [
+    ("POST", "/api/projects", {"name": "不该创建"}),
+    ("POST", "/api/memories", {"text": "不该保存"}),
+    ("POST", "/api/views", {"name": "不该创建"}),
+    ("PUT", "/api/ai/config", {"budget_limit": 12}),
+])
+def test_json_write_endpoints_reject_text_plain_without_side_effects(fresh_server, method, path, body):
+    before_projects = fresh_server.get("/api/projects")[1]["projects"]
+    before_memories = fresh_server.get("/api/memories")[1]["memories"]
+    before_views = fresh_server.get("/api/views")[1]["views"]
+    before_config = fresh_server.get("/api/ai/config")[1]
+
+    response = fresh_server.client.request(
+        method, path, content=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "text/plain"})
+
+    assert response.status_code == 415, response.text
+    assert response.json()["detail"] == "请求正文仅支持 application/json"
+    assert fresh_server.get("/api/projects")[1]["projects"] == before_projects
+    assert fresh_server.get("/api/memories")[1]["memories"] == before_memories
+    assert fresh_server.get("/api/views")[1]["views"] == before_views
+    assert fresh_server.get("/api/ai/config")[1] == before_config
+
+
+def test_json_content_type_with_charset_is_accepted(fresh_server):
+    response = fresh_server.client.request(
+        "POST", "/api/projects", content=json.dumps({"name": "带字符集的 JSON"}, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json; charset=utf-8"})
+    assert response.status_code == 201, response.text
 
 
 def test_localhost_host_allowed(server):

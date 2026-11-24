@@ -174,20 +174,20 @@ function renderEndpoints(eps) {
   wrap.innerHTML = eps.map((ep, i) => `
     <div class="ep-card">
       <div class="ep-top">
-        <input data-i="${i}" data-f="name" class="ep-name-input" value="${esc(ep.name)}">
-        <label class="switch"><input type="checkbox" data-i="${i}" data-f="enabled" ${ep.enabled ? "checked" : ""}><span class="slider"></span></label>
+        <input data-i="${i}" data-f="name" class="ep-name-input" value="${esc(ep.name)}" aria-label="端点 ${i + 1} 名称">
+        <label class="switch"><input type="checkbox" data-i="${i}" data-f="enabled" ${ep.enabled ? "checked" : ""} aria-label="启用端点 ${i + 1}"><span class="slider"></span></label>
       </div>
-      <div class="field"><label>Base URL</label>
-        <input data-i="${i}" data-f="base_url" value="${esc(ep.base_url)}" placeholder="https://.../v1"></div>
-      <div class="field"><label>API Keys（每行一个，可多 Key 轮询）</label>
-        <textarea data-i="${i}" data-f="keys" placeholder="sk-... 每行一个">${esc((ep.api_keys || []).join("\n"))}</textarea></div>
-      <div class="field"><label>模型（逗号分隔，按优先级排序）</label>
-        <input data-i="${i}" data-f="models" value="${esc((ep.models || []).join(", "))}"></div>
+      <div class="field"><label for="ep-base-${i}">Base URL</label>
+        <input id="ep-base-${i}" data-i="${i}" data-f="base_url" value="${esc(ep.base_url)}" placeholder="https://.../v1"></div>
+      <div class="field"><label for="ep-keys-${i}">API Keys（每行一个，可多 Key 轮询）</label>
+        <textarea id="ep-keys-${i}" data-i="${i}" data-f="keys" placeholder="sk-... 每行一个">${esc((ep.api_keys || []).join("\n"))}</textarea></div>
+      <div class="field"><label for="ep-models-${i}">模型（逗号分隔，按优先级排序）</label>
+        <input id="ep-models-${i}" data-i="${i}" data-f="models" value="${esc((ep.models || []).join(", "))}"></div>
       <div class="field" style="flex-direction:row;gap:10px;align-items:flex-end">
-        <div style="flex:1"><label>输入单价（$/千 token，0=不估算）</label>
-          <input type="number" data-i="${i}" data-f="price_in" min="0" step="0.0001" value="${Number(ep.price_per_1k_input || 0) || 0}"></div>
-        <div style="flex:1"><label>输出单价（$/千 token）</label>
-          <input type="number" data-i="${i}" data-f="price_out" min="0" step="0.0001" value="${Number(ep.price_per_1k_output || 0) || 0}"></div>
+        <div style="flex:1"><label for="ep-price-in-${i}">输入单价（$/千 token，0=不估算）</label>
+          <input id="ep-price-in-${i}" type="number" data-i="${i}" data-f="price_in" min="0" step="0.0001" value="${Number(ep.price_per_1k_input || 0) || 0}"></div>
+        <div style="flex:1"><label for="ep-price-out-${i}">输出单价（$/千 token）</label>
+          <input id="ep-price-out-${i}" type="number" data-i="${i}" data-f="price_out" min="0" step="0.0001" value="${Number(ep.price_per_1k_output || 0) || 0}"></div>
       </div>
     </div>`).join("");
 }

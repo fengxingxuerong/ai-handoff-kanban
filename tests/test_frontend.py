@@ -245,7 +245,8 @@ def test_all_modal_close_paths_share_one_implementation():
 
 
 def test_clickable_cards_are_keyboard_reachable():
-    """卡片都是 div，鼠标能用键盘不能用；至少要能 Tab 到、Enter/空格能触发"""
+    """项目卡标题用原生按钮，其它动态卡仍走 data-keyact；Enter/空格都必须能激活。"""
+    assert '<button class="name" data-open-card="1"' in HTML
     assert 'tabindex="0" role="button" data-keyact="1"' in HTML
     assert 'el.dataset.keyact = "1"' in HTML, "任务卡是 createElement 出来的，要单独加"
     assert re.search(r'e\.key !== "Enter" && e\.key !== " ".*?el\.click\(\)', HTML, re.S), \

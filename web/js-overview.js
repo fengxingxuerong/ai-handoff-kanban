@@ -140,13 +140,13 @@ function cardHTML(p) {
     + SEG.map(([k]) => `${k} ${c[k] || 0}`).join("、") + `">`
     + SEG.map(([k, cls]) => Number(c[k] || 0) ? `<i class="s-${cls}" style="flex:${c[k]}"></i>` : "").join("")
     + `</div>`;
-  return `<div class="pcard" data-pid="${esc(p.id)}" tabindex="0" role="button" data-keyact="1">
+  return `<div class="pcard" data-pid="${esc(p.id)}">
     <div class="head">
       <input type="checkbox" class="pick" data-pick="1" aria-label="选择这个项目"
              ${selectedPids.has(p.id) ? "checked" : ""}>
       <button class="btn small pin${pinned ? " on" : ""}" data-act="pin" aria-pressed="${pinned}"
               title="${pinned ? "取消置顶" : "置顶（排在总览最前面）"}">${pinned ? "★" : "☆"}</button>
-      <span class="name" title="${esc(p.name)}">${esc(p.name)}</span>
+      <button class="name" data-open-card="1" title="${esc(p.name)}">${esc(p.name)}</button>
       <span class="actions">
         <button class="btn small" data-act="edit" title="编辑项目">✎</button>
         <button class="btn small danger" data-act="del" title="删除项目">🗑</button>

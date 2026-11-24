@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 
@@ -29,6 +30,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 # 也是 CI 上唯一能用的那级）。**最后一级必须保留**，钉子见
 # tests/test_suite_hygiene.py::test_e2e_keeps_the_bundled_chromium_fallback
 CHANNELS = ["msedge", "chrome", None]
+AXE_CORE = Path(__file__).resolve().parents[1] / "tests/assets/axe-core-4.10.2.min.js"
 
 
 def open_header_menu(page, act: str):
@@ -350,7 +352,7 @@ def test_detail_more_menu_closes_on_outside_click_escape_and_pick(ui):
 
 
 # 读屏用户按 Tab 时听到的东西：可交互元素至少得有一个能读出来的名字。
-# 不引 axe（不加重依赖、也不引 CDN）—— 我们只钉最容易造成"完全没法用"的那一类：
+# 轻量可访问名探针：每次核心流程都能跑；完整 WCAG A/AA 规则由下面的 axe-core 用例覆盖。
 # 没有名字的按钮/输入框在读屏里只会念成"按钮"，用户根本不知道它会干什么。
 _NAMES_PROBE = """
 () => {
@@ -380,6 +382,102 @@ _NAMES_PROBE = """
   return out;
 }
 """
+
+
+def axe_wcag_aa(page, selector=None):
+    page.wait_for_function("""() => {
+      const modal = document.querySelector('.modal-mask.show .modal');
+      if (!modal) return true;
+      const style = getComputedStyle(modal);
+      return style.opacity === '1' && style.transform === 'none';
+    }""")
+    if page.evaluate("() => typeof axe === 'undefined'"):
+        page.add_script_tag(path=str(AXE_CORE))
+    return page.evaluate("""async selector => {
+      const context = selector ? document.querySelector(selector) : document;
+      if (!context) throw new Error('axe context not found: ' + selector);
+      const result = await axe.run(context, {
+        runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa']}
+      });
+      return {
+        violations: result.violations.map(v => ({
+          id: v.id, impact: v.impact, help: v.help,
+          nodes: v.nodes.map(n => ({target: n.target, summary: n.failureSummary}))
+        })),
+        incomplete: result.incomplete.map(v => ({id: v.id, impact: v.impact, nodes: v.nodes.length}))
+      };
+    }""", selector)
+
+
+def assert_no_axe_violations(result, state):
+    assert result["violations"] == [], (
+        f"{state} 存在 WCAG A/AA 违规：{result['violations']}；"
+        f"需人工复核项：{result['incomplete']}")
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_wcag_aa_core_views_and_modals(ui, theme):
+    page, api, _ = ui
+    page.evaluate("theme => localStorage.setItem('kanban-theme', theme)", theme)
+    project = make_project(api, "无障碍扫描项目", next_action="把可访问性补齐")
+    api.post(f"/api/projects/{project['id']}/tasks", {"title": "无障碍扫描任务"})
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector(".pcard", timeout=15000)
+    pin_box = page.locator(".pcard .pin").first.bounding_box()
+    assert pin_box and pin_box["width"] >= 24 and pin_box["height"] >= 24, pin_box
+
+    assert_no_axe_violations(axe_wcag_aa(page), "总览")
+    page.locator(".pcard:has-text('无障碍扫描项目') [data-open-card]").click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    assert_no_axe_violations(axe_wcag_aa(page), "详情")
+
+    page.click("[data-act='openProjectModal']")
+    page.wait_for_selector("#proj-modal.show", timeout=10000)
+    assert_no_axe_violations(axe_wcag_aa(page, "#proj-modal"), "新建项目弹窗")
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => !document.querySelector('#proj-modal.show')")
+
+    page.click("[data-act='openTaskModal']")
+    page.wait_for_selector("#task-modal.show", timeout=10000)
+    assert_no_axe_violations(axe_wcag_aa(page, "#task-modal"), "新建任务弹窗")
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_ai_settings_inputs_have_accessible_labels(ai_ui, theme):
+    page, _, _, _ = ai_ui
+    page.evaluate("theme => localStorage.setItem('kanban-theme', theme)", theme)
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("[data-act='openAISettings']", timeout=20000)
+    page.click("[data-act='openAISettings']")
+    page.wait_for_selector("#ai-settings-modal.show", timeout=10000)
+    assert_no_axe_violations(axe_wcag_aa(page, "#ai-settings-modal"), "AI 设置弹窗")
+
+
+@pytest.mark.parametrize("key", ["Enter", " "])
+def test_project_card_title_is_keyboard_operable(ui, key):
+    page, api, _ = ui
+    make_project(api, "键盘打开项目")
+    page.reload(wait_until="domcontentloaded")
+    title = page.locator(".pcard:has-text('键盘打开项目') [data-open-card]")
+    title.focus()
+    page.keyboard.press(key)
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    assert "键盘打开项目" in page.locator("#view-detail").inner_text()
+
+
+def test_panel_title_button_collapses_without_nested_actions(ui):
+    page, api, _ = ui
+    project = make_project(api, "面板折叠项目")
+    page.reload(wait_until="domcontentloaded")
+    page.locator(f".pcard[data-pid='{project['id']}'] [data-open-card]").click()
+    page.wait_for_selector("#view-detail.active", timeout=10000)
+    trigger = page.locator("#kanban-panel > h3 > .panel-collapse-btn")
+    trigger.click()
+    page.wait_for_function("() => document.querySelector('#kanban-panel').classList.contains('collapsed')")
+    assert trigger.get_attribute("aria-expanded") == "false"
+    trigger.click()
+    page.wait_for_function("() => !document.querySelector('#kanban-panel').classList.contains('collapsed')")
+    assert trigger.get_attribute("aria-expanded") == "true"
 
 
 def test_visible_controls_have_accessible_names(ui):
@@ -1136,7 +1234,7 @@ def test_enter_key_opens_the_focused_card(ui):
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector(".pcard:has-text('键盘打开项目')", timeout=15000)
 
-    page.locator(".pcard:has-text('键盘打开项目')").focus()
+    page.locator(".pcard:has-text('键盘打开项目') [data-open-card]").focus()
     page.keyboard.press("Enter")
     page.wait_for_selector("#view-detail.active", timeout=10000)
     page.wait_for_selector("#col-todo .tcard", timeout=10000)

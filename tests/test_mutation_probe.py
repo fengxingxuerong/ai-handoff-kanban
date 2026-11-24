@@ -345,7 +345,7 @@ def test_sandbox_copy_keeps_gate_files_and_skips_heavy_dirs():
 def test_parallel_execution_reports_every_mutation_in_table_order(tmp_path, monkeypatch):
     """并行编排的两条契约：结果**按变异表顺序**完整落位（与串行版同一份输出契约）；
     worker 内异常转成 error 档而不是把整轮炸掉。沙箱真跑 pytest 的全量自证在
-    ci_local 的探针步（125 条真跑，判据还是 125/125 被杀），这里只验编排。"""
+    ci_local 的探针步（147 条真跑，判据还是 147/147 被杀），这里只验编排。"""
     probe = _load_probe()
     todo = [{"id": i, "file": "x.py", "old": "", "new": "", "why": "", "tests": []}
             for i in ("a", "b", "c", "d", "e")]

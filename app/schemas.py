@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictBool, field_validator
 
 from .fields import (
     canonical_priority,
@@ -94,12 +94,20 @@ class TaskIn(BaseModel):
     @field_validator("blocked_reason", mode="before")
     @classmethod
     def _clean_blocked_reason(cls, v):
-        v = (v or "").strip()
+        if v is None:
+            return ""
+        if not isinstance(v, str):
+            raise ValueError("blocked_reason 必须是字符串")
+        v = v.strip()
         return v[:MAX_BLOCKED_REASON] if v else ""
     @field_validator("due_date", mode="before")
     @classmethod
     def _clean_due(cls, v):
-        v = (v or "").strip()
+        if v is None:
+            return ""
+        if not isinstance(v, str):
+            raise ValueError("due_date 必须是日期字符串")
+        v = v.strip()
         if not v:
             return ""
         try:
@@ -111,7 +119,11 @@ class TaskIn(BaseModel):
     @field_validator("milestone", mode="before")
     @classmethod
     def _clean_milestone(cls, v):
-        v = (v or "").strip()
+        if v is None:
+            return ""
+        if not isinstance(v, str):
+            raise ValueError("milestone 必须是字符串")
+        v = v.strip()
         return v[:MAX_MILESTONE_NAME] if v else ""
 
     @field_validator("refs", mode="before")
@@ -201,7 +213,9 @@ class MemoryIn(BaseModel):
     @field_validator("expires", mode="before")
     @classmethod
     def _clean_expires(cls, v):
-        v = (v or "").strip()
+        if not isinstance(v, str):
+            raise ValueError("expires 必须是日期字符串")
+        v = v.strip()
         if not v:
             return ""
         try:
@@ -218,9 +232,16 @@ class AIConfigIn(BaseModel):
     endpoints: list[dict] | None = None
     active_model: str | None = None
     schedule: dict | None = None
-    mcp_readonly: bool | None = None
+    mcp_readonly: StrictBool | None = None
     session_sources: list[dict] | None = None
-    budget_limit: float | None = None
+    budget_limit: float | None = Field(None, allow_inf_nan=False)
+
+    @field_validator("budget_limit", mode="before")
+    @classmethod
+    def _reject_bool_budget(cls, v):
+        if isinstance(v, bool):
+            raise ValueError("budget_limit 必须是数字")
+        return v
 class SuggestionUpdate(BaseModel):
     project_id: str
     field: str = "next_action"

@@ -186,6 +186,15 @@ def test_bad_expires_format_is_dropped_not_stored(app_client):
     assert "expires" not in r["memory"], "认不出的日期清空（变成长期有效），不留脏值"
 
 
+@pytest.mark.parametrize("bad", [{}, [], [None, None], None, 1, False])
+def test_memory_expires_rejects_non_string_types(app_client, bad):
+    _, before = app_client.get("/api/memories")
+    status, body = app_client.post("/api/memories", {"text": "非法时效", "expires": bad})
+    assert status == 422, f"expires={bad!r} 应 422，实际 {status}: {body}"
+    _, after = app_client.get("/api/memories")
+    assert after["memories"] == before["memories"], "校验失败不能留下半条记忆"
+
+
 def test_expired_memory_excluded_from_handoff_and_context_with_note(app_client):
     _, p = app_client.create_project("过期记忆交接项目")
     pid = p["id"]

@@ -98,16 +98,16 @@
 
   --text: #16203a;
   --text-dim: #4d5f80;
-  --text-faint: #65728e;
+  --text-faint: #56627a;
 
   --accent: #1679bd;
   /* 与深色主题同源（单一强调色）：浅色这里漏改过，进度条会退回紫色渐变 */
   --accent2: var(--accent);
   --purple: #7c5cf0;
-  --green: #0d9e63;
-  --orange: #c26a02;
-  --red: #d92d20;
-  --blue: #2361d8;
+  --green: #067647;
+  --orange: #9a4d00;
+  --red: #b42318;
+  --blue: #1d4ed8;
   --gray: #64748b;
 
   --accent-soft: rgba(26, 134, 207, .10);
@@ -1065,10 +1065,14 @@ header {
 /* —— 项目卡降噪 —— */
 .pcard .head { display: flex; align-items: center; gap: 8px; }
 .pcard .head .name {
-  flex: 1; min-width: 0; font-size: 15px; font-weight: 700; letter-spacing: .01em;
+  flex: 1; min-width: 0; min-height: 24px; padding: 0; border: 0; background: transparent;
+  appearance: none; display: block; color: inherit; text-align: left; cursor: pointer;
+  font-family: inherit; line-height: inherit;
+  font-size: 15px; font-weight: 700; letter-spacing: .01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pcard .card-sub { display: flex; align-items: center; gap: 6px; margin-top: -2px; min-height: 18px; }
+#task-agent-filter, #task-sort { min-height: 24px; }
 .pcard .card-sub .badge { flex-shrink: 0; }
 .pcard .actions { flex-shrink: 0; }
 .pcard .stack-row { display: flex; align-items: center; gap: 10px; }
@@ -1121,12 +1125,17 @@ header {
    标题即开关（h3 带 role=button + data-keyact）。低频面板默认收起，把"要滚很久"压下来；
    折叠态在 localStorage，跨次打开保持一致。 */
 .panel-head-toggle { cursor: pointer; user-select: none; }
+.panel-collapse-btn {
+  appearance: none; padding: 0; border: 0; background: transparent; color: inherit;
+  font: inherit; text-align: left; cursor: pointer;
+}
 .panel-head-toggle::after {
   content: "▾"; margin-left: auto; padding-left: 8px;
   font-size: 10px; color: var(--text-faint);
   transition: transform var(--t) var(--ease);
 }
-.panel.collapsed > h3.panel-head-toggle::after { transform: rotate(-90deg); }
+.panel.collapsed > h3.panel-head-toggle::after,
+.panel.collapsed > h3 > .panel-head-toggle::after { transform: rotate(-90deg); }
 .panel.collapsed > *:not(h3) { display: none; }
 .panel-head-toggle:focus-visible {
   outline: none; border-radius: var(--r-xs);
@@ -1136,7 +1145,8 @@ header {
 /* —— 卡片置顶星标（个人工作台）——
    常显而不是 hover 才出现：星标本身就是"这个我置顶了"的状态，藏起来等于白置顶。 */
 .pcard .pin {
-  flex-shrink: 0; padding: 1px 5px; font-size: 13px; line-height: 1;
+  flex-shrink: 0; min-width: 24px; min-height: 24px; display: inline-grid; place-items: center;
+  padding: 2px 5px; font-size: 13px; line-height: 1;
   color: var(--text-faint); background: transparent; border-color: transparent;
 }
 .pcard .pin:hover { color: var(--orange); }
@@ -1254,7 +1264,7 @@ header { padding: 10px 20px; gap: 12px; }
   background: var(--accent); border: 1px solid var(--accent);
   color: #07111d; box-shadow: none;
 }
-.btn.primary:hover { filter: none; background: color-mix(in srgb, var(--accent) 88%, white); box-shadow: none; }
+.btn.primary:hover { filter: none; background: var(--accent); box-shadow: none; }
 :root[data-theme="light"] .btn.primary,
 :root[data-theme="light"] .logo .mark { color: #fff; }
 .chip.active { background: var(--accent); border-color: var(--accent); color: #07111d; }
@@ -1323,9 +1333,9 @@ header { padding: 10px 20px; gap: 12px; }
 /* 就绪度：不再是全页最亮的视觉焦点 */
 .readiness-top { gap: 12px; }
 .rd-ring { width: 48px; height: 48px; font-size: 13px; box-shadow: none; }
-.rd-ring.rd-hi { background: color-mix(in srgb, var(--green) 58%, var(--card)); }
-.rd-ring.rd-mid { background: color-mix(in srgb, var(--orange) 58%, var(--card)); }
-.rd-ring.rd-lo { background: color-mix(in srgb, var(--red) 58%, var(--card)); }
+.rd-ring.rd-hi { background: #047857; }
+.rd-ring.rd-mid { background: #92400e; }
+.rd-ring.rd-lo { background: #b91c1c; }
 
 /* 窄窗口：保留分组，但允许顶栏回归普通按钮，避免挤压 */
 @media (max-width: 980px) {

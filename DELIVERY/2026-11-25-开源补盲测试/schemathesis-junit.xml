@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites errors="0" failures="0" skipped="0" tests="18" time="177.035138">
+  <testsuite name="schemathesis" hostname="Admin" errors="0" failures="0" skipped="0" tests="18" time="177.035138">
+    <testcase name="PUT /api/ai/config" time="29.305654" />
+    <testcase name="POST /api/memories" time="19.430984" />
+    <testcase name="POST /api/projects" time="32.048979" />
+    <testcase name="POST /api/views" time="24.364490" />
+    <testcase name="GET /api/ai/config" time="0.532796" />
+    <testcase name="GET /api/ai/reports" time="0.547755" />
+    <testcase name="GET /api/ai/trends" time="0.538731" />
+    <testcase name="GET /api/backups" time="0.526344" />
+    <testcase name="GET /api/health" time="0.508028" />
+    <testcase name="GET /api/inbox" time="0.842730" />
+    <testcase name="GET /api/memories" time="20.896039" />
+    <testcase name="GET /api/projects" time="1.635995" />
+    <testcase name="GET /api/recoverable" time="0.977640" />
+    <testcase name="GET /api/search/tasks" time="20.756989" />
+    <testcase name="GET /api/stats" time="1.837463" />
+    <testcase name="GET /api/today" time="21.067172" />
+    <testcase name="GET /api/usage" time="0.521498" />
+    <testcase name="GET /api/views" time="0.695851" />
+  </testsuite>
+</testsuites>

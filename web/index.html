@@ -178,7 +178,7 @@
         </div>
 
         <div class="panel">
-          <h3 style="justify-content:space-between">🧠 项目记忆
+          <h3 style="justify-content:space-between"><button type="button" class="panel-collapse-btn" data-act="togglePanel">🧠 项目记忆</button>
             <button class="btn small" data-act="toggleMemoryForm">＋ 记一条</button>
           </h3>
           <div id="memory-form" style="display:none;gap:8px;margin-bottom:8px">
@@ -207,7 +207,7 @@
         </div>
 
         <div class="panel" id="reality-panel">
-          <h3 style="justify-content:space-between">⚖️ 看板说的 vs 代码里真发生的
+          <h3 style="justify-content:space-between"><button type="button" class="panel-collapse-btn" data-act="togglePanel">⚖️ 看板说的 vs 代码里真发生的</button>
             <button class="btn small" data-act="loadGitInfo" title="展开分支、提交列表与未提交文件">提交明细</button>
           </h3>
           <div id="reality-body" class="cmp"></div>
@@ -220,7 +220,7 @@
         </div>
 
         <div class="panel">
-          <h3 style="justify-content:space-between;flex-wrap:wrap;row-gap:2px">🤝 交接说明（给智能体）
+          <h3 style="justify-content:space-between;flex-wrap:wrap;row-gap:2px"><button type="button" class="panel-collapse-btn" data-act="togglePanel">🤝 交接说明（给智能体）</button>
             <span style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;margin-left:auto">
               <span style="font-size:11px;font-weight:400;color:var(--text-faint)">Markdown 渲染</span>
               <button class="btn small" data-act="openAIHandoff">✨ AI 生成</button>
@@ -253,7 +253,7 @@
           <div id="ms-body"></div>
         </div>
         <div class="panel" id="kanban-panel" style="margin-bottom:0">
-          <h3>🗃 任务看板
+          <h3><button type="button" class="panel-collapse-btn" data-act="togglePanel">🗃 任务看板</button>
             <span class="board-tools" style="margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; min-width:0; max-width:100%; text-transform:none; letter-spacing:0; font-weight:400">
               <input id="task-search" placeholder="搜索任务…" aria-label="搜索任务"
                 style="font-size:12px;padding:3px 8px;width:min(130px,42vw);min-width:60px;max-width:100%" autocomplete="off">
@@ -337,7 +337,7 @@
       <div class="form-section"><span>发布节点</span></div>
       <div class="field">
         <label>里程碑（可选，用于把任务归进发布节点）</label>
-        <div id="f-milestones" aria-label="里程碑列表"></div>
+        <div id="f-milestones" role="group" aria-label="里程碑列表"></div>
         <button class="btn small" data-act="addMilestoneRow" type="button">＋ 添加里程碑</button>
       </div>
       <div class="form-section"><span>交接信息（新智能体接手时会优先读这里）</span></div>

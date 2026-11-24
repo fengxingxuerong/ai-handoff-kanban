@@ -7,6 +7,7 @@ AI 交接看板 - FastAPI 后端
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -608,8 +609,22 @@ async def _zh_validation_error(request: Request, exc: RequestValidationError):
     最常撞的就是"文本超长"（2026-11-03 之前 desc 500KB 都能收），
     这里统一翻成「字段 X 最多 N 字，当前 M 字」。
     """
+    def safe_value(value):
+        if isinstance(value, Exception):
+            return str(value)
+        if isinstance(value, float) and not math.isfinite(value):
+            return str(value)
+        if isinstance(value, dict):
+            return {key: safe_value(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [safe_value(item) for item in value]
+        return value
+
     parts = []
+    errors = []
     for err in exc.errors():
+        safe_err = {key: safe_value(value) for key, value in err.items()}
+        errors.append(safe_err)
         loc = [str(x) for x in err.get("loc", []) if x not in ("body", "query", "path")]
         field = ".".join(loc) or "请求体"
         typ = err.get("type", "")
@@ -630,7 +645,7 @@ async def _zh_validation_error(request: Request, exc: RequestValidationError):
             parts.append(f"「{field}」数值不合法")
         else:
             parts.append(f"「{field}」{err.get('msg', '格式不正确')}")
-    return JSONResponse({"detail": "；".join(parts) or "请求参数不合法", "errors": exc.errors()},
+    return JSONResponse({"detail": "；".join(parts) or "请求参数不合法", "errors": errors},
                         status_code=422)
 
 WEB_DIR = _resource_path("web")
@@ -653,6 +668,9 @@ async def guard_local_request(request: Request, call_next):
     )
     if code:
         return JSONResponse({"detail": why}, status_code=code)
+    content_type = request.headers.get("content-type", "").partition(";")[0].strip().lower()
+    if request.method in ("POST", "PUT", "DELETE", "PATCH") and content_type and content_type != "application/json":
+        return JSONResponse({"detail": "请求正文仅支持 application/json"}, status_code=415)
     return await call_next(request)
 
 

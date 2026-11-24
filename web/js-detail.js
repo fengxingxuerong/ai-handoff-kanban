@@ -17,7 +17,8 @@ function _panelKey(panel, h3) {
 function _applyPanelCollapse(panel, collapsed) {
   panel.classList.toggle("collapsed", collapsed);
   const h3 = panel.querySelector(":scope > h3");
-  if (h3) h3.setAttribute("aria-expanded", String(!collapsed));
+  const trigger = h3 && (h3.querySelector(".panel-collapse-btn") || h3);
+  if (trigger) trigger.setAttribute("aria-expanded", String(!collapsed));
 }
 
 function initPanelCollapse() {
@@ -25,11 +26,14 @@ function initPanelCollapse() {
     const h3 = panel.querySelector(":scope > h3");
     if (!h3 || h3.dataset.collapsible) return;
     h3.dataset.collapsible = "1";
-    h3.dataset.act = "togglePanel";     // 复用全局 click 委托
-    h3.dataset.keyact = "1";            // 复用全局 keydown（Enter/空格 → click）
-    h3.tabIndex = 0;
-    h3.setAttribute("role", "button");
-    h3.classList.add("panel-head-toggle");
+    const trigger = h3.querySelector(".panel-collapse-btn") || h3;
+    trigger.dataset.act = "togglePanel";     // 复用全局 click 委托
+    trigger.classList.add("panel-head-toggle");
+    if (trigger === h3) {
+      trigger.dataset.keyact = "1";          // h3 不是原生按钮，才需要补键盘激活
+      trigger.tabIndex = 0;
+      trigger.setAttribute("role", "button");
+    }
     const text = (h3.textContent || "").trim();
     let collapsed = false;
     try { collapsed = localStorage.getItem(_panelKey(panel, h3)) === "1"; } catch (e) { collapsed = false; }
@@ -43,7 +47,7 @@ function togglePanel(el) {
   if (!panel) return;
   const collapsed = !panel.classList.contains("collapsed");
   _applyPanelCollapse(panel, collapsed);
-  try { localStorage.setItem(_panelKey(panel, el), collapsed ? "1" : "0"); } catch (e) {}
+  try { localStorage.setItem(_panelKey(panel, panel.querySelector(":scope > h3")), collapsed ? "1" : "0"); } catch (e) {}
 }
 
 // ============ 详情 ============

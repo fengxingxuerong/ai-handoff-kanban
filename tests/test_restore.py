@@ -46,6 +46,66 @@ def test_corrupt_file_auto_recovers_from_last_good(app_client):
     assert again["data_recovered"] is False
 
 
+def test_atomic_replace_failure_keeps_current_and_last_good(app_client, monkeypatch):
+    import app.main as kanban
+
+    seed_projects(app_client, "替换失败前的项目")
+    target = app_client.data_dir / "projects.json"
+    last_good = app_client.data_dir / "projects.json.last-good"
+    before = target.read_bytes()
+    before_good = last_good.read_bytes()
+
+    def fail_replace(*_args):
+        raise PermissionError("simulated replace failure")
+
+    monkeypatch.setattr(kanban.os, "replace", fail_replace)
+    with pytest.raises(PermissionError):
+        kanban._save_data({"projects": []})
+
+    assert target.read_bytes() == before
+    assert last_good.read_bytes() == before_good
+    assert target.with_suffix(".json.tmp").exists(), "失败的临时文件应留下现场"
+
+
+def test_partial_json_write_does_not_touch_current_data(app_client, monkeypatch):
+    import app.main as kanban
+
+    seed_projects(app_client, "半写保护项目")
+    target = app_client.data_dir / "projects.json"
+    last_good = app_client.data_dir / "projects.json.last-good"
+    before = target.read_bytes()
+    before_good = last_good.read_bytes()
+
+    def fail_dump(_data, fp, *_args, **_kwargs):
+        fp.write('{"projects": [')
+        raise OSError("simulated disk full")
+
+    monkeypatch.setattr(kanban.json, "dump", fail_dump)
+    with pytest.raises(OSError):
+        kanban._save_data({"projects": []})
+
+    assert target.read_bytes() == before
+    assert last_good.read_bytes() == before_good
+
+
+def test_last_good_refresh_failure_does_not_fail_primary_save(app_client, monkeypatch):
+    import app.main as kanban
+
+    seed_projects(app_client, "刷新副本前的项目")
+    target = app_client.data_dir / "projects.json"
+    last_good = app_client.data_dir / "projects.json.last-good"
+    before_good = last_good.read_bytes()
+
+    def fail_copy(*_args):
+        raise OSError("simulated last-good copy failure")
+
+    monkeypatch.setattr(kanban.shutil, "copy2", fail_copy)
+    kanban._save_data({"projects": []})
+
+    assert json.loads(target.read_text(encoding="utf-8"))["projects"] == []
+    assert last_good.read_bytes() == before_good
+
+
 def test_corruption_without_last_good_resets_to_empty(app_client):
     """没有可救的副本时就重置为空，并如实说明"""
     api = app_client

@@ -379,6 +379,82 @@ def test_unknown_method_returns_jsonrpc_error(mcp):
     assert resp["error"]["code"] == -32601
 
 
+@pytest.mark.parametrize("raw", [
+    "[]", "null", "42", "{}",
+    '{"jsonrpc":"1.0","id":7,"method":"ping"}',
+    '{"jsonrpc":"2.0","id":8}',
+    '{"jsonrpc":"2.0","id":true,"method":"ping"}',
+    '{"jsonrpc":"2.0","id":{},"method":"ping"}',
+])
+def test_invalid_request_envelopes_return_invalid_request(mcp, raw):
+    mcp.send_raw(raw)
+    resp = mcp.read()
+    assert resp["jsonrpc"] == "2.0"
+    assert resp["id"] is None
+    assert resp["error"]["code"] == -32600, resp
+    assert mcp.call("ping")["result"] == {"resultType": "complete"}
+
+
+@pytest.mark.parametrize("request_id", [0, "req-1", 1.5, None])
+def test_valid_request_id_types_are_echoed(mcp, request_id):
+    mcp.send_raw(json.dumps({"jsonrpc": "2.0", "id": request_id, "method": "ping"}))
+    resp = mcp.read()
+    assert resp["id"] == request_id
+    assert resp["result"] == {"resultType": "complete"}
+
+
+@pytest.mark.parametrize("method", ["ping", "tools/list"])
+@pytest.mark.parametrize("params", [[], "bad", 1])
+def test_params_must_be_an_object(mcp, method, params):
+    mcp.send_raw(json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}))
+    resp = mcp.read()
+    assert resp["id"] == 1
+    assert resp["error"]["code"] == -32602, resp
+
+
+def test_invalid_notification_gets_no_reply(mcp):
+    mcp.send_raw('{"jsonrpc":"2.0","method":"tools/list","params":[]}')
+    resp = mcp.call("ping")
+    assert resp["id"] == 1 and resp["result"] == {"resultType": "complete"}, resp
+
+
+def test_regular_notification_gets_no_reply(mcp):
+    mcp.send_raw('{"jsonrpc":"2.0","method":"tools/list"}')
+    resp = mcp.call("ping")
+    assert resp["id"] == 1 and resp["result"] == {"resultType": "complete"}, resp
+
+
+def test_tools_list_order_is_deterministic(mcp):
+    snapshots = [[tool["name"] for tool in mcp.call("tools/list")["result"]["tools"]] for _ in range(3)]
+    assert snapshots[0] == snapshots[1] == snapshots[2]
+
+
+def test_closed_stdout_exits_cleanly(tmp_path):
+    env = dict(os.environ, KANBAN_DATA_DIR=str(tmp_path / "mcp-broken-pipe"),
+               KANBAN_NO_SCHEDULER="1", PYTHONIOENCODING="utf-8")
+    proc = subprocess.Popen([sys.executable, str(SERVER)], cwd=str(ROOT), env=env,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc.stdout.close()
+    proc.stdin.write(b'{"jsonrpc":"2.0","id":1,"method":"ping"}\n')
+    proc.stdin.close()
+    assert proc.wait(timeout=10) == 0
+    stderr = proc.stderr.read().decode("utf-8", "replace")
+    assert "BrokenPipeError" not in stderr, stderr
+
+
+def test_tool_handler_exception_is_contained(monkeypatch):
+    from app import mcp_server
+
+    def boom(_args):
+        raise RuntimeError("unexpected handler failure")
+
+    monkeypatch.setitem(mcp_server.HANDLERS, "kanban_list_projects", boom)
+    resp = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                              "params": {"name": "kanban_list_projects", "arguments": {}}})
+    assert resp["result"]["isError"] is True
+    assert "unexpected handler failure" in resp["result"]["content"][0]["text"]
+
+
 def test_resources_and_prompts_answer_even_with_an_empty_board(mcp):
     """空看板上也要答得出来（不是 error、也不是空数组）：
     客户端在列表阶段就按"有没有这个能力"决定要不要显示入口。"""
@@ -397,6 +473,7 @@ def test_tool_schemas_are_wellformed(mcp):
     names = [t["name"] for t in tools]
     assert len(names) == len(set(names)), "工具名不能重复"
     for t in tools:
+        assert re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", t["name"]), t["name"]
         assert t["name"].startswith("kanban_"), t["name"]
         assert t["description"] and len(t["description"]) > 10, f"{t['name']} 描述太短"
         schema = t["inputSchema"]

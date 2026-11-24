@@ -42,7 +42,7 @@ except Exception:
 # **故意不给 try/except 兜底**：`app.service` 是纯标准库的叶子模块，它取不到的话
 # 后面 `uvicorn.run("app.main:app")` 一样起不来 —— 与其留一个字面量在这儿等它漂，
 # 不如让导入失败当场炸在启动日志里（`startup.log` 是唯一的排查入口）。
-from app.service import DEFAULT_PORT
+from app.service import DEFAULT_PORT, free_port
 
 PORT = int(os.environ.get("KANBAN_PORT", DEFAULT_PORT))
 
@@ -73,6 +73,33 @@ def port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.4)
         return s.connect_ex((HOST, port)) == 0
+
+
+def _health(port: int, timeout: float = 2.0) -> dict | None:
+    import json
+    import urllib.request
+
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(f"http://{HOST}:{port}/api/health", timeout=timeout) as response:
+            body = json.loads(response.read().decode("utf-8"))
+        return body if isinstance(body, dict) else None
+    except Exception:
+        return None
+
+
+def select_port() -> int:
+    if not port_in_use(PORT):
+        return PORT
+    health = _health(PORT)
+    reported = health.get("data_file") if health else None
+    if reported:
+        try:
+            if Path(reported).resolve() == (data_dir() / "projects.json").resolve():
+                return PORT
+        except OSError:
+            pass
+    return free_port()
 
 
 def ensure_standard_streams() -> None:
@@ -121,11 +148,17 @@ def start_server() -> None:
 
 
 def main() -> None:
+    global PORT
     ensure_standard_streams()
+    requested_port = PORT
+    PORT = select_port()
     log("=" * 60)
     log(f"版本：v{APP_VERSION} build {BUILD_TIME}")
     log(f"启动：frozen={getattr(sys, 'frozen', False)} meipass={getattr(sys, '_MEIPASS', '')}")
     log(f"PORT={PORT} HOST={HOST} data_dir={data_dir()}")
+    if PORT != requested_port:
+        log(f"端口 {requested_port} 不属于本数据目录，改用 {PORT}")
+    os.environ["KANBAN_PORT"] = str(PORT)
 
     if port_in_use(PORT):
         log("端口已被占用，直接复用已有实例")
@@ -171,18 +204,18 @@ def main() -> None:
 
 
 def http_alive(timeout: float = 6.0) -> bool:
-    """真实请求 /api/health，确认不是"只 bind 不响应"的半死状态"""
-    import json
-    import urllib.request
-
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    """真实请求 /api/health，并自证服务读的是本实例的数据目录。"""
     deadline = time.time() + timeout
+    expected = (data_dir() / "projects.json").resolve()
     while time.time() < deadline:
-        try:
-            with opener.open(f"http://{HOST}:{PORT}/api/health", timeout=2) as r:
-                return bool(json.loads(r.read().decode("utf-8")).get("ok"))
-        except Exception:
-            time.sleep(0.3)
+        health = _health(PORT)
+        if health and health.get("ok") and health.get("data_file"):
+            try:
+                if Path(health["data_file"]).resolve() == expected:
+                    return True
+            except OSError:
+                pass
+        time.sleep(0.3)
     return False
 
 
